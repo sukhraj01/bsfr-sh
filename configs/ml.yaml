@@ -1,0 +1,95 @@
+# Detection-layer (Phase 3) configuration.
+#
+# See configs/chain.yaml for the PAPER / DERIVED / DECLARED convention.
+#
+# The paper reports four algorithms and two headline metrics and nothing else: no split
+# procedure beyond the 90/10 resample, no cross-validation scheme, no hyperparameters, no random
+# seed. Everything below that is not marked PAPER is our declaration, and every one of them is a
+# place where our numbers could legitimately differ from the published ones.
+
+kind: ml
+schema_version: 1
+
+dataset:
+  name: bitcoinheist                # PAPER ref [15] — Akcora et al., IJCAI 2021, UCI repository
+  rows: 2916697                     # PAPER §VII / dataset card
+  positive_rows: 41413              # ransomware-family addresses
+  negative_rows: 2875284            # label == "white"
+  label_column: label
+  benign_label: white
+  # DECLARED — the paper does not say `address` is dropped. Keeping it leaks the identifier
+  # straight into the model (docs/EXPERIMENTS.md, Target 2).
+  drop_columns: [address]
+  feature_columns: [year, day, length, weight, count, looped, neighbors, income]
+  subsample:
+    # DECLARED — an 8 GB box cannot hold a KNN neighbour search over 2.9M rows (CLAUDE.md §6).
+    # Default runs are subsampled and say so in the sidecar; `--full` opts into the real thing
+    # and is expected to be an Ada batch job.
+    enabled: true
+    rows: 200000
+    stratified: true
+
+# DEV-06. Both modes run every time and are reported side by side. Neither is ever published
+# without the other.
+modes:
+  paper_mode:
+    description: exact reproduction target — the paper's resampled split
+    split: resample                 # PAPER §VII — resample to 90% ransomware / 10% benign
+    positive_fraction: 0.90         # PAPER §VII
+    test_size: 0.30                 # DECLARED — the paper gives no train/test ratio
+    shuffle: true
+    metrics: [accuracy, f1]         # PAPER — the only two metrics Table II reports
+  honest_mode:
+    description: same data at its true class balance
+    split: natural                  # ~1.42% positive
+    cross_validation:
+      kind: stratified_k_fold       # DECLARED — the paper cross-validates nothing
+      folds: 5
+      shuffle: true
+    metrics: [precision, recall, pr_auc, mcc, f1_minority, confusion_matrix]
+
+baselines:
+  # A constant "always ransomware" classifier. On the paper's 90/10 split it scores high enough
+  # to make the headline number meaningless, so it is computed and published next to every
+  # result rather than quoted (CLAUDE.md §2 — never claim a number we did not measure).
+  constant_positive: true
+  constant_negative: true
+
+# DECLARED, all of it. The paper reports no hyperparameters for any of the four algorithms, so
+# these are our choices, recorded here so a reader can tell which of our numbers is the paper's
+# design and which is ours. random_state is injected from --seed at run time, never hard-coded.
+models:
+  random_forest:
+    enabled: true
+    n_estimators: 100
+    criterion: gini
+    max_depth: null
+    min_samples_split: 2
+    min_samples_leaf: 1
+    n_jobs: -1
+  logistic_regression:
+    enabled: true
+    penalty: l2
+    C: 1.0
+    solver: lbfgs
+    max_iter: 1000                  # DECLARED — sklearn's default 100 does not converge here
+    class_weight: null
+  decision_tree:
+    enabled: true
+    criterion: gini
+    max_depth: null
+    min_samples_split: 2
+    min_samples_leaf: 1
+  k_nearest_neighbours:
+    enabled: true
+    n_neighbors: 5
+    weights: uniform
+    metric: minkowski
+    p: 2
+    algorithm: auto
+    n_jobs: 1                       # DECLARED — parallel KNN multiplies peak memory; see §6
+
+profiles:
+  # Alg. 3 line 3 — NProf / AProf as fitted class-conditional descriptions (ARCHITECTURE §detection)
+  normal_profile_label: NProf
+  attack_profile_label: AProf

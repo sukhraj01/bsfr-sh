@@ -1,0 +1,72 @@
+# Chain, consensus and crypto parameters.
+#
+# Convention used throughout configs/:
+#   PAPER    — a value BSFR-SH pins down. Changing it breaks the reproduction.
+#   DERIVED  — forced by a PAPER value plus a standard definition.
+#   DECLARED — the paper is silent. We choose, state it here, and never bury it in code.
+#
+# Rule (CLAUDE.md §2): a value that lives here is never re-literalled in a module. If a module
+# needs 100 transactions per block, it reads block.transactions_per_block.
+
+kind: chain
+schema_version: 1
+
+consensus:
+  protocol: pbft                  # PAPER §VII — voting-based consensus, Castro & Liskov ref [24]
+  miner_nodes: 4                  # PAPER §VII — 4 miner nodes
+  faulty_nodes_f: 1               # DERIVED — n = 3f + 1 with n = 4
+  commit_threshold: 3             # DERIVED — 2f + 1. DEV-10: the paper says only "a threshold
+                                  #   fraction of miners commit" and gives no number.
+  leader_election: round_robin    # DECLARED — the paper is silent on leader selection.
+  view_change_timeout_s: 2.0      # DECLARED — the paper describes no view change at all (DEV-10).
+  message_bus: in_process         # DECLARED — async/networked bus is an M7 extension.
+
+block:
+  version: 1
+  transactions_per_block: 100     # PAPER §VII — 100 transactions per block
+
+# Case definitions. PAPER §VII fixes 5 / 10 / 15 blocks. DEV-12 records that §VII-C's prose calls
+# the x-axis "number of devices" while the setup varies blocks; we follow the setup, because that
+# is what produced the published numbers.
+cases:
+  case_1: 5
+  case_2: 10
+  case_3: 15
+
+# The two chains are independent objects with independent genesis blocks and independent pBFT
+# node sets (CLAUDE.md §4). They are listed together only so that one config describes both.
+chains:
+  BC_DTBU:
+    purpose: encrypted data backups from smart-healthcare devices
+    genesis_owner_id: CS_0
+    genesis_payload: "BSFR-SH BC_DTBU genesis"
+  BC_SigRW:
+    purpose: ransomware signatures and feature vectors from the honeypot
+    genesis_owner_id: CS_0
+    genesis_payload: "BSFR-SH BC_SigRW genesis"
+
+transaction:
+  # DECLARED — Q2 / GAP-2. The paper never states a transaction payload size, yet every timing
+  # number in Figs. 6(a)-(d) depends on it. 4 KiB is our declared default: large enough to be a
+  # realistic encrypted record fragment, small enough that 1500 transactions fit in memory on the
+  # 8 GB box. M6 sweeps payload_bytes_sensitivity to show how much of the paper's curve is really
+  # a statement about payload size.
+  payload_bytes: 4096
+  payload_bytes_sensitivity: [1024, 4096, 16384]
+
+crypto:
+  hash: sha-256                   # PAPER — SHA-256 throughout
+  signature:
+    algorithm: ecdsa              # PAPER ref [23] — mandated; do not substitute Ed25519
+    curve: secp256r1
+  aead:
+    algorithm: aes-256-gcm        # DEV-01 — hybrid encryption; the paper writes E_KU_CSl(Tx)
+    key_bits: 256
+    nonce_bytes: 12
+  kem: ecies                      # DEV-01 — wraps the AEAD data key under KU_CSl
+  session:
+    timestamp_window_s: 30        # DECLARED — DEV-02, ARCHITECTURE §crypto
+    nonce_bytes: 16
+
+merkle:
+  odd_node_policy: duplicate_last # DEV-11 — Bitcoin convention; the paper gives no construction

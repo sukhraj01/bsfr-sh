@@ -1,0 +1,113 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bsfr-sh"
+version = "0.1.0"
+description = "From-scratch implementation, re-evaluation and repair of BSFR-SH (Wazid, Das & Shetty, IEEE TCE 2023)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "sukhraj01" }]
+keywords = ["blockchain", "pbft", "ransomware", "smart-healthcare", "reproduction"]
+
+# Runtime dependencies stay minimal by CLAUDE.md §6. `cryptography` is declared here because
+# every candidate answer to Q1 (ECDSA backend) needs a baseline to be benchmarked against in M1;
+# declaring it is not choosing it. No code in this repo imports it yet.
+dependencies = [
+    "cryptography>=42",
+    "scikit-learn>=1.4",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML>=6.0",  # required for `mypy --strict` to type yaml.safe_load
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bsfr_sh = ["py.typed"]
+
+# --------------------------------------------------------------------------------------------
+# pytest
+# --------------------------------------------------------------------------------------------
+# `make test` runs tests/unit only (fast loop). `make test-all` runs everything.
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests/unit"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "slow: takes more than a second; excluded from the fast loop",
+    "integration: crosses a module boundary; lives in tests/integration",
+]
+
+# --------------------------------------------------------------------------------------------
+# ruff  (configured here, not in a separate ruff.toml — CLAUDE.md §7)
+# --------------------------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle — E722 is the "no bare except" rule from CLAUDE.md §7
+    "F",         # pyflakes
+    "I",         # import sorting
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "A",         # builtin shadowing
+    "C4",        # comprehensions
+    "T20",       # flake8-print — enforces "no print, use util.logging" (CLAUDE.md §7)
+    "RET",       # return simplification
+    "SIM",       # simplification
+    "PTH",       # prefer pathlib
+    "ANN",       # missing type annotations (CLAUDE.md §7: type hints everywhere)
+    "ARG",       # unused arguments
+    "TID",       # tidy imports
+    "RUF",
+]
+ignore = [
+    "ANN401",  # explicit Any is unavoidable at the YAML boundary
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may assert on internals and take fixtures they do not annotate.
+"tests/**" = ["ANN", "ARG", "SIM117"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.format]
+quote-style = "double"
+
+# --------------------------------------------------------------------------------------------
+# mypy  (strict over src/, per CLAUDE.md §7)
+# --------------------------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+strict = true
+warn_unreachable = true
+warn_unused_configs = true
+show_error_codes = true
+pretty = true
+
+# No per-module overrides yet. sklearn and matplotlib ship no stubs, so M4/M6 will need a
+# narrowly scoped `ignore_missing_imports` block here — added when the import appears, not
+# before: `warn_unused_configs` reports a stanza for a module nothing imports, and a config that
+# warns on a clean run trains you to ignore its output.

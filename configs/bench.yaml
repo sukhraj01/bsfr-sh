@@ -1,0 +1,61 @@
+# Benchmark harness configuration (M6).
+#
+# See configs/chain.yaml for the PAPER / DERIVED / DECLARED convention.
+#
+# Nothing here duplicates chain.yaml. Case block counts and transactions-per-block live there;
+# this file only names which of them to run.
+
+kind: bench
+schema_version: 1
+
+run:
+  cases: [case_1, case_2, case_3]   # resolved against chain.yaml `cases`
+  chains: [BC_DTBU, BC_SigRW]       # PAPER §VII — both chains benchmarked separately
+
+timing:
+  repeats: 5                        # DECLARED — docs/EXPERIMENTS.md protocol: median of N >= 5.
+                                    #   The paper reports a single unqualified number per case.
+  warmup_runs: 1                    # DECLARED — discarded, never folded into the median
+  aggregate: median                 # never mean: one slow run must not move the number
+  clock: perf_counter               # DECLARED — monotonic, highest available resolution
+  # CLAUDE.md §4: the measured span is block construction + consensus + append. Nothing else is
+  # inside the timer.
+  measure_span: [block_construction, consensus, append]
+
+derived:
+  # DEV-08. TPS is arithmetic on the timing above, never a separately measured quantity:
+  #   tps = total_transactions / total_seconds
+  # This matches how the paper's own six TPS values were produced (verified in EXPERIMENTS.md).
+  tps: true
+  # The paper's rising TPS is fixed-cost amortisation, not a throughput gain. Per-block marginal
+  # cost is reported alongside it and should be roughly flat.
+  marginal_cost_per_block: true
+
+output:
+  tables_dir: results/tables
+  figures_dir: results/figures
+  logs_dir: results/logs
+  # Every emitted number carries one of exactly two labels and no third category (CLAUDE.md §2).
+  number_labels: [measured, paper_reported]
+  # Sidecar JSON written next to every table and figure. Without config_hash and seed a number
+  # is not reproducible and therefore not publishable.
+  sidecar_fields:
+    - run_id
+    - config_hash
+    - seed
+    - git_rev
+    - host
+    - cpu
+    - python_version
+    - platform
+    - started_at
+    - wall_seconds
+
+reporting:
+  # DEV-13 — absolute seconds will not match Java on 2019 hardware. The reproduction claim is
+  # about shape: monotone increase, concavity, and the BC_SigRW > BC_DTBU gap.
+  compare: [ratios, trend_shape]
+  expected_properties:
+    time_monotone_increasing: true
+    time_sublinear_in_blocks: true
+    sigrw_slower_than_dtbu: true
