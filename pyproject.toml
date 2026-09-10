@@ -30,6 +30,11 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "types-PyYAML>=6.0",  # required for `mypy --strict` to type yaml.safe_load
+    # Benchmark-only, and deliberately not a runtime dependency. M1 measured it against
+    # `cryptography` to close Q1 (pure Python lost by 17x on sign and 40x on verify, see
+    # RESULTS.md); it is kept so `scripts/bench_ecdsa_backends.py` stays re-runnable and the
+    # decision stays checkable rather than remembered.
+    "ecdsa>=0.19",
 ]
 
 [tool.setuptools]

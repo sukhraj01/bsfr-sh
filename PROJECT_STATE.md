@@ -4,15 +4,15 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-11 · **Milestone:** M1 (crypto) · **Sessions completed:** 1
+**Last updated:** 2026-09-11 · **Milestone:** M2 (blockchain + consensus) · **Sessions completed:** 2
 
 ---
 
 ## One-line status
 
-M0 is closed: `clone → make setup → make test` works and runs 186 real tests. The `util/` layer
-(canonical serialization, config + hash, structured logging, seeding) is built and green. Next is
-the crypto layer.
+M1 is closed: all six `crypto/` modules are built, `make test` runs 347 tests and `make lint` is
+clean, Q1 is decided on measured numbers, and every §V-1 property has a passing test. Next is
+`blockchain/` — the first consumer of these primitives.
 
 ---
 
@@ -20,11 +20,11 @@ the crypto layer.
 
 | Layer | State | Notes |
 |---|---|---|
-| Docs (`CLAUDE.md`, `docs/*`) | done | deviations DEV-01..16 pre-registered |
-| `pyproject.toml`, `Makefile`, `.gitignore`, `configs/` | **done** | 8 make targets; later-milestone ones fail loudly |
-| `util/` (config, logging, seed, serialization) | **done** | 186 unit tests, `mypy --strict` clean |
-| `crypto/` | not started | **M1 — start here**, zero internal deps beyond `util` |
-| `blockchain/`, `consensus/` | not started | M2 |
+| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-01/02/11 amended in M1 |
+| `pyproject.toml`, `Makefile`, `.gitignore`, `configs/` | done | 8 make targets; later-milestone ones fail loudly |
+| `util/` (config, logging, seed, serialization) | done | cross-process determinism re-verified in M1 |
+| `crypto/` | **done** | hashing, merkle, ecdsa, aead, kem, session — 161 tests |
+| `blockchain/`, `consensus/` | not started | **M2 — start here** |
 | `honeypot/`, `recovery/`, phases 1/2/5 | not started | M3 |
 | `detection/`, phase 3 | not started | M4 |
 | `mitigation/`, phase 4 | not started | M5 |
@@ -32,15 +32,33 @@ the crypto layer.
 
 ## Current numbers
 
-None. No benchmark has been run; `RESULTS.md` holds only `paper_reported` rows. Every target in
-`docs/EXPERIMENTS.md` is `paper_reported`, zero are `measured`.
+One `measured` row exists: the Q1 ECDSA backend bake-off (`RESULTS.md` §Ours). Every
+reproduction target in `docs/EXPERIMENTS.md` is still `paper_reported`.
+
+## What M2 must not re-derive
+
+Established in M1; take these as given rather than re-litigating them.
+
+- **`util.serialization` is deterministic across processes.** Re-verified under four
+  `PYTHONHASHSEED` values in separate interpreters. No `json`, no `pickle`, no `hash()`.
+- **`crypto.hashing.tagged_h` is the positional hash.** `h()` is the bare primitive. A block
+  header digest, a transaction digest and a Merkle leaf must use different domains — the
+  constants already exist (`DOMAIN_BLOCK_HEADER`, `DOMAIN_TRANSACTION`, ...).
+- **`MTR` binds the leaf count.** Call `crypto.merkle.merkle_root(...)`; do not recompute a root
+  by hand. See DEV-11's amendment for why.
+- **Transaction encryption is `crypto.kem.seal_payload` / `open_payload`.** Do not assemble the
+  wrap and the AEAD separately — the DEV-01 binding only holds when applied in one place.
+- **ECDSA is deterministic (RFC 6979).** Signatures over identical bytes are byte-identical, so
+  fixture keys give reproducible test runs.
 
 ## Next task
 
-**M1-1 — crypto layer.** Start with `crypto/hashing.py` (the single SHA-256 entry point), which
-also retires the temporary `hashlib` exemption in `util/config.py`. Then settle Q1 by benchmarking
-`cryptography` against a pure-Python ECDSA, then `merkle.py`, `ecdsa.py`, `aead.py`, `kem.py`,
-`session.py`. Exit: every §V-1 property has a passing test.
+**M2-1 — `blockchain/`.** Build `transaction.py`, `block.py` and `chain.py` against the field
+orders already declared in `util.serialization` (`TRANSACTION_FIELD_ORDER`, `BLOCK_FIELD_ORDER`,
+`BlockPart.HASH` / `.SIGN`), using `crypto.kem.seal_payload` for payloads and
+`crypto.merkle.merkle_root` for `MTR`. `Block` should assert its own field names against
+`BLOCK_FIELD_ORDER` so the dataclass and the encoder cannot drift. Consensus is M2-2, not this
+task.
 
 ## Blockers
 
@@ -50,17 +68,24 @@ None.
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q1 | Which ECDSA library — `cryptography` (fast, C-backed) or pure-Python for auditability? | M1 | benchmark both in M1, pick on speed since bench timings depend on it |
-| Q2 | Transaction payload size — 4096 B now *declared* in `configs/chain.yaml` (DEV-15), but not yet justified | M6 result validity | sensitivity sweep over 1024/4096/16384 in M6 |
-| Q3 | Does BitcoinHeist need the full 2.9M rows locally, or is a stratified subsample sufficient for `paper_mode`? | M4 | measure at M4 start; full runs go to Ada regardless |
+| Q2 | Transaction payload size — 4096 B *declared* in `configs/chain.yaml` (DEV-15), not yet justified | M6 result validity | sensitivity sweep over 1024/4096/16384 in M6 |
+| Q3 | Does BitcoinHeist need the full 2.9M rows locally, or is a stratified subsample enough for `paper_mode`? | M4 | measure at M4 start; full runs go to Ada regardless |
 | Q4 | Do we need real feature-space evasion for M7, or is that out of scope for a course deliverable? | M7 | defer until M6 lands |
-| Q5 | Should entry points load one merged config object or the three files independently? | M6 | decide when `bench/` becomes the first multi-config consumer; `combined_config_hash()` already exists |
+| Q5 | Should entry points load one merged config object or the three files independently? | M6 | decide when `bench/` becomes the first multi-config consumer; `combined_config_hash()` exists |
+| Q6 | Does `Transaction` carry its own ECDSA signature, or is `Sig_βj` over the block the only signature? | M2 | the paper shows only `Sig_βj`; decide in M2-1 and record as a DEV if we add one |
+
+**Q1 is closed.** `cryptography` (C/OpenSSL), on measured throughput: 39,371 sign/s and 23,306
+verify/s versus 2,307 and 588 for pure-Python `ecdsa` — 17x and 40x. At the pure-Python rate,
+case-3's 1500 transactions would spend ~2.6 s on verification alone, ~45% of the 5.71 s the paper
+reports for the entire case, so Fig. 6 would be measuring the signature library. Both rows are in
+`RESULTS.md`; `ecdsa` stays in the dev extras so the comparison is re-runnable.
 
 ## Carried debt
 
 | # | Item | Retire by |
 |---|---|---|
-| D1 | `util/config.py` calls `hashlib` directly, against CLAUDE.md §7. It is the only such call site, pinned by `HASHLIB_ALLOWED` in `tests/unit/test_module_boundaries.py`, because `crypto.hashing` did not exist yet. | M1-1: switch to `crypto.hashing.h()` and delete the exemption |
+| D1 | `util/config.py` still calls `hashlib` directly. **M1 could not retire this as written.** The M0 plan was for it to import `crypto.hashing.h()`, but `util` may not import upward — `test_util_depends_on_nothing_else_in_the_package` forbids it and `docs/ARCHITECTURE.md` fixes the direction as `util <- crypto`. Both rules cannot hold while `util.config` computes its own digest. Fix: move `config_hash()`/`combined_config_hash()` into `crypto.hashing`, drop the `config_hash` field from the `Config` dataclass, and let `bench`/`scripts` compose the two. | M2 — it touches `Config` and the M0 tests that pin it, so it wants its own task |
+| D2 | `make lint` runs `ruff check src tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/bench_ecdsa_backends.py` is therefore unchecked. | M6, when `scripts/` stops being nearly empty |
 
 ## Risks
 
@@ -68,9 +93,10 @@ None.
 |---|---|---|
 | Python timings diverge so far from the paper's Java that trends don't reproduce | Targets 3 and 4 unverifiable | report ratios and shape, not seconds (DEV-13); already declared |
 | KNN OOMs the 8 GB local box on full BitcoinHeist | M4 stalls | subsample by default, `--full` goes to Ada |
-| `honest_mode` numbers come out poor enough to look like implementation failure | write-up confusion | publish the constant-classifier baseline next to every number so the comparison is unambiguous |
+| `honest_mode` numbers come out poor enough to look like implementation failure | write-up confusion | publish the constant-classifier baseline next to every number |
 | Scope creep from M7 extensions before M6 lands | nothing ships | M7 is stretch; do not start before M6 exit |
-| The canonical encoding changes after hashes exist | every stored hash silently unreproducible | `ENCODING_VERSION` plus pinned golden vectors in `test_serialization.py`; a format change must fail those tests first |
+| The canonical encoding changes after hashes exist | every stored hash silently unreproducible | `ENCODING_VERSION` plus pinned golden vectors; a format change must fail those tests first |
+| M2 recomputes a digest or a Merkle root by hand instead of calling `crypto/` | domain separation and the DEV-11 count binding silently lost | `crypto/` exposes exactly one function per job; see "What M2 must not re-derive" above |
 
 ---
 

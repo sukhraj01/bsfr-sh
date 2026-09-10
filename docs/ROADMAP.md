@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M1**
+**Current milestone: M2**
 
 ---
 
@@ -21,17 +21,22 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ---
 
-## M1 — Crypto layer `[~]`
+## M1 — Crypto layer `[x]`
 
-- [ ] `crypto/hashing.py` — single SHA-256 entry point
-- [ ] `crypto/merkle.py` — tree, root, inclusion proofs, odd-node duplication (DEV-11)
-- [ ] `crypto/ecdsa.py` — secp256r1 keygen / sign / verify
-- [ ] `crypto/aead.py` — AES-256-GCM
-- [ ] `crypto/kem.py` — ECIES key wrapping (DEV-01)
-- [ ] `crypto/session.py` — ECDH + signed transcript (DEV-02)
-- [ ] Tests: known-answer vectors, tamper detection, replay rejection, timestamp window
+- [x] `crypto/hashing.py` — single SHA-256 entry point, domain-separated positions
+- [x] `crypto/merkle.py` — tree, root, inclusion proofs, odd-node duplication + count binding
+      (DEV-11 amended)
+- [x] `crypto/ecdsa.py` — secp256r1 keygen / sign / verify, RFC 6979 deterministic nonces
+- [x] `crypto/aead.py` — AES-256-GCM, nonce supplied internally so reuse is unrepresentable
+- [x] `crypto/kem.py` — ECIES key wrapping bound to its ciphertext (DEV-01 amended)
+- [x] `crypto/session.py` — ECDH + signed transcript, responder-identity binding, nonce cache
+      (DEV-02 amended)
+- [x] Tests: known-answer vectors, tamper detection, replay rejection, timestamp window
+      (161 crypto tests; 347 total)
+- [x] Q1 closed — `cryptography` backend, on measured throughput (RESULTS.md)
 
-**Exit:** every §V-1 property has a passing test.
+**Exit:** every §V-1 property has a passing test. **Met** — `test_session.py`,
+`test_session_replay.py`, `test_session_mitm.py`.
 
 ---
 

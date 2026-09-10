@@ -38,19 +38,37 @@ back-import.
 | `kem.py` | ECIES-style key wrapping: EC public key wraps the AEAD data key |
 | `session.py` | ECDH + ECDSA-signed transcript, timestamps, nonces (fills GAP-7) |
 
-**Merkle detail.** Odd node counts duplicate the last hash (Bitcoin convention). Documented
-because the paper does not specify it and it changes `MTR`.
+**Hashing detail.** `hashing.h()` is the bare SHA-256 primitive; everything positional goes
+through `tagged_h(domain, *parts)`, which length-prefixes each part via the canonical encoder. A
+transaction digest, a block-header digest, a Merkle leaf and a Merkle node therefore never share a
+pre-image, so a digest computed for one position cannot be replayed in another.
+
+**Merkle detail.** Odd node counts duplicate the last hash (Bitcoin convention), *and* the leaf
+count is bound into the root. Duplication alone is not injective — `[a, b, c]` and `[a, b, c, c]`
+build the same tree and the same root (CVE-2012-2459), which would leave `MTR` unable to
+distinguish two different transaction lists. See DEV-11.
 
 **Session establishment (GAP-7).** The paper defers to "any standard mechanism." Ours:
 
 ```
-A -> B : ID_A, N_A, TS_A, g^a, Sig_A(ID_A || N_A || TS_A || g^a)
-B -> A : ID_B, N_B, TS_B, g^b, Sig_B(ID_B || N_B || TS_B || g^b || N_A)
-both   : SK = KDF(g^ab || N_A || N_B || ID_A || ID_B)
+A -> B : ID_A, ID_B, N_A, TS_A, g^a,
+         Sig_A(tag1 || ID_A || ID_B || N_A || TS_A || g^a)
+B -> A : ID_B, ID_A, N_B, TS_B, g^b,
+         Sig_B(tag2 || ID_B || ID_A || N_B || TS_B || g^b || N_A || g^a)
+both   : SK = HKDF(g^ab, info = tag_sk || ID_A || ID_B || N_A || N_B || g^a || g^b)
 ```
 
-This satisfies every property §V-1 claims: freshness from nonces and timestamps, per-session
-distinct keys, mutual authentication from the signed transcript, replay/MITM/impersonation
+Two details are load-bearing and were both missing from the first version of this sketch — see the
+M1 amendment in DEV-02 for the attacks they stop:
+
+* **A's signature names B.** Without `ID_B` inside it, A's opening is valid for *every* cloud
+  server, and a captured message replays to a different one as a genuine opening from A.
+* **A nonce cache, not just a timestamp window.** The window only bounds the replay interval.
+  `Responder` remembers `(peer_id, nonce)` for `2 x timestamp_window_s` and rejects repeats.
+
+`tag1`/`tag2`/`tag_sk` are distinct domain separators, so neither signature fits the other's slot.
+With those, the protocol gives what §V-1 claims: freshness from nonces and timestamps, per-session
+distinct keys, mutual authentication from the signed transcript, and replay / MITM / impersonation
 resistance. Timestamp window is configurable, default 30 s.
 
 ---

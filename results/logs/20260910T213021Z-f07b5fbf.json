@@ -1,0 +1,90 @@
+{
+  "config_hash": null,
+  "git_rev": "3c59f62a",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260911",
+    "system": "Darwin 24.6.0"
+  },
+  "measurements": [
+    {
+      "all_seconds": [
+        0.0051191670063417405,
+        0.005126916992594488,
+        0.005072667001513764,
+        0.005087709010695107,
+        0.005075207998743281,
+        0.005076375004136935,
+        0.005079833994386718
+      ],
+      "backend": "cryptography",
+      "median_seconds": 0.005079833994386718,
+      "operation": "sign",
+      "operations": 200,
+      "ops_per_second": 39371.36532827699
+    },
+    {
+      "all_seconds": [
+        0.008588708005845547,
+        0.008554083004128188,
+        0.008604791990364902,
+        0.008568999997805804,
+        0.008558458008337766,
+        0.008581625006627291,
+        0.00859550001041498
+      ],
+      "backend": "cryptography",
+      "median_seconds": 0.008581625006627291,
+      "operation": "verify",
+      "operations": 200,
+      "ops_per_second": 23305.609350856852
+    },
+    {
+      "all_seconds": [
+        0.08517866699548904,
+        0.08591499998874497,
+        0.0864052079996327,
+        0.08761099999537691,
+        0.08696975000202656,
+        0.0871909580018837,
+        0.08670533300028183
+      ],
+      "backend": "ecdsa (pure python)",
+      "median_seconds": 0.08670533300028183,
+      "operation": "sign",
+      "operations": 200,
+      "ops_per_second": 2306.6631899026315
+    },
+    {
+      "all_seconds": [
+        0.34038862500165123,
+        0.3390460410009837,
+        0.339965499995742,
+        0.3391395830112742,
+        0.33991224999772385,
+        0.3414197499951115,
+        0.3425092920078896
+      ],
+      "backend": "ecdsa (pure python)",
+      "median_seconds": 0.339965499995742,
+      "operation": "verify",
+      "operations": 200,
+      "ops_per_second": 588.2949887635804
+    }
+  ],
+  "note": "no config file governs this run; parameters are the CLI arguments below",
+  "parameters": {
+    "curve": "secp256r1",
+    "deterministic_nonces": true,
+    "hash": "sha-256",
+    "operations": 200,
+    "repeats": 7,
+    "warmup": 1
+  },
+  "purpose": "Q1 \u2014 ECDSA backend selection",
+  "run_id": "20260910T213021Z-f07b5fbf",
+  "seed": 20260911
+}

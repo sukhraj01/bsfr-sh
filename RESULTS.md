@@ -56,4 +56,15 @@ DEV-08.
 
 ## Ours
 
-*(nothing measured yet)*
+### Crypto primitives (M1)
+
+```
+2026-09-11 | crypto/ecdsa-cryptography | secp256r1 sha-256 rfc6979, 200 ops x median of 7 | sign=39371.4/s verify=23305.6/s | measured | 20260910T213021Z-f07b5fbf | Q1 backend bake-off, C/OpenSSL
+2026-09-11 | crypto/ecdsa-pure-python  | secp256r1 sha-256 rfc6979, 200 ops x median of 7 | sign=2306.7/s verify=588.3/s   | measured | 20260910T213021Z-f07b5fbf | Q1 backend bake-off, `ecdsa` 0.19.2
+```
+
+Q1 closed on these: `cryptography` is 17.1x faster to sign and 39.6x faster to verify. At the
+pure-Python rate, case-3's 1500 transactions would spend ~2.6 s on signature verification alone —
+about 45% of the 5.71 s the paper reports for the *whole* case — so Figs. 6(a)-(d) would be
+measuring the signature library rather than the framework. Both rows are logged because the
+losing number is what makes the choice defensible.

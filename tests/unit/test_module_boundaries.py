@@ -14,10 +14,17 @@ import pytest
 SRC = Path(__file__).resolve().parents[2] / "src" / "bsfr_sh"
 PY_FILES = sorted(SRC.rglob("*.py"))
 
-#: The only module allowed to import hashlib is `crypto.hashing`, which does not exist yet: M1
-#: builds it. Until then `util.config` needs a digest for the config hash and holds the single
-#: exemption. When M1 lands, `crypto/hashing.py` joins this set and `util/config.py` leaves it.
-HASHLIB_ALLOWED = {"util/config.py"}
+#: `crypto.hashing` is the project's SHA-256 entry point (CLAUDE.md §7) and the module this rule
+#: exists to protect.
+#:
+#: `util/config.py` is still here, and M1 could not remove it. The M0 plan was for it to import
+#: `crypto.hashing.h()`, but `util` may not import upward — `test_util_depends_on_nothing_else_in
+#: _the_package` below forbids exactly that, and docs/ARCHITECTURE.md fixes the direction as
+#: `util <- crypto`. The two rules cannot both hold while `util.config` computes its own digest.
+#: Retiring it means moving `config_hash()` out of `util.config` and into `crypto.hashing`, with
+#: `bench`/`scripts` composing the two — tracked as debt D1 in PROJECT_STATE.md, deferred to M2
+#: because it changes the `Config` dataclass and the M0 tests that pin it.
+HASHLIB_ALLOWED = {"util/config.py", "crypto/hashing.py"}
 
 
 def _rel(path: Path) -> str:
