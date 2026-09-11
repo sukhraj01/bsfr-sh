@@ -181,6 +181,41 @@ Commit explaining why.
 2. session limit is restored continue where left off
 ```
 
+*(Prompts 3 and 4 came after the handover and the M2b commit; see "Addendum" at the end.)*
+
+```
+3. Check what's actually exposed before anything else:
+
+bash
+cd ~
+git remote -v                    # did origin get set on the home repo?
+git ls-files | wc -l             # how much is tracked
+git ls-files | grep -E '\.ssh|\.aws|\.kaggle|_rsa|\.pem|\.env|ada_env' 
+git log --oneline | head -20     # is the BSFR history here
+
+If that grep returns anything, treat those credentials as compromised if the repo was ever pushed — rotate rather than just removing the file, since it stays in history.
+
+To re-root without losing your four commits:
+
+bash
+cd ~
+git subtree split --prefix=<path/to/ris-blockchian> -b bsfr-extract
+# then, in a fresh clone of the project alone:
+git clone ~ /tmp/bsfr-tmp -b bsfr-extract
+cd /tmp/bsfr-tmp && git remote set-url origin https://github.com/sukhraj01/bsfr-sh.git
+
+That carries M0 through M2b across intact. Then remove the project from ~/.git's index and decide separately whether ~/.git should exist at all — it usually shouldn't, and the gc.log warning suggests it's been accumulating for a while.
+
+The f=2 collusion finding is correct and it's the best thing in this session. pBFT tolerates fewer than n/3 faults, so at n=4 the bound is one. Two colluding nodes breaking safety isn't your bug — it's the protocol's stated limit, and asserting the fork rather than asserting a clean failure is the honest test.
+
+It also breaks §V-3 harder than you've noted. The paper's argument is that PoW is vulnerable to 51% attacks, therefore PBFT is used, therefore BSFR-SH resists them. But PBFT's threshold is stricter — 33%, not 51%. At their own configuration of 4 nodes, two nodes suffice. So the paper cites a property that makes its chosen consensus algorithm look better while the real number is worse than the one it's contrasting against. Worth stating that plainly in the write-up; it's a substantive critique, not a wording nit.
+
+Breaking each safety rule in 15 variants to confirm the tests fail is the right discipline. Tests that have never failed aren't known to test anything.
+
+4. bro this directory was supposed to be made remote 
+https://github.com/sukhraj01/bsfr-sh.git
+```
+
 *(Prompt 2 followed a usage-limit interruption after the brief was written and before any code.
 Nothing was lost; work resumed from the DEV entries.)*
 
@@ -343,3 +378,55 @@ absent from the consensus span; M6 serialises at the bus or says in Target 3 tha
 - [x] `docs/ROADMAP.md` boxes ticked — M2b `[x]`, current milestone → M3
 - [x] `docs/DEVIATIONS.md` updated — DEV-10 amended, DEV-19–22 opened
 - [x] Committed, message explains *why*
+
+---
+
+## Addendum — repository re-rooted *(after the M2b commit, same session)*
+
+Until this point every commit in the project, M0 onward, had gone into a git repository rooted at
+the **home directory** (`~/.git`), not at the project. Found because `git status` at session start
+listed screenshots and other coursework as `../`; flagged at the end of M2b; fixed here on the
+user's instruction.
+
+**Exposure check, before anything else** — all read-only:
+
+| Check | Result |
+|---|---|
+| Remote on `~/.git` | **none**, and no `remote.*` config or remote refs have ever existed → nothing was ever pushed |
+| Tracked files | 34,275, all under `Desktop/`; 33,302 of them one assignment's `venv/`. `~/.git` is 7.8 GB |
+| Credential patterns, **current index** (the prompt's grep) | one hit: `pip/_vendor/certifi/cacert.pem` — public root-CA bundle, not a secret |
+| Credential patterns, **every path in history**, broader (`id_*`, `.key`, `.p12`, `.env`, `.netrc`, `.git-credentials`, `credentials`, `secret`, `token`, `gcloud`, `.docker/config`) | only false positives — `nltk/tokenize`, INLP tokenizer assignments |
+| Tracked shell history (`Desktop/sem1/.../.my_shell_history`) | 20 lines, zero matching password/token/key/`AKIA`/`ghp_`/`sk-`/private-key patterns (counted, not printed) |
+| Root commit `dfa87bb6` (2026-06-06, 34,182 files) touches the project? | no — the project lives in exactly 4 commits |
+
+Conclusion: no credential needs rotating on account of this repository.
+
+**Re-root.** `git subtree split --prefix=Desktop/ris-blockchain -b bsfr-extract` (the prompt's
+prefix had a typo, `ris-blockchian`). The split HEAD tree hash equals `HEAD:Desktop/ris-blockchain`
+exactly (`b9dba58b...`), so the content is byte-identical; commit hashes changed because paths
+lost their prefix (M2b is now `9d8c7342`, was `10ac82d1`), authors, dates and messages intact.
+
+*Dead end:* a plain `git clone ~ /tmp/bsfr-tmp` produced a **7.8 GB** `.git` for a 93-file
+project — a local clone hardlinks the entire source object store, venv blobs included. Re-cloned
+with `--no-local --single-branch` over `file://`, which transfers only reachable objects: 364 KB,
+`git fsck` clean.
+
+Then, per prompt 4, the clean `.git` was moved into `Desktop/ris-blockchain/` so the project
+directory is itself the repository (the `/tmp` clone would not survive a reboot), branch renamed
+to `main`, `origin` = `https://github.com/sukhraj01/bsfr-sh.git`, stale `origin/bsfr-extract`
+upstream removed. In `~/.git`, the project's 93 files were removed from the index
+(`git rm -r --cached`, **staged, not committed**, no working files touched); the `bsfr-extract`
+branch was left there.
+
+`git ls-remote origin` succeeds with no refs: the GitHub repository exists and is empty.
+
+**Left for the user:** the push itself (publishing, and the repo's visibility is not visible from
+here), and whether `~/.git` should exist at all — deleting it discards the other coursework's
+history too, so it is not this project's decision to make.
+
+**Also in this addendum:** the §V-3 finding in `docs/PAPER_NOTES.md` rewritten, and labelled
+[FLAW-5] (FLAW-4 was already the 90/10 resampling), on the user's direction to
+state §V-3's error as the argument it is — the move from PoW to pBFT *lowers* the adversarial
+fraction from 1/2 to 1/3, and at the paper's own n=4 two nodes suffice — together with the one fair
+concession (pBFT counts identities, so the real claim is "compromise 2 of 4 servers", which the
+paper never makes).

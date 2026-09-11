@@ -111,17 +111,31 @@ Five informal prose arguments: (1) session keys via mutual auth defeat replay/MI
 (4) blockchain immutability resists DoS/manipulation/leakage;
 (5) two separate chains isolate detection from recovery.
 
-**FINDING (M2b, 2026-09-11) — §V-3's "51%" framing is inverted for pBFT.** "51% attack" is a
-proof-of-work notion: an adversary needs a majority of hash power. pBFT's bound is stricter, not
-looser — safety holds only while fewer than **one third** of replicas are byzantine
-(`n >= 3f + 1`). With the paper's four miners, two colluding nodes (50%, below the "51%" the text
-invokes) can make two honest replicas commit different blocks at one height. Measured, not
-argued: `tests/unit/test_pbft_byzantine.py::test_f2_colluding_equivocators_can_fork_honest_replicas_the_bound_is_exactly_f`.
-What pBFT does give, and M2b shows: with one byzantine node of four, the chain commits and never
-forks, under all four tested behaviours; with two non-colluding faulty nodes, it stops rather than
-committing wrongly. "Selfish mining" has no pBFT analogue — there is no mining to withhold; the
-closest thing, a leader withholding proposals, is handled by view change. The §V-3 write-up must
-state the `f < n/3` bound rather than repeat the paper's wording.
+**[FLAW-5]** *(found in M2b, 2026-09-11)* **§V-3 cites a threshold that makes pBFT look stronger than PoW; the
+real threshold makes it weaker.** This is a substantive flaw in the argument, not a wording nit.
+
+The argument, as §V-3 runs it: proof-of-work chains are vulnerable to 51% attacks; BSFR-SH uses
+pBFT instead; therefore BSFR-SH resists 51% attacks. But pBFT's safety threshold is not a half —
+it is a **third**. pBFT is safe only while `f < n/3` replicas are byzantine (`n >= 3f + 1`). Moving
+from PoW to pBFT therefore *lowers* the fraction of the network an adversary must control, from
+just over one half to one third. At the paper's own configuration of four miners, `f = 1`: two
+colluding nodes — 50%, *below* the 51% the text says is being defended against — can make two
+honest replicas commit different blocks at one height, and two merely silent nodes halt the chain.
+Measured, not argued:
+`tests/unit/test_pbft_byzantine.py::test_f2_colluding_equivocators_can_fork_honest_replicas_the_bound_is_exactly_f`.
+
+The fair counter-point, which the write-up should concede and the paper never makes: pBFT's
+threshold counts *identities*, not hash power, and in a permissioned deployment identities cannot
+be minted (tested: `test_pbft.py::test_a_sybil_swarm_of_outsider_identities_cannot_form_a_certificate`).
+So the defensible version of §V-3 is "an attacker must compromise two of our four cloud servers" —
+a claim about operational security of a small, named set of machines, not a consensus-theoretic
+guarantee, and one that gets *worse* in relative terms, not better, as a reason to prefer pBFT over
+PoW. The paper substitutes a borrowed 51% figure for that argument.
+
+What M2b does substantiate: with one byzantine node of four, the chain commits and never forks,
+under all four tested behaviours; with two non-colluding faulty nodes, it stops rather than
+committing wrongly. "Selfish mining" has no pBFT analogue — there is nothing to mine; the closest
+thing, a leader withholding proposals, is handled by view change.
 
 **[GAP-6]** No formal model. No ROR/BAN proof, no AVISPA or Scyther verification — unusual, since
 Das's other papers almost always include one. Reproducing §V means writing the argument, not

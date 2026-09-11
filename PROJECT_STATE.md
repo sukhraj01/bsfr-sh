@@ -87,9 +87,11 @@ travels alongside and must satisfy `current_hash == digest`.
 
 ## For the write-up — §V-3
 
-§V-3's "pBFT resists 51% attacks" is inverted: pBFT is safe only below **one third** byzantine.
-Two colluding nodes of four fork it, and a test asserts the fork. FINDING in `docs/PAPER_NOTES.md`
-§V; full claim-by-claim mapping in `sessions/2026-09-11-03-m2b-pbft-consensus.md`.
+A substantive critique, not a nit: §V-3 argues "PoW is 51%-vulnerable, so we use pBFT", but pBFT's
+threshold is **one third**, so the switch lowers the bar. At the paper's four nodes, two colluders
+(50%) fork it — a test asserts the fork. Fair concession: pBFT counts identities, so the real claim
+is "compromise 2 of 4 cloud servers", which the paper never argues. [FLAW-5] in
+`docs/PAPER_NOTES.md` §V; claim-by-claim mapping in `sessions/2026-09-11-03-m2b-pbft-consensus.md`.
 
 ## Carried debt
 
