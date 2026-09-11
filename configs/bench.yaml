@@ -39,9 +39,15 @@ output:
   number_labels: [measured, paper_reported]
   # Sidecar JSON written next to every table and figure. Without config_hash and seed a number
   # is not reproducible and therefore not publishable.
+  #
+  # config_hash_scheme records *how* the digest was built, not what it covers. M2a moved
+  # config_hash() into crypto.hashing and domain-separated the pre-image, so every config digest
+  # changed value on 2026-09-11 without any config file changing. Comparing hashes across that
+  # boundary without the scheme would read a version difference as config drift.
   sidecar_fields:
     - run_id
     - config_hash
+    - config_hash_scheme
     - seed
     - git_rev
     - host

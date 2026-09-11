@@ -373,10 +373,10 @@ def _perturb(value: object) -> object:
 
 def test_missing_or_unexpected_struct_fields_are_errors() -> None:
     missing = {k: v for k, v in BLOCK.items() if k != "nonce"}
-    with pytest.raises(CanonicalEncodingError, match="missing=\\['nonce'\\]"):
+    with pytest.raises(CanonicalEncodingError, match=r"missing=\['nonce'\]"):
         encode_block(missing)
     extra = {**BLOCK, "surprise": 1}
-    with pytest.raises(CanonicalEncodingError, match="unexpected=\\['surprise'\\]"):
+    with pytest.raises(CanonicalEncodingError, match=r"unexpected=\['surprise'\]"):
         encode_block(extra)
 
 

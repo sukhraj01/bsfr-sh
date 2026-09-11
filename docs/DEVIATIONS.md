@@ -207,3 +207,42 @@ scikit-learn defaults kept where they are sane and `max_iter: 1000` where the de
 converge), `paper_mode.test_size: 0.30`, and `random_state` injected from `--seed` at run time.
 **Impact on reproduction:** our Table II row is reproducible from our config; the paper's is not
 reproducible from theirs. The report states this rather than implying our numbers are theirs.
+
+### DEV-17 · FIX · Block timestamps are non-decreasing within a tolerance, not monotonic
+**Paper:** Alg. 1 line 3 / Alg. 2 line 8 put `TS` / `TSDT_j` in the block header and the text
+implies block timestamps increase along the chain. `docs/ARCHITECTURE.md` §blockchain recorded
+this as "timestamp monotonicity".
+**Problem:** taken strictly, that is wrong for the system the paper describes. Blocks are
+produced by different cloud servers in a P2P network, each with an independent clock. Two honest
+blocks committed a second apart can carry timestamps in the "wrong" order under ordinary NTP
+skew, so strict monotonicity rejects honest blocks. The symptom is the unpleasant kind: an append
+that fails only sometimes, only under load, on a chain that is not actually corrupt.
+**Ours:** non-decreasing **within a tolerance**. A block may be up to `skew_tolerance_s` older
+than the current head; beyond that it is rejected. Equal timestamps are accepted. Forward drift
+is not bounded here — freshness against wall-clock belongs to `crypto.session`, and duplicating
+it in the chain would mean two clock policies to keep in step.
+
+The tolerance is the **same configured value** the session protocol uses, read through
+`SessionPolicy.from_config` rather than from a second key: `configs/chain.yaml` →
+`crypto.session.timestamp_window_s`, default 30 s. Two independently-tuned clock tolerances in
+one system drift apart, and then "how much skew do we accept?" has a different answer depending
+on which subsystem is asked.
+**Impact on reproduction:** none. No benchmark varies block timestamps; case-1/2/3 append blocks
+in order. This only changes which *dishonest* chains are rejected, which the paper never
+measures. Tested in `tests/unit/test_chain.py`.
+
+### DEV-18 · ADD · Config-hash construction is versioned
+**Paper:** n/a — this is about our own result provenance, not BSFR-SH.
+**Problem:** `results/logs/<run_id>.json` records a `config_hash` so a number can be traced to the
+configuration that produced it (CLAUDE.md §2). M2a moved `config_hash()` from `util.config` into
+`crypto.hashing` and routed it through `tagged_h`, which mixes in a domain tag. Every config
+digest therefore changed value on 2026-09-11 **without any config file changing**. A later
+comparison across that boundary would read a version difference as config drift and send someone
+looking for a config that never moved.
+**Ours:** `crypto.hashing.CONFIG_HASH_SCHEME` (currently 2), written into every sidecar as
+`config_hash_scheme` and listed in `configs/bench.yaml` `output.sidecar_fields`. Scheme 1 is the
+pre-M2a construction. The one existing sidecar has been backfilled with `config_hash_scheme: 1`
+and a note; its `config_hash` is `null` — that run had no governing config — so no value is
+affected, and the field records which era the file belongs to.
+**Impact on reproduction:** none yet, since no `measured` row depends on a config hash. It is
+recorded now because the cost of adding it later, after M6 has written figures, is much higher.

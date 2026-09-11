@@ -86,7 +86,26 @@ paper's Alg. 1 line 3 / Alg. 2 line 8 exactly, and canonical serialization follo
 `BC_DTBU` and `BC_SigRW` — never sharing node sets or state.
 
 Validation on append checks, in order: prev_hash linkage, Merkle root recomputation, current_hash
-recomputation, ECDSA signature under `owner_pubkey`, timestamp monotonicity.
+recomputation, ECDSA signature under `owner_pubkey`, timestamp.
+
+**Two block types, not one.** `current_hash` and `signature` are header fields computed over the
+other header fields, so a single dataclass holding all ten can hold a digest that does not match
+what it digests. `BlockDraft` has no `current_hash` and no `signature` fields at all; `Block` is
+produced only by `BlockDraft.seal()` and **stores neither derived digest** — `merkle_root` and
+`current_hash` are computed from the stored fields on access. There is no assignment through
+which they could disagree. The signature is the one derived field that must be stored, and it is
+verified in `Block.__post_init__`, so a `Block` with an invalid signature cannot exist either.
+
+`Sig_βj` covers `BlockPart.SIGN` — every header field except `signature` itself. See the
+`blockchain/block.py` docstring for why the full set rather than `current_hash` alone.
+
+**`RN` is inert.** The paper's header carries a random nonce. Under proof-of-work that is the
+mining counter; BSFR-SH uses pBFT, where blocks are committed by a `2f+1` quorum and there is
+nothing to mine. The field is kept for header fidelity and has no consensus role, no difficulty
+target and no validation rule. Nothing should ever loop over it looking for leading zeros.
+
+**Timestamps** are non-decreasing within a tolerance, not strictly monotonic, and the tolerance is
+the same configured value `crypto.session` uses — see DEV-17.
 
 ---
 

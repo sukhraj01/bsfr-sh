@@ -1,4 +1,4 @@
-"""YAML configuration loading, validation, and a stable config hash.
+"""YAML configuration loading and validation.
 
 Why this module is stricter than "call `yaml.safe_load`":
 
@@ -7,35 +7,39 @@ Why this module is stricter than "call `yaml.safe_load`":
 * **Cross-field checks.** `commit_threshold` must equal `2f + 1` for `miner_nodes = 3f + 1`
   (DEV-10). A config that quietly violates that would still run and would still produce numbers —
   numbers that no longer describe the paper's setup.
-* **A stable hash.** Every bench sidecar carries `config_hash` (docs/EXPERIMENTS.md, output
-  contract). If that hash is not reproducible across runs and machines, no result in `results/`
-  is traceable to the configuration that produced it, and CLAUDE.md §2 is unenforceable.
 
-The hash is computed over the canonical encoding from `util.serialization`, so it depends on the
-config's *content* and not on YAML key order, comments, or whitespace.
+This module deliberately does **not** hash. Every bench sidecar carries a `config_hash`
+(docs/EXPERIMENTS.md, output contract), but computing it here would mean `util` importing
+`crypto.hashing` — and the dependency runs `util <- crypto`, never back
+(docs/ARCHITECTURE.md §Dependency direction). CLAUDE.md §7 additionally requires exactly one
+`hashlib` importer in the tree, which is `crypto.hashing`.
+
+So `Config` carries no digest. The consumer that needs one composes the two layers::
+
+    from bsfr_sh.crypto.hashing import config_hash
+    from bsfr_sh.util.config import load_config
+
+    cfg = load_config("configs/chain.yaml")
+    digest = config_hash(cfg.kind, cfg.data)
+
+`Config.data` is the whole validated document, so the digest still depends on the config's
+*content* and not on YAML key order, comments, or whitespace. This arrangement retired debt D1;
+the earlier one had `util.config` calling `hashlib` directly, which no rule in the project
+actually permitted.
 """
 
 from __future__ import annotations
 
-import hashlib
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, TypeVar
 
 import yaml
 
-from bsfr_sh.util.serialization import (
-    DOMAIN_CONFIG,
-    CanonicalEncodingError,
-    encode_struct,
-)
-
 __all__ = [
     "Config",
     "ConfigError",
-    "combined_config_hash",
-    "config_hash",
     "load_config",
     "load_configs",
 ]
@@ -109,13 +113,16 @@ _REQUIRED_MODELS: Final = (
 
 @dataclass(frozen=True)
 class Config:
-    """A validated config file plus its content hash."""
+    """A validated config file.
+
+    Deliberately no `config_hash` field — see the module docstring. Pass `kind` and `data` to
+    `crypto.hashing.config_hash()` at the point a digest is actually needed.
+    """
 
     kind: str
     schema_version: int
     path: Path
     data: Mapping[str, Any]
-    config_hash: str
 
     def get(self, dotted: str, default: Any = _MISSING) -> Any:
         """Look up a dotted key path, e.g. ``consensus.commit_threshold``."""
@@ -142,44 +149,10 @@ class Config:
 
 
 # --------------------------------------------------------------------------------------------
-# Hashing
-# --------------------------------------------------------------------------------------------
-def config_hash(kind: str, data: Mapping[str, Any]) -> str:
-    """Return the stable SHA-256 hex digest of a config's content.
-
-    Order-independent (mappings are sorted by canonical encoded key), comment-independent, and
-    identical across runs, processes, machines and Python versions.
-    """
-    try:
-        payload = encode_struct(DOMAIN_CONFIG, ("kind", "data"), {"kind": kind, "data": data})
-    except CanonicalEncodingError as exc:  # pragma: no cover - defensive
-        raise ConfigError(f"config for {kind!r} contains a non-encodable value: {exc}") from exc
-    # NOTE (M1): CLAUDE.md §7 routes all SHA-256 through `crypto.hashing.h()`. That module does
-    # not exist yet — `crypto/` is M1 and is explicitly out of scope for this session — so this
-    # is the one deliberate hashlib call site in the repo. `tests/unit/test_no_stray_hashlib.py`
-    # pins it to exactly this file, and M1 must replace it with `crypto.hashing.h()` and delete
-    # the exemption from that test.
-    return hashlib.sha256(payload).hexdigest()
-
-
-def combined_config_hash(configs: Iterable[Config]) -> str:
-    """Hash of a set of configs, for a run that reads more than one file.
-
-    Independent of the order the configs were loaded in: they are keyed by `kind`.
-    """
-    by_kind: dict[str, Any] = {}
-    for cfg in configs:
-        if cfg.kind in by_kind:
-            raise ConfigError(f"two configs of kind {cfg.kind!r} in one run")
-        by_kind[cfg.kind] = cfg.config_hash
-    return config_hash("combined", by_kind)
-
-
-# --------------------------------------------------------------------------------------------
 # Loading
 # --------------------------------------------------------------------------------------------
 def load_config(path: str | Path, *, expected_kind: str | None = None) -> Config:
-    """Load, validate and hash one YAML config file."""
+    """Load and validate one YAML config file."""
     path = Path(path)
     try:
         text = path.read_text(encoding="utf-8")
@@ -209,13 +182,7 @@ def load_config(path: str | Path, *, expected_kind: str | None = None) -> Config
             f"(this build understands {SUPPORTED_SCHEMA_VERSION})"
         )
 
-    cfg = Config(
-        kind=kind,
-        schema_version=version,
-        path=path,
-        data=raw,
-        config_hash=config_hash(kind, raw),
-    )
+    cfg = Config(kind=kind, schema_version=version, path=path, data=raw)
     _validate(cfg)
     return cfg
 

@@ -14,17 +14,15 @@ import pytest
 SRC = Path(__file__).resolve().parents[2] / "src" / "bsfr_sh"
 PY_FILES = sorted(SRC.rglob("*.py"))
 
-#: `crypto.hashing` is the project's SHA-256 entry point (CLAUDE.md §7) and the module this rule
-#: exists to protect.
+#: `crypto.hashing` is the project's SHA-256 entry point (CLAUDE.md §7) and now the *only*
+#: module in the tree that imports hashlib.
 #:
-#: `util/config.py` is still here, and M1 could not remove it. The M0 plan was for it to import
-#: `crypto.hashing.h()`, but `util` may not import upward — `test_util_depends_on_nothing_else_in
-#: _the_package` below forbids exactly that, and docs/ARCHITECTURE.md fixes the direction as
-#: `util <- crypto`. The two rules cannot both hold while `util.config` computes its own digest.
-#: Retiring it means moving `config_hash()` out of `util.config` and into `crypto.hashing`, with
-#: `bench`/`scripts` composing the two — tracked as debt D1 in PROJECT_STATE.md, deferred to M2
-#: because it changes the `Config` dataclass and the M0 tests that pin it.
-HASHLIB_ALLOWED = {"util/config.py", "crypto/hashing.py"}
+#: `util/config.py` held the second exemption from M0 until M2a, because it computed a config
+#: digest at load time and `util` may not import upward. Retiring that (debt D1) meant moving
+#: `config_hash()` into `crypto.hashing` and dropping the field from `Config`; the consumer that
+#: needs a digest composes the two layers. Adding a name back to this set means re-opening a
+#: question that has now been answered — route the hash through `crypto.hashing.h()` instead.
+HASHLIB_ALLOWED = {"crypto/hashing.py"}
 
 
 def _rel(path: Path) -> str:

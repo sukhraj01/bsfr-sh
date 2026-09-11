@@ -1,8 +1,12 @@
-"""Config loading, validation and the stability of `config_hash`.
+"""Config loading and validation, plus the stability of the digest taken over a loaded config.
 
-The hash matters as much as the values: `results/logs/<run_id>.json` records a config hash, and
+The digest matters as much as the values: `results/logs/<run_id>.json` records a config hash, and
 if that hash is not reproducible then no figure in `results/` can be tied to the configuration
 that produced it (CLAUDE.md §2, docs/EXPERIMENTS.md output contract).
+
+`config_hash` lives in `crypto.hashing`, not on `Config` — `util` may not import upward, and
+`crypto.hashing` is the tree's only `hashlib` importer (CLAUDE.md §7). These tests therefore
+compose the two layers exactly as a caller must: `config_hash(cfg.kind, cfg.data)`.
 """
 
 from __future__ import annotations
@@ -12,14 +16,19 @@ from pathlib import Path
 import pytest
 import yaml
 
+from bsfr_sh.crypto.hashing import combined_config_hash, config_hash
 from bsfr_sh.util.config import (
     Config,
     ConfigError,
-    combined_config_hash,
-    config_hash,
     load_config,
     load_configs,
 )
+
+
+def hash_of(cfg: Config) -> str:
+    """What a caller writing a sidecar does: load through `util`, hash through `crypto`."""
+    return config_hash(cfg.kind, cfg.data)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "configs"
@@ -34,7 +43,7 @@ def test_shipped_configs_load_and_validate(name: str) -> None:
     cfg = load_config(CONFIG_DIR / name)
     assert cfg.kind == name.removesuffix(".yaml")
     assert cfg.schema_version == 1
-    assert len(cfg.config_hash) == 64
+    assert len(hash_of(cfg)) == 64
 
 
 def test_shipped_chain_config_matches_the_paper_setup() -> None:
@@ -90,7 +99,7 @@ def test_expected_kind_mismatch_is_an_error() -> None:
 # ---------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("name", SHIPPED)
 def test_hash_is_stable_across_loads(name: str) -> None:
-    assert load_config(CONFIG_DIR / name).config_hash == load_config(CONFIG_DIR / name).config_hash
+    assert hash_of(load_config(CONFIG_DIR / name)) == hash_of(load_config(CONFIG_DIR / name))
 
 
 def test_hash_ignores_key_order_comments_and_whitespace(tmp_path: Path) -> None:
@@ -102,7 +111,7 @@ def test_hash_ignores_key_order_comments_and_whitespace(tmp_path: Path) -> None:
         + yaml.safe_dump(reordered, sort_keys=False, default_flow_style=False)
         + "\n\n"
     )
-    assert load_config(rewritten).config_hash == load_config(CONFIG_DIR / "chain.yaml").config_hash
+    assert hash_of(load_config(rewritten)) == hash_of(load_config(CONFIG_DIR / "chain.yaml"))
 
 
 def test_hash_changes_when_any_value_changes(tmp_path: Path) -> None:
@@ -110,7 +119,7 @@ def test_hash_changes_when_any_value_changes(tmp_path: Path) -> None:
     source["transaction"]["payload_bytes"] = 8192
     changed = tmp_path / "chain.yaml"
     changed.write_text(yaml.safe_dump(source))
-    assert load_config(changed).config_hash != load_config(CONFIG_DIR / "chain.yaml").config_hash
+    assert hash_of(load_config(changed)) != hash_of(load_config(CONFIG_DIR / "chain.yaml"))
 
 
 def test_hash_is_domain_separated_by_kind() -> None:
@@ -118,16 +127,38 @@ def test_hash_is_domain_separated_by_kind() -> None:
     assert config_hash("chain", data) != config_hash("ml", data)
 
 
+def test_config_carries_no_digest_field() -> None:
+    """Debt D1, pinned. A `config_hash` field would mean `util` hashing, which it may not do.
+
+    If this fails, someone has put the digest back on the dataclass and `util/config.py` is
+    importing `hashlib` again — see `test_module_boundaries.py`.
+    """
+    from dataclasses import fields
+
+    assert "config_hash" not in {f.name for f in fields(Config)}
+
+
 def test_combined_hash_is_order_independent() -> None:
+    """Keyed by kind, so the order the files were loaded in cannot change the digest."""
     loaded = load_configs(SHIPPED, root=CONFIG_DIR)
-    forwards = [loaded["chain"], loaded["ml"], loaded["bench"]]
-    assert combined_config_hash(forwards) == combined_config_hash(list(reversed(forwards)))
+    by_kind = {kind: hash_of(cfg) for kind, cfg in loaded.items()}
+    reversed_order = dict(reversed(list(by_kind.items())))
+    assert combined_config_hash(by_kind) == combined_config_hash(reversed_order)
 
 
-def test_combined_hash_rejects_two_configs_of_one_kind() -> None:
-    cfg = load_config(CONFIG_DIR / "chain.yaml")
+def test_combined_hash_changes_when_any_member_changes() -> None:
+    loaded = load_configs(SHIPPED, root=CONFIG_DIR)
+    by_kind = {kind: hash_of(cfg) for kind, cfg in loaded.items()}
+    altered = {**by_kind, "ml": "0" * 64}
+    assert combined_config_hash(by_kind) != combined_config_hash(altered)
+
+
+def test_load_configs_still_rejects_two_configs_of_one_kind(tmp_path: Path) -> None:
+    """The duplicate-kind guard moved to load time, which is where it can name both paths."""
+    duplicate = tmp_path / "chain.yaml"
+    duplicate.write_text((CONFIG_DIR / "chain.yaml").read_text())
     with pytest.raises(ConfigError, match="two configs of kind"):
-        combined_config_hash([cfg, cfg])
+        load_configs([CONFIG_DIR / "chain.yaml", duplicate])
 
 
 # ---------------------------------------------------------------------------------------------
@@ -188,12 +219,12 @@ def test_commit_threshold_must_be_2f_plus_1(tmp_path: Path) -> None:
     # The failure this catches is invisible at run time: a threshold of 2 still commits blocks,
     # it just is not pBFT any more, and the benchmark would describe a different protocol.
     path = _chain(tmp_path, consensus__commit_threshold=2)
-    with pytest.raises(ConfigError, match="not 2f\\+1"):
+    with pytest.raises(ConfigError, match=r"not 2f\+1"):
         load_config(path)
 
 
 def test_miner_nodes_must_be_3f_plus_1(tmp_path: Path) -> None:
-    with pytest.raises(ConfigError, match="not 3f\\+1"):
+    with pytest.raises(ConfigError, match=r"not 3f\+1"):
         load_config(_chain(tmp_path, consensus__miner_nodes=5))
 
 
@@ -269,6 +300,6 @@ def test_require_int_rejects_a_bool(tmp_path: Path) -> None:
     # YAML's `yes`/`true` are bools, and `isinstance(True, int)` is True, so this is a real
     # config typo that would otherwise sail through as the integer 1.
     path = _write(tmp_path, {"kind": "chain", "schema_version": 1, "n": True})
-    cfg = Config(kind="chain", schema_version=1, path=path, data={"n": True}, config_hash="x")
+    cfg = Config(kind="chain", schema_version=1, path=path, data={"n": True})
     with pytest.raises(ConfigError, match="is a bool"):
         cfg.require("n", int)

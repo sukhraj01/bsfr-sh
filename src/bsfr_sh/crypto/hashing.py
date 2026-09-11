@@ -32,13 +32,21 @@ protocol structures; the dependency runs `util <- crypto` and never back
 from __future__ import annotations
 
 import hashlib
-from typing import Final
+from collections.abc import Mapping
+from typing import Any, Final
 
-from bsfr_sh.util.serialization import encode
+from bsfr_sh.util.serialization import (
+    DOMAIN_CONFIG,
+    CanonicalEncodingError,
+    encode,
+    encode_struct,
+)
 
 __all__ = [
+    "CONFIG_HASH_SCHEME",
     "DIGEST_SIZE",
     "DOMAIN_BLOCK_HEADER",
+    "DOMAIN_CONFIG",
     "DOMAIN_KEM_TRANSCRIPT",
     "DOMAIN_MERKLE_LEAF",
     "DOMAIN_MERKLE_NODE",
@@ -46,6 +54,8 @@ __all__ = [
     "DOMAIN_SESSION_TRANSCRIPT",
     "DOMAIN_TRANSACTION",
     "HASH_NAME",
+    "combined_config_hash",
+    "config_hash",
     "h",
     "hex_digest",
     "tagged_h",
@@ -111,3 +121,52 @@ def tagged_h(domain: str, *parts: bytes) -> bytes:
 def hex_digest(digest: bytes) -> str:
     """Hex-encode a digest for logs and result sidecars."""
     return digest.hex()
+
+
+# --------------------------------------------------------------------------------------------
+# Config hashing
+# --------------------------------------------------------------------------------------------
+# This lives here, not in `util.config`, because `util` may not import upward
+# (docs/ARCHITECTURE.md fixes the direction as `util <- crypto`) and CLAUDE.md §7 requires this
+# module to be the only `hashlib` importer. Those two rules together mean a config digest cannot
+# be computed inside `util.config` at load time; the consumer that needs one — `bench`, or a
+# script writing a sidecar — composes `util.config` with this function instead. That is why
+# `Config` no longer carries a `config_hash` field. Retires debt D1.
+
+#: Bumped when the *construction* of a config hash changes, independently of the config content.
+#:
+#: Scheme 1 (M0-M1) hashed `encode_struct(DOMAIN_CONFIG, ...)` through a bare `hashlib.sha256`
+#: call inside `util.config`. Scheme 2 routes the same pre-image through `tagged_h`, which mixes
+#: in a domain tag, so every config hash changed value on 2026-09-11 *without any config file
+#: changing*. Sidecars record the scheme so that a later comparison reads a version difference as
+#: a version difference rather than as config drift — see `CONFIG_HASH_SCHEME` in the sidecar
+#: contract, and the backfilled `results/logs/20260910T213021Z-f07b5fbf.json`.
+CONFIG_HASH_SCHEME: Final = 2
+
+#: The position a config digest occupies. Distinct from `util.serialization.DOMAIN_CONFIG`, which
+#: separates the *encoding*; this separates the *hash*.
+DOMAIN_CONFIG_HASH: Final = "bsfr_sh.hash.config.v2"
+
+
+def config_hash(kind: str, data: Mapping[str, Any]) -> str:
+    """Return the stable SHA-256 hex digest of a config's content.
+
+    Order-independent (mappings are sorted by canonical encoded key), comment-independent, and
+    identical across runs, processes, machines and Python versions — the property every
+    `results/logs/<run_id>.json` depends on to tie a number back to the configuration that
+    produced it (CLAUDE.md §2).
+    """
+    try:
+        payload = encode_struct(DOMAIN_CONFIG, ("kind", "data"), {"kind": kind, "data": data})
+    except CanonicalEncodingError as exc:
+        raise ValueError(f"config for {kind!r} contains a non-encodable value: {exc}") from exc
+    return tagged_h(DOMAIN_CONFIG_HASH, payload).hex()
+
+
+def combined_config_hash(hashes_by_kind: Mapping[str, str]) -> str:
+    """Hash of several configs, for a run that reads more than one file.
+
+    Takes `{kind: config_hash}` rather than `Config` objects, so that `crypto` does not need to
+    know what a `Config` is. Independent of the order the configs were loaded in.
+    """
+    return config_hash("combined", dict(hashes_by_kind))

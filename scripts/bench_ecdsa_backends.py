@@ -34,6 +34,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from bsfr_sh.crypto.hashing import CONFIG_HASH_SCHEME  # noqa: E402
 from bsfr_sh.util import logging as log  # noqa: E402
 from bsfr_sh.util.seeding import seed_all  # noqa: E402
 
@@ -184,6 +185,13 @@ def main() -> int:
         "purpose": "Q1 — ECDSA backend selection",
         "seed": args.seed,
         "config_hash": None,
+        # A config hash is only comparable against another hash built the same way. The
+        # construction changed in M2a (scheme 1 -> 2: the pre-image now goes through `tagged_h`,
+        # so every config digest changed value without any config file changing), so the scheme
+        # is recorded alongside the digest. Without it, M6 comparing a new hash to an old one
+        # would read a version difference as config drift and go looking for a config that
+        # never moved.
+        "config_hash_scheme": CONFIG_HASH_SCHEME,
         "note": "no config file governs this run; parameters are the CLI arguments below",
         "parameters": {
             "operations": args.operations,

@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M2**
+**Current milestone: M2b**
 
 ---
 
@@ -40,17 +40,38 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ---
 
-## M2 — Blockchain + consensus `[ ]`
+## M2 — Blockchain + consensus
 
-- [ ] `blockchain/transaction.py` — hybrid-encrypted `Transaction`
-- [ ] `blockchain/block.py` — exact header field order from Alg. 1 line 3
-- [ ] `blockchain/chain.py` — genesis, validated append, integrity walk
+**Split into M2a and M2b on 2026-09-11.** The original single milestone bundled two things that
+fail differently: data structures whose correctness is local and checkable in isolation, and a
+distributed protocol whose correctness is about message ordering and quorums. Building them
+together would have meant debugging a Merkle root through a consensus round. M2a is a hard
+dependency of M2b and nothing else about the plan changed.
+
+### M2a — Blockchain data structures `[x]`
+
+- [x] `blockchain/transaction.py` — hybrid-encrypted `Transaction`, two payload builders
+      (Alg. 1 line 2, Alg. 2 line 7)
+- [x] `blockchain/block.py` — exact header field order from Alg. 1 line 3; draft/sealed split so
+      a block cannot hold a digest that does not cover it; `RN` documented inert
+- [x] `blockchain/chain.py` — genesis, validated append, integrity walk, iteration
+- [x] Timestamps non-decreasing within the shared skew tolerance (DEV-17)
+- [x] Tests: per-header-field tamper sweep, chain independence, round trip, skew bounds
+      (107 blockchain tests; 465 total)
+- [x] Debt D1 retired — `config_hash()` moved to `crypto.hashing`; one `hashlib` importer again
+- [x] Sidecar `config_hash_scheme` added and backfilled (DEV-18)
+
+**Exit:** `BC_DTBU` and `BC_SigRW` each build 15 blocks x 100 tx by direct single-node append,
+no consensus. **Met** — `tests/unit/test_chain_scale.py`.
+
+### M2b — Consensus `[ ]`
+
 - [ ] `consensus/network.py` — in-process P2PCS message bus
 - [ ] `consensus/pbft.py` — pre-prepare / prepare / commit, `2f+1`, view change (DEV-10)
 - [ ] Byzantine fixtures: silent, equivocating, bad-signature, stale-view
-- [ ] Tests: tampered block rejected, chain independence, threshold enforcement
+- [ ] Tests: threshold enforcement, view change, `f=1` tolerated
 
-**Exit:** `BC_DTBU` and `BC_SigRW` each build 15 blocks × 100 tx with 4 nodes, `f=1` tolerated.
+**Exit:** `BC_DTBU` and `BC_SigRW` each build 15 blocks x 100 tx with 4 nodes, `f=1` tolerated.
 
 ---
 

@@ -1,5 +1,7 @@
 {
+  "backfill_note": "config_hash_scheme backfilled 2026-09-11 (M2a). This run predates the move of config_hash() into crypto.hashing; digests written before that change used scheme 1 (bare hashlib.sha256 over the canonical encoding, no domain tag). This particular run had no governing config file, so its config_hash is null and no value is affected \u2014 the field records which era the file belongs to so a scheme difference is never mistaken for config drift.",
   "config_hash": null,
+  "config_hash_scheme": 1,
   "git_rev": "3c59f62a",
   "host": {
     "machine": "arm64",
