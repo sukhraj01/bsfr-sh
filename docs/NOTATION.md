@@ -16,12 +16,15 @@ Table I itself is a raster figure in the PDF.
 | `DM_CSl` | detection module hosted on `CS_l` | `detection.detector.DetectionModule` |
 | `L` | pBFT leader (primary) for a consensus round | `Membership.primary(view)` — round-robin, not a class |
 | `A` | adversary | threat model only, no class |
+| `CS'_l` | cloud server holding the key a backup was encrypted to — Phase 1's collector (DEV-25) | a `CloudServer` in the key-holder role of `recovery.restore` |
 
 ## Data
 
 | Symbol | Meaning | Code |
 |---|---|---|
-| `DT_BU` | healthcare data backup payload | `blockchain.transaction.BackupPayload` |
+| `DT_BU` | healthcare data backup payload | whole: `bytes` on `System`; one chunk per transaction: `blockchain.transaction.BackupPayload` (DEV-24) |
+| — | payload digest `H(DT_BU)`, taken on `SYS_i` before shipping (DEV-23, ours) | `BackupPayload.payload_digest`, `blockchain.backup.payload_digest()` |
+| — | `SYS_i`'s attestation over the digest (DEV-23, ours) | `BackupPayload.attestation`, `blockchain.backup.BackupManifest` |
 | `DT_RW` | raw ransomware data from honeypot | `honeypot.collector.RawSample` |
 | `DT_RWC` | cleaned/pre-processed ransomware data | `honeypot.preprocess.CleanSample` |
 | `Sig_RW` | ransomware sample signature (content digest) | `honeypot.signatures.SampleSignature` |
@@ -61,6 +64,7 @@ these are `Honeypot` and `Block.prev_hash` respectively — never abbreviate eit
 | Symbol | Meaning | Code |
 |---|---|---|
 | `KU_CSl` | public key of `CS_l` | `CloudServer.public_key` |
+| `KU_SYSi` | public key of `SYS_i`, which session establishment already requires; it also verifies the DEV-23 attestation (that use is ours) | `System.public_key` |
 | `SK_{E_A, E_B}` | session key between entities A and B | `crypto.session.SessionKey` |
 | `SK_{CS_l, SYS_i}` | cloud server ↔ system session key | established in Phase 1 |
 | `SK_{CS_l, HP_RW}` | cloud server ↔ honeypot session key | established in Phase 2 |

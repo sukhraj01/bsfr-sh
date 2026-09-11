@@ -10,13 +10,13 @@ Every module that implements a paper algorithm step carries a docstring referenc
 
 | Lines | Step | Implementation |
 |---|---|---|
-| 1 | `CS_l` collects `DT_BU` over `SK_{CS_l,SYS_i}` | `crypto.session.establish()` + `System.ship_backup()` |
-| 2 | Encrypt into transactions `E_KU(Tx_m)`, m = 1..`N_dTx` | `blockchain.transaction.encrypt_backup()` — hybrid, see DEV-01 |
-| 3 | Assemble block `β_j` with full header | `blockchain.block.Block.assemble()` |
+| 1 | `CS_l` collects `DT_BU` over `SK_{CS_l,SYS_i}` | `framework.entities.establish_session()`, then `System.ship_backup()` → `CloudServer.receive_backup()` over a `crypto.channel.Channel`; `SYS_i` attests first (DEV-23) |
+| 2 | Encrypt into transactions `E_KU(Tx_m)`, m = 1..`N_dTx` | `phase1_backup.backup_transactions()`: `blockchain.backup.split()` (DEV-24) + `blockchain.transaction.encrypt_backup()` (DEV-01) |
+| 3 | Assemble block `β_j` with full header | `framework._block_pipeline.batch()` per `block.transactions_per_block`; the pBFT primary's `Chain.draft_next().seal()` (DEV-22) |
 | 4 | Broadcast `β_j` to P2PCS | `consensus.pbft.Cluster.submit()` → `ClientRequest` to every replica over `consensus.network.P2PCSNetwork`; the primary broadcasts the block as a `Proposal` (DEV-19, DEV-22) |
 | 5 | Leader `L` runs pBFT | `consensus.pbft.Replica` — pre-prepare / prepare / commit; `L` = `Membership.primary(view)` |
 | 6–10 | Threshold commit → append, else re-run consensus | commit at `2f+1` → `Chain.append()`; "re-run" = view change on timeout, `consensus.view_change` (DEV-10, DEV-20) |
-| 11–15 | Terminate when all blocks added | `phase1_backup.run()` |
+| 11–15 | Terminate when all blocks added | `framework._block_pipeline.commit()` returns once `f+1` replicas hold every block (the pBFT client rule); `phase1_backup.run()` |
 
 **Watch:** line 6 of the paper reads "commit on addition of β_i" inside the β_j loop — index typo.
 Treat as β_j.
@@ -34,8 +34,8 @@ Treat as β_j.
 | 5 | Generate `Sig_RW` | `honeypot.signatures.build()` — **design ours, GAP-3** |
 | 6 | Generate `FT_RW` | `honeypot.features.build()` — **design ours, GAP-3** |
 | 7 | Encrypt into `E_KU(Tx_i)`, i = 1..`N_Tx` | `blockchain.transaction.encrypt_signature_record()` |
-| 8–9 | Assemble and broadcast `β_i` | shared with Alg. 1 |
-| 10–15 | pBFT round, commit or retry | shared with Alg. 1 |
+| 8–9 | Assemble and broadcast `β_i` | `framework._block_pipeline.run()` — built in M3a, shared with Alg. 1 |
+| 10–15 | pBFT round, commit or retry | `framework._block_pipeline.run()` — built in M3a, shared with Alg. 1 |
 | 16–20 | Terminate when all blocks added | `phase2_collection.run()` |
 
 Lines 3–10 are structurally identical to Alg. 1 lines 2–10. **Factor once** into
@@ -91,17 +91,21 @@ line 4 as *remediate*, not *erase*.
 
 | Lines | Step | Implementation |
 |---|---|---|
-| 1 | Identify `SYS_i` needing recovery | `recovery.locator.identify()` |
-| 2 | Start recovery from `BC_DTBU` | `recovery.restore.begin()` |
-| 3 | Request decryption of `E_KU(Tx_j)` | `recovery.restore.request_decrypt()` |
-| 4 | `CS'_l` decrypts, ships to `CS_l` over `SK_{CS'_l,CS_l}` | `recovery.restore.transfer()` |
+| 1 | Identify `SYS_i` needing recovery | `System.request_recovery()` → `CloudServer.accept_recovery_request()` (a system may name only itself), then `recovery.locator.identify()` |
+| 2 | Start recovery from `BC_DTBU` | `recovery.restore.begin()` — newest complete backup |
+| 3 | Request decryption of `E_KU(Tx_j)` | `recovery.restore.request_decrypt()` — re-verifies each block (`Chain.verify_block`), decrypts, reassembles by `chunk_index` (DEV-24) |
+| 4 | `CS'_l` decrypts, ships to `CS_l` over `SK_{CS'_l,CS_l}` | `recovery.restore.transfer()`; `CS'_l` is the key holder (DEV-25); skipped when one server holds both roles |
 | 5 | `CS_l` → `SYS_i` over `SK_{CS_l,SYS_i}` | `recovery.restore.deliver()` |
-| 6 | `SYS_i` stores `DT_BU` | `System.restore()` |
-| 7–11 | Terminate on success, else continue | `phase5_recovery.run()` |
+| 6 | `SYS_i` stores `DT_BU` | `System.restore()` → `recovery.restore.open_delivery()`, which checks the attested digest first (DEV-23) |
+| 7–11 | Terminate on success, else continue | `phase5_recovery.run()` — returns a report or raises; not a retry loop |
 
 **Addition (DEV-05):** the paper implies a linear scan to find a system's backups. We add
 `recovery.locator.BackupIndex`, a per-system transaction index maintained on append. Falls back
-to full scan if the index is cold, so behaviour matches the paper's semantics exactly.
+to full scan if the index is cold, so behaviour matches the paper's semantics exactly. Because
+`system_id` is encrypted, only the key holder can build the index (DEV-05 amendment).
+
+**Addition (DEV-23):** Alg. 5 never checks that what `SYS_i` stores is what it backed up. `SYS_i`
+attests a payload digest before Phase 1 ships it and verifies it after line 5.
 
 ---
 

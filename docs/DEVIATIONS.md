@@ -96,6 +96,19 @@ malware removal logic; there is nothing real to remove.
 **Ours:** `recovery.locator.BackupIndex` maintained on append. Falls back to full scan when cold,
 so paper semantics are preserved exactly. Reduces recovery from O(chain) to O(1) lookup.
 
+**Amendment (M3a, 2026-09-12): who can build the index, and what it costs.** M2a put `system_id`
+inside the encrypted payload, so the chain does not reveal which systems were backed up or when.
+That means an index keyed on `system_id` cannot be built from public chain data. `BackupIndex`
+belongs to the key holder `CS'_l` (DEV-25) and decrypts each backup transaction once, as its block
+is appended. **The index moves the decryption cost from recovery time to append time. It does not
+remove that cost.** The warm index and the cold scan do the same decryptions at different moments.
+Only the lookup becomes independent of chain length. The index stores pointers (height, block hash,
+transaction index), never plaintext. Restore re-reads and re-verifies the block behind every
+pointer. So a stale or wrong index can cost a fallback scan, but it cannot change what is restored.
+If a warm index's anchor block hash no longer matches the chain, the index is discarded and rebuilt
+by full scan. `tests/unit/test_backup_index.py` asserts that the index and the cold scan return
+identical locations.
+
 ### DEV-06 · FIX · Class balance in ML evaluation
 **Paper:** §VII resamples BitcoinHeist to 90% ransomware / 10% benign, then reports accuracy
 (98.98%) and F1 (0.990). On that split a constant-positive classifier scores 90.0% accuracy and
@@ -323,6 +336,13 @@ chain forever, which undercuts §V-3's resistance claim.
 5. **Client replies and request authentication.** Requests (a batch of transactions to put in a
    block) are delivered to replicas unauthenticated and nothing replies to the submitter. Request
    authentication belongs to the session layer (`crypto.session`, Phase 1) and is wired in M3.
+   **M3a (2026-09-12): wired for backups, not for requests.** A backup reaches `CS_l` only over
+   its sender's `SK_{CS_l,SYS_i}`, and it must carry that sender's DEV-23 attestation. So no system
+   can get a *restorable* backup onto `BC_DTBU` in another system's name. The `ClientRequest`
+   from `CS_l` to the replicas is still unauthenticated. Anyone who can reach the bus can get junk
+   transactions committed. That costs storage, and junk can never be restored as anyone's data.
+   Closing the gap means signing requests with the submitting server's key. No M3a claim depends
+   on it. The pipeline's client rule (`f+1` replicas) stands in for Castro–Liskov's replies.
 6. **Retransmission.** A dropped message is never resent; liveness under loss comes only from
    the view-change timer.
 7. **Helping with already-committed heights.** A replica rejects every message for a height it
@@ -368,3 +388,78 @@ pBFT the primary is that node. This is the standard client/primary split.
 **Impact on reproduction:** Target 3's measured span — block construction + consensus + append —
 contains the same work either way (hybrid encryption happens before submission in both); sealing
 a block is one Merkle root and one ECDSA signature. No correctness target is affected.
+
+### DEV-23 · FILL · Recovered data is checked against a digest `SYS_i` attested before shipping (GAP-8)
+**Paper:** Alg. 5 decrypts `E_KU(Tx_j)`, ships the plaintext through two cloud servers and has
+`SYS_i` store it. Nothing checks that what `SYS_i` stores is what it backed up.
+**Problem:** the chain proves a *transaction* was not altered after commit (Merkle root, block
+signature, AEAD tag). It says nothing about plaintext round-trip, which has three failure paths
+the chain cannot see:
+1. **Reassembly.** A backup spanning several transactions (DEV-24) is put back together off-chain.
+   A wrong order, a missing chunk, or a chunk from another backup gives bytes that were never
+   backed up, while every transaction verifies.
+2. **The two hops.** `CS'_l` and `CS_l` each hold the plaintext between the chain and `SYS_i`
+   (Alg. 5 lines 4–5). Session AEAD protects the bytes in transit. It does not protect them from
+   the servers at either end.
+3. **The collector.** `CS_l` encrypts in Phase 1 whatever it chooses to. The chain then certifies
+   that choice faithfully.
+
+**Ours:** before `DT_BU` leaves the device, `SYS_i` computes
+`payload_digest = H(tag_payload ‖ system_id ‖ captured_at ‖ DT_BU)` and signs
+`(tag_attest ‖ system_id ‖ captured_at ‖ payload_digest)` with its ECDSA identity key. Both travel
+inside every chunk's encrypted payload (`BackupPayload.payload_digest`, `.attestation`). After the
+last decryption, `SYS_i` recomputes the digest over the reassembled bytes, compares it, and
+verifies the attestation under **its own** public key. On any mismatch it raises and stores
+nothing.
+
+**Why a signature and not only a digest:** a digest carried with the data can be recomputed by
+anyone who can alter the data, and that includes both servers. It would catch path 1 and miss
+paths 2 and 3. `SYS_i` cannot keep a local receipt either, because the scenario Alg. 5 exists for
+is a wiped device. The attestation needs only the device's identity key, which it must hold anyway
+to open the recovery session. So the check survives both the wipe and a dishonest server. It costs
+one signature per backup, not per chunk.
+**Consequence:** a backup record with no digest or attestation, which is what the paper's own
+record amounts to (`BackupPayload`'s defaults), is **refused** at restore rather than returned
+unverified. `tests/unit/test_restore.py` pins that refusal.
+**Impact on reproduction:** none on any number. Phase 1 gains one ECDSA signature per backup,
+on `SYS_i`, outside Target 3's span (block construction + consensus + append).
+
+### DEV-24 · FILL · `DT_BU` is chunked across transactions, with explicit sequence numbers
+**Paper:** Alg. 1 line 2 encrypts `DT_BU` into transactions `Tx_m, m = 1..N_dTx` and never says how
+a backup maps onto them. GAP-2 (no payload size) makes the question unavoidable, because DEV-15's
+declared 4 KiB is smaller than any real backup.
+**Ours:** `blockchain.backup.split()` cuts `DT_BU` into `ceil(len / payload_bytes)` fragments of
+`transaction.payload_bytes` bytes. The last fragment carries the remainder, and an empty backup is
+one empty fragment, so "empty" and "absent" stay distinguishable. `CS_l` encrypts each fragment into
+its own transaction. The pipeline packs them `block.transactions_per_block` to a block, so a large
+backup spans several blocks. Every fragment carries `chunk_index` and `chunk_count` inside its
+encrypted payload. `blockchain.backup.reassemble()` orders by `chunk_index`, **never** by block
+height or position. It requires exactly the indices `0..count-1`, requires every chunk of one backup
+to agree on `(system_id, captured_at, payload_digest, attestation, chunk_count)`, accepts a
+byte-identical duplicate, and refuses a conflicting one.
+**Why explicit indices:** block order is consensus order, and the submitter does not control it.
+Batches submitted together commit in whatever order the primary proposes them, and a view change
+can re-propose. Inferring fragment order from height would make restore depend on a property
+consensus does not promise. Tested by committing a backup's later fragments at lower heights.
+**What `payload_bytes` now means:** backup bytes per transaction, before framing and encryption.
+Measured for a 4096-byte chunk with `system_id = "SYS_1"`:
+
+* The chunk's plaintext encoding is **215 bytes** larger than its data. The paper-shaped record's
+  own framing accounts for 112 of those, and M3a's indices, digest and attestation for 103.
+* DEV-01's encryption adds another **161 bytes**: a 16-byte GCM tag, a 133-byte wrapped key and a
+  12-byte nonce.
+
+The exact figures vary by a byte or two with the id length and the DER signature length.
+**Impact on reproduction:** none. Fig. 6 counts transactions and blocks, not backups.
+
+### DEV-25 · FILL · `CS'_l` is the cloud server holding the key a backup was encrypted to
+**Paper:** Alg. 5 line 4 has "`CS'_l`" decrypt `E_KU(Tx_j)` and hand the plaintext to `CS_l` over
+`SK_{CS'_l,CS_l}`. `CS'_l` is defined nowhere.
+**Ours:** Alg. 1 line 2 encrypts to `KU_CSl` of the server that *collected* the backup, so only
+that server can decrypt it. The consistent reading is that `CS'_l` is Phase 1's collecting server
+(the key holder) and `CS_l` is whichever server `SYS_i` recovers through (the front server).
+`recovery.restore` builds both hops. When the two roles fall on one server, the first hop has no one
+to go to (a server holds no session with itself), and `framework.phase5_recovery` skips it. Recovery
+still succeeds, which shows the hop is there for fidelity to §IV-E, not because recovery needs it.
+Tested: `test_restore.py::test_one_server_in_both_roles_skips_the_fidelity_hop`.
+**Impact on reproduction:** none; Alg. 5 is not benchmarked.

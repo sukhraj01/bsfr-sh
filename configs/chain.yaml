@@ -29,6 +29,12 @@ consensus:
   log_window: 4                   # DECLARED — DEV-20. Heights above the committed one that a
                                   #   replica buffers messages for. Bounds memory a byzantine peer
                                   #   can make it spend; one height is ever in flight.
+  client_wait_timeouts: 32        # DECLARED — M3a. How long a submitting CS_l waits for its
+                                  #   requests to commit before reporting failure, in multiples of
+                                  #   view_change_timeout_s of simulated time. Alg. 1 line 10's
+                                  #   "else re-run consensus" is the view change (DEV-20); this
+                                  #   bounds the wait around it so a stalled chain is reported,
+                                  #   not waited on forever.
 
 block:
   version: 1

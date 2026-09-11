@@ -282,6 +282,28 @@ class Chain:
     def contains(self, current_hash: bytes) -> bool:
         return current_hash in self._index
 
+    def verify_block(self, height: int) -> Block:
+        """Re-verify one stored block and return it. Raises `ChainError` if it no longer holds.
+
+        `verify_integrity()` for a single block: Merkle root, signature, index entry. Everything
+        except linkage to its neighbours, which is the walk's job. It is what a reader calls
+        before trusting one block's transactions without paying for the whole walk; `recovery`
+        calls it for every block a backup is read from (added in M3a).
+
+        No separate per-transaction digest check is needed. `MTR` covers only the digests, but
+        the signature pre-image carries every transaction's full encoding, ciphertext included,
+        so an altered ciphertext breaks the signature even when its digest field is left alone
+        (`tests/unit/test_chain_verify_block.py`).
+        """
+        block = self.block_at(height)
+        if block.merkle_root != merkle_root([tx.digest for tx in block.transactions]):
+            raise ChainError(f"{self.name}: block {height} merkle_root is wrong")
+        if not verify(block.owner_public_key(), block.signature, block.signing_preimage()):
+            raise ChainError(f"{self.name}: block {height} signature does not verify")
+        if self._index.get(block.current_hash) != height:
+            raise ChainError(f"{self.name}: block {height} is missing from the hash index")
+        return block
+
     @property
     def height(self) -> int:
         """Index of the head. A chain with only a genesis block has height 0."""
@@ -316,12 +338,7 @@ class Chain:
         if genesis.prev_hash != GENESIS_PREV_HASH:
             raise ChainError(f"{self.name}: genesis prev_hash is not the zero hash")
         for height, block in enumerate(self._blocks):
-            if block.merkle_root != merkle_root([tx.digest for tx in block.transactions]):
-                raise ChainError(f"{self.name}: block {height} merkle_root is wrong")
-            if not verify(block.owner_public_key(), block.signature, block.signing_preimage()):
-                raise ChainError(f"{self.name}: block {height} signature does not verify")
-            if self._index.get(block.current_hash) != height:
-                raise ChainError(f"{self.name}: block {height} is missing from the hash index")
+            self.verify_block(height)
             if height == 0:
                 continue
             previous = self._blocks[height - 1]

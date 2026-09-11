@@ -78,32 +78,80 @@ class TransactionError(ValueError):
 # --------------------------------------------------------------------------------------------
 @dataclass(frozen=True)
 class BackupPayload:
-    """`DT_BU` — a healthcare data backup from `SYS_i`. Alg. 1 line 2.
+    """`DT_BU` — one chunk of a healthcare data backup from `SYS_i`. Alg. 1 line 2.
 
     `data` is opaque bytes: this layer neither interprets nor compresses it. `system_id` is the
-    `SYS_i` the backup came from, which `recovery.locator.BackupIndex` (DEV-05) will key on in
-    M3 — it is inside the encrypted payload rather than in the transaction header, so the chain
-    does not leak which systems have been backed up and when.
+    `SYS_i` the backup came from, which `recovery.locator.BackupIndex` (DEV-05) keys on — it is
+    inside the encrypted payload rather than in the transaction header, so the chain does not
+    leak which systems have been backed up and when.
+
+    The last four fields are M3a's (`blockchain.backup` builds and consumes them):
+
+    * `chunk_index` / `chunk_count` — DEV-24. A backup larger than `transaction.payload_bytes`
+      spans several transactions; its order is carried explicitly, never inferred from where a
+      transaction landed on the chain.
+    * `payload_digest` / `attestation` — DEV-23. The digest `SYS_i` took over the *whole* backup
+      before it left the device, and its ECDSA signature over that digest. Opaque bytes here;
+      `blockchain.backup` defines and checks them.
+
+    Their defaults describe the paper's own record — one transaction, no digest, no attestation.
+    Such a record still encrypts, commits and decrypts; `blockchain.backup.reassemble` refuses to
+    restore it, because nothing about it can be verified (DEV-23).
     """
 
     system_id: str
     data: bytes
     captured_at: int
+    chunk_index: int = 0
+    chunk_count: int = 1
+    payload_digest: bytes = b""
+    attestation: bytes = b""
+
+    def __post_init__(self) -> None:
+        if self.chunk_count < 1:
+            raise TransactionError(f"chunk_count must be at least 1, got {self.chunk_count}")
+        if not 0 <= self.chunk_index < self.chunk_count:
+            raise TransactionError(
+                f"chunk_index {self.chunk_index} is outside 0..{self.chunk_count - 1}"
+            )
 
     def to_bytes(self) -> bytes:
         """Canonical plaintext encoding. Order-fixed, so it round-trips exactly."""
         return encode(
-            {"system_id": self.system_id, "data": self.data, "captured_at": self.captured_at}
+            {
+                "system_id": self.system_id,
+                "data": self.data,
+                "captured_at": self.captured_at,
+                "chunk_index": self.chunk_index,
+                "chunk_count": self.chunk_count,
+                "payload_digest": self.payload_digest,
+                "attestation": self.attestation,
+            }
         )
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> BackupPayload:
-        fields = _decode_mapping(raw, ("system_id", "data", "captured_at"))
+        fields = _decode_mapping(raw, _BACKUP_FIELDS)
         return cls(
             system_id=_as_str(fields["system_id"], "system_id"),
             data=_as_bytes(fields["data"], "data"),
             captured_at=_as_int(fields["captured_at"], "captured_at"),
+            chunk_index=_as_int(fields["chunk_index"], "chunk_index"),
+            chunk_count=_as_int(fields["chunk_count"], "chunk_count"),
+            payload_digest=_as_bytes(fields["payload_digest"], "payload_digest"),
+            attestation=_as_bytes(fields["attestation"], "attestation"),
         )
+
+
+_BACKUP_FIELDS: Final = (
+    "system_id",
+    "data",
+    "captured_at",
+    "chunk_index",
+    "chunk_count",
+    "payload_digest",
+    "attestation",
+)
 
 
 @dataclass(frozen=True)

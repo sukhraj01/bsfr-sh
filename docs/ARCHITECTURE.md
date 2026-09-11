@@ -37,6 +37,7 @@ back-import.
 | `aead.py` | AES-256-GCM for payloads |
 | `kem.py` | ECIES-style key wrapping: EC public key wraps the AEAD data key |
 | `session.py` | ECDH + ECDSA-signed transcript, timestamps, nonces (fills GAP-7) |
+| `channel.py` | messages under an established `SK` (M3a): AES-256-GCM; the AAD binds session, direction, protocol step and a strictly increasing counter, so a message cannot be moved to another session, reflected, re-purposed or replayed |
 
 **Hashing detail.** `hashing.h()` is the bare SHA-256 primitive; everything positional goes
 through `tagged_h(domain, *parts)`, which length-prefixes each part via the canonical encoder. A
@@ -86,7 +87,13 @@ paper's Alg. 1 line 3 / Alg. 2 line 8 exactly, and canonical serialization follo
 `BC_DTBU` and `BC_SigRW` — never sharing node sets or state.
 
 Validation on append checks, in order: prev_hash linkage, Merkle root recomputation, current_hash
-recomputation, ECDSA signature under `owner_pubkey`, timestamp.
+recomputation, ECDSA signature under `owner_pubkey`, timestamp. `Chain.verify_block(height)` (M3a)
+re-runs the per-block part on stored state for a reader that is about to trust one block.
+
+`backup.py` (M3a) is the `DT_BU` contract between Phase 1 and Phase 5, kept in one module because
+each half is only correct relative to the other: `split`/`reassemble` (DEV-24: explicit chunk
+indices, never block order) and `attest`/`verify_restored` (DEV-23: `SYS_i`'s signed payload
+digest). `BackupPayload` in `transaction.py` carries one chunk.
 
 **Two block types, not one.** `current_hash` and `signature` are header fields computed over the
 other header fields, so a single dataclass holding all ten can hold a digest that does not match
@@ -215,9 +222,40 @@ describes at Alg. 3 line 3.
 
 `POLICY_BLOCKED` is where Case-3 terminates. It is a terminal simulated state.
 
-`recovery/locator.py` holds `BackupIndex` (DEV-05). `recovery/restore.py` implements the
-two-hop transfer of Alg. 5 lines 3–5 — the paper routes through a second cloud server `CS'_l`,
-which we preserve even though a single server would do, because it is what §IV-E specifies.
+`recovery/locator.py` finds a system's backup chunks. `scan()` is the paper's walk. `BackupIndex`
+(DEV-05) is the per-system pointer index that the key holder maintains on append. `identify()`
+returns the identical tuple either way. `system_id` is encrypted, so only the key holder can build
+the index, and building it costs the same decryptions as a scan, paid at append time.
+
+`recovery/restore.py` implements Alg. 5 lines 1–6 as functions over a `Chain`, a `Decryptor` and
+`Channel` endpoints:
+
+* `begin` chooses the newest complete backup.
+* `request_decrypt` re-verifies each block, decrypts, and reassembles.
+* `transfer` is the `CS'_l` → `CS_l` hop. It is there for fidelity (DEV-25): the paper routes
+  through a second server, and we keep that even though one would do.
+* `deliver` is the `CS_l` → `SYS_i` hop.
+* `open_delivery` is `SYS_i`'s DEV-23 check.
+
+Every failure raises, and none returns data.
+
+---
+
+## `framework/` (M3a)
+
+Participants and phase orchestration. Depends on everything below it; nothing depends on it
+(`test_module_boundaries.py::test_nothing_below_framework_imports_it`).
+
+| Module | Contents |
+|---|---|
+| `entities.py` | `System` (`SYS_i`), `CloudServer` (`CS_l`), `establish_session`: an identity, a keypair, and one `crypto.channel.Channel` per established session. Thin: each entity performs its own steps and never sequences them |
+| `_block_pipeline.py` | Alg. 1 lines 2–10 = Alg. 2 lines 3–10, parametrised on a payload builder and the target chain's `Cluster`. It submits transactions, never blocks (DEV-22), and waits until `f+1` replicas hold each block (the pBFT client rule) |
+| `phase1_backup.py` | Alg. 1: collect over `SK`, attest (DEV-23), chunk (DEV-24), encrypt, pipeline |
+| `phase5_recovery.py` | Alg. 5: request, identify, begin, decrypt at `CS'_l`, two hops, `SYS_i` verifies |
+
+**Where a boundary bit.** `recovery/` implements Alg. 5's hops between entities that live in
+`framework/`, and may not import it. So `recovery` takes a decryption callable (`Decryptor`) and
+`Channel` endpoints instead of `CloudServer` objects, and `crypto.channel` sits below both.
 
 ---
 

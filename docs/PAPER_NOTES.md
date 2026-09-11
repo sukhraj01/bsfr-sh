@@ -103,6 +103,12 @@ plaintext back over `SK_{CS_l, SYS_i}`, system restores.
 **[GAP-5]** No index structure is specified. Linear scan of a chain to find one system's backups
 is O(chain length). We add a per-system transaction index and note it as an addition.
 
+**[GAP-8]** *(found in M3a, 2026-09-12)* Nothing checks that the restored plaintext is what was
+backed up. The chain certifies transactions. Reassembly, and the two servers that each hold
+plaintext on the way back (Alg. 5 lines 4–5), are outside what it certifies. DEV-23 adds a payload
+digest that `SYS_i` attests before shipping. Two more silences in this section: `CS'_l` is never
+defined (DEV-25), and a backup larger than one transaction is never addressed (GAP-2 → DEV-24).
+
 ## §V — Security analysis
 
 Five informal prose arguments: (1) session keys via mutual auth defeat replay/MITM/impersonation;

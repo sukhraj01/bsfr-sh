@@ -113,6 +113,33 @@ def test_consensus_depends_only_on_crypto_blockchain_and_util(path: Path) -> Non
         assert not internal, f"the bus must not import package code, found {sorted(internal)}"
 
 
+@pytest.mark.parametrize("path", PY_FILES, ids=_rel)
+def test_nothing_below_framework_imports_it(path: Path) -> None:
+    """docs/ARCHITECTURE.md: nothing depends on `framework` or `bench`.
+
+    `recovery` is where this is easiest to break. It implements Alg. 5's hops between entities
+    that live in `framework`, so it takes a decryption callable and `crypto.channel` endpoints
+    rather than reaching up for `CloudServer`.
+    """
+    rel = _rel(path)
+    if rel.startswith(("framework/", "bench/")):
+        return
+    internal = {mod for mod in _imported_paths(_tree(path)) if mod.startswith("bsfr_sh")}
+    offenders = {mod for mod in internal if mod.startswith(("bsfr_sh.framework", "bsfr_sh.bench"))}
+    assert not offenders, f"{rel} imports {sorted(offenders)}; nothing below framework may"
+
+
+@pytest.mark.parametrize("path", PY_FILES, ids=_rel)
+def test_crypto_depends_only_on_util(path: Path) -> None:
+    """docs/ARCHITECTURE.md: `crypto` has no internal dependencies beyond `util` (and itself)."""
+    rel = _rel(path)
+    if not rel.startswith("crypto/"):
+        return
+    internal = {mod for mod in _imported_paths(_tree(path)) if mod.startswith("bsfr_sh")}
+    offenders = {mod for mod in internal if not mod.startswith(("bsfr_sh.crypto", "bsfr_sh.util"))}
+    assert not offenders, f"{rel} imports {sorted(offenders)}"
+
+
 def test_serialization_does_not_hash_or_sign() -> None:
     """M0 scope boundary: `util.serialization` defines the encoding only.
 

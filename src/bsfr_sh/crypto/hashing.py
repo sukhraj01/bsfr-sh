@@ -45,6 +45,10 @@ from bsfr_sh.util.serialization import (
 __all__ = [
     "CONFIG_HASH_SCHEME",
     "DIGEST_SIZE",
+    "DOMAIN_BACKUP_ATTESTATION",
+    "DOMAIN_BACKUP_ID",
+    "DOMAIN_BACKUP_PAYLOAD",
+    "DOMAIN_BACKUP_TX_ID",
     "DOMAIN_BLOCK_HEADER",
     "DOMAIN_CONFIG",
     "DOMAIN_KEM_TRANSCRIPT",
@@ -92,6 +96,14 @@ DOMAIN_MERKLE_ROOT: Final = "bsfr_sh.hash.merkle.root.v1"
 #: ECIES wrap transcript (DEV-01) and session-establishment transcript (DEV-02).
 DOMAIN_KEM_TRANSCRIPT: Final = "bsfr_sh.hash.kem.transcript.v1"
 DOMAIN_SESSION_TRANSCRIPT: Final = "bsfr_sh.hash.session.transcript.v1"
+
+#: `DT_BU` positions (DEV-23, DEV-24): the digest `SYS_i` takes before shipping, the pre-image it
+#: signs over that digest, the backup id derived from both, and each chunk's public `tx_id`. Four
+#: positions, four tags — a payload digest must never verify as an attestation pre-image.
+DOMAIN_BACKUP_PAYLOAD: Final = "bsfr_sh.hash.backup.payload.v1"
+DOMAIN_BACKUP_ATTESTATION: Final = "bsfr_sh.hash.backup.attestation.v1"
+DOMAIN_BACKUP_ID: Final = "bsfr_sh.hash.backup.id.v1"
+DOMAIN_BACKUP_TX_ID: Final = "bsfr_sh.hash.backup.tx_id.v1"
 
 
 def h(data: bytes) -> bytes:

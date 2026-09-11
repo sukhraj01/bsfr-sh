@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M3**
+**Current milestone: M3b**
 
 ---
 
@@ -81,19 +81,37 @@ no consensus. **Met** — `tests/unit/test_chain_scale.py`.
 
 ---
 
-## M3 — Phases 1, 2, 5 `[ ]`
+## M3 — Phases 1, 2, 5
 
-- [ ] `framework/_block_pipeline.py` — shared Alg. 1 lines 2–10 / Alg. 2 lines 3–10
-- [ ] `framework/phase1_backup.py` — Alg. 1
+**Split into M3a and M3b on 2026-09-12.** Phases 1 and 5 go together because a backup that
+cannot be recovered is not a verified backup: the chunk format, the payload digest and the index
+are one contract between them, and the only proof the contract holds is the round trip. Phase 2
+shares nothing with them except the block pipeline, which M3a builds and M3b reuses unchanged.
+Its real work (DEV-03's signatures and features) is design work of a different kind.
+
+### M3a — Phases 1 and 5: backup and recovery `[x]`
+
+- [x] `framework/entities.py` — `System`, `CloudServer`, session establishment
+- [x] `crypto/channel.py` — messages under `SK` (session, direction, step, counter in the AAD)
+- [x] `framework/_block_pipeline.py` — shared Alg. 1 lines 2–10 / Alg. 2 lines 3–10
+- [x] `blockchain/backup.py` + `framework/phase1_backup.py` — Alg. 1, chunked (DEV-24)
+- [x] `recovery/locator.py` + `BackupIndex` (DEV-05), index and cold scan agree
+- [x] `recovery/restore.py` — Alg. 5 two-hop transfer (DEV-25), attested payload digest (DEV-23)
+- [x] `framework/phase5_recovery.py` — Alg. 5
+- [x] Integration test: backup → chain → recover → byte-identical restore
+      (213 new unit tests, 831 total; 9 integration)
+
+**Exit:** data survives a simulated full wipe, byte-identical, through consensus on `BC_DTBU`.
+**Met** — `tests/integration/test_backup_recovery.py`, configured sizes (4096-byte chunks, 100
+per block, a 201-chunk backup across three blocks), four replicas; also with a silent primary.
+
+### M3b — Phase 2: honeypot, signatures, features `[ ]`
+
 - [ ] `honeypot/collector.py`, `preprocess.py` — Alg. 2 lines 1–4
 - [ ] `honeypot/signatures.py`, `features.py` — Alg. 2 lines 5–6 (DEV-03, the design work)
-- [ ] `framework/phase2_collection.py` — Alg. 2
-- [ ] `recovery/locator.py` + `BackupIndex` (DEV-05)
-- [ ] `recovery/restore.py` — Alg. 5 two-hop transfer
-- [ ] `framework/phase5_recovery.py` — Alg. 5
-- [ ] Integration test: backup → chain → recover → byte-identical restore
+- [ ] `framework/phase2_collection.py` — Alg. 2, on M3a's `_block_pipeline` with no changes to it
 
-**Exit:** data survives a simulated full wipe.
+**Exit:** signature records land on `BC_SigRW` through consensus and decrypt to what was built.
 
 ---
 

@@ -157,6 +157,17 @@ def test_payload_missing_a_field_is_rejected() -> None:
 def test_payload_with_a_wrong_field_type_is_rejected() -> None:
     from bsfr_sh.util.serialization import encode
 
-    raw = encode({"system_id": 7, "data": b"x", "captured_at": 1})
+    # Every field present (M3a added four), so the type check is what fails rather than presence.
+    raw = encode(
+        {
+            "system_id": 7,
+            "data": b"x",
+            "captured_at": 1,
+            "chunk_index": 0,
+            "chunk_count": 1,
+            "payload_digest": b"",
+            "attestation": b"",
+        }
+    )
     with pytest.raises(TransactionError, match="not a string"):
         BackupPayload.from_bytes(raw)
