@@ -214,6 +214,22 @@ Breaking each safety rule in 15 variants to confirm the tests fail is the right 
 
 4. bro this directory was supposed to be made remote 
 https://github.com/sukhraj01/bsfr-sh.git
+
+5. The GitHub repo is now private. Push: git push -u origin main.
+
+Then two cleanups:
+
+1. grep sessions/ PROJECT_STATE.md docs/ for the old misspelling
+   "ris-blockchian" and fix any stale path references. The directory is
+   ris-blockchain now.
+
+2. Add a ~/.gitignore covering .venv/, venv/, __pycache__/, node_modules/
+   so the home repo doesn't re-absorb another venv. Commit the staged
+   removal of the 93 project files there — it's accurate now.
+
+Don't touch ~/.git beyond that. No gc, no deletions.
+
+Then stop and confirm the push succeeded before starting M3a.
 ```
 
 *(Prompt 2 followed a usage-limit interruption after the brief was written and before any code.
@@ -415,14 +431,18 @@ Then, per prompt 4, the clean `.git` was moved into `Desktop/ris-blockchain/` so
 directory is itself the repository (the `/tmp` clone would not survive a reboot), branch renamed
 to `main`, `origin` = `https://github.com/sukhraj01/bsfr-sh.git`, stale `origin/bsfr-extract`
 upstream removed. In `~/.git`, the project's 93 files were removed from the index
-(`git rm -r --cached`, **staged, not committed**, no working files touched); the `bsfr-extract`
-branch was left there.
+(`git rm -r --cached`, no working files touched); the `bsfr-extract` branch was left there.
 
 `git ls-remote origin` succeeds with no refs: the GitHub repository exists and is empty.
 
-**Left for the user:** the push itself (publishing, and the repo's visibility is not visible from
-here), and whether `~/.git` should exist at all — deleting it discards the other coursework's
-history too, so it is not this project's decision to make.
+**Follow-up, 2026-09-12 (prompt 5).** The user made the GitHub repository private;
+`git push -u origin main` then succeeded, and `git ls-remote` showed remote `main` equal to local
+`HEAD` (`bee763d`). In `~/.git`, a new `~/.gitignore` (`.venv/`, `venv/`, `__pycache__/`,
+`node_modules/`, any depth) and the 93 staged removals were committed together as `d542d529` —
+94 paths, the 68 unrelated unstaged changes deliberately left out. No gc, no deletions; whether
+`~/.git` should exist at all is still the user's call. A grep for the misspelled prefix
+`ris-blockchian` found it only in prompt 3's verbatim text and in the sentence above recording
+the typo — neither is a live path, and the verbatim prompt is not edited.
 
 **Also in this addendum:** the §V-3 finding in `docs/PAPER_NOTES.md` rewritten, and labelled
 [FLAW-5] (FLAW-4 was already the 90/10 resampling), on the user's direction to
