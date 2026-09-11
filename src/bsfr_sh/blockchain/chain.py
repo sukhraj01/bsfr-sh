@@ -68,6 +68,7 @@ __all__ = [
     "Chain",
     "ChainError",
     "ChainPolicy",
+    "build_genesis",
 ]
 
 #: The two chain names the paper uses. Constants so a typo is an ImportError, not a third chain.
@@ -77,6 +78,24 @@ BC_SigRW: Final = "BC_SigRW"
 
 class ChainError(ValueError):
     """Raised when an append or an integrity walk fails validation."""
+
+
+def build_genesis(
+    *,
+    owner_id: str,
+    private_key: PrivateKey,
+    timestamp: float,
+    transactions: tuple[Transaction, ...] = (),
+) -> Block:
+    """Build a genesis block without attaching it to a chain. See `Chain.adopt_genesis`."""
+    draft = BlockDraft(
+        owner_id=owner_id,
+        owner_pubkey=private_key.public_key.to_bytes(),
+        transactions=transactions,
+        prev_hash=GENESIS_PREV_HASH,
+        timestamp=timestamp,
+    )
+    return draft.seal(private_key)
 
 
 @dataclass(frozen=True)
@@ -135,17 +154,30 @@ class Chain:
         """
         if self._blocks:
             raise ChainError(f"{self.name} already has a genesis block")
-        draft = BlockDraft(
+        block = build_genesis(
             owner_id=owner_id,
-            owner_pubkey=private_key.public_key.to_bytes(),
-            transactions=transactions,
-            prev_hash=GENESIS_PREV_HASH,
+            private_key=private_key,
             timestamp=timestamp,
+            transactions=transactions,
         )
-        block = draft.seal(private_key)
+        self.adopt_genesis(block)
+        return block
+
+    def adopt_genesis(self, block: Block) -> None:
+        """Install an existing genesis block.
+
+        Every pBFT replica of one chain holds its own `Chain` instance, and they must all start
+        from the *same* genesis — `create_genesis()` on each would give four different ones,
+        because `RN` is random. So one replica (or the cluster builder) makes the block with
+        `build_genesis()` and every replica adopts it. `Block` is frozen, so sharing the object
+        between replicas of one chain shares no mutable state.
+        """
+        if self._blocks:
+            raise ChainError(f"{self.name} already has a genesis block")
+        if block.prev_hash != GENESIS_PREV_HASH:
+            raise ChainError(f"{self.name}: a genesis block must have the zero prev_hash")
         self._blocks.append(block)
         self._index[block.current_hash] = 0
-        return block
 
     def draft_next(
         self,
@@ -175,6 +207,19 @@ class Chain:
 
         Every rejection path raises before touching `_blocks` or `_index`, so a rejected block
         cannot leave the chain half-updated.
+        """
+        self.check_append(block)
+        self._blocks.append(block)
+        self._index[block.current_hash] = len(self._blocks) - 1
+
+    def check_append(self, block: Block) -> None:
+        """Run every `append()` check without appending. Raises `ChainError` if any fails.
+
+        This is how consensus asks "is this block valid here?" without deciding it itself. A pBFT
+        replica must refuse to *prepare* a block that `append()` would later reject — otherwise a
+        quorum commits a block nobody can append and the chain stalls — but the answer has to come
+        from the one validator, not a second copy of it in the protocol layer. So `append()` is
+        this plus the two assignments, and nothing else anywhere defines block validity.
         """
         if not self._blocks:
             raise ChainError(f"{self.name} has no genesis block; call create_genesis() first")
@@ -210,9 +255,6 @@ class Chain:
                 f"{self.name}: block timestamp is {drift:.1f}s older than the head, beyond the "
                 f"{self._policy.skew_tolerance_s:.0f}s skew tolerance"
             )
-
-        self._blocks.append(block)
-        self._index[block.current_hash] = len(self._blocks) - 1
 
     # -- reading -------------------------------------------------------------------------------
     def head(self) -> Block:

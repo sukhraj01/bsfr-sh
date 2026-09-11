@@ -288,3 +288,57 @@ def test_integrity_walk_detects_a_genesis_with_a_real_prev_hash(cs1_keys: KeyPai
 def test_integrity_walk_rejects_an_empty_chain() -> None:
     with pytest.raises(ChainError, match="is empty"):
         Chain(BC_SigRW).verify_integrity()
+
+
+# --------------------------------------------------------------------------------------------
+# check_append / adopt_genesis — the two entry points M2b's consensus uses
+# --------------------------------------------------------------------------------------------
+def test_check_append_accepts_what_append_accepts_and_changes_nothing(cs1_keys: KeyPair) -> None:
+    chain = started_chain(cs1_keys)
+    block = chain.draft_next(
+        owner_id="CS_1",
+        owner_pubkey=cs1_keys.public.to_bytes(),
+        transactions=txs(cs1_keys, 2),
+        timestamp=1001.0,
+    ).seal(cs1_keys.private)
+    chain.check_append(block)
+    assert len(chain) == 1, "check_append must not append"
+    chain.append(block)
+    assert chain.head() == block
+
+
+def test_check_append_refuses_what_append_refuses(cs1_keys: KeyPair) -> None:
+    """One validator: the consensus layer's pre-check and append() can never disagree."""
+    chain = started_chain(cs1_keys)
+    orphan = BlockDraft(
+        owner_id="CS_1",
+        owner_pubkey=cs1_keys.public.to_bytes(),
+        transactions=txs(cs1_keys, 2),
+        prev_hash=bytes(range(32)),
+        timestamp=1001.0,
+    ).seal(cs1_keys.private)
+    with pytest.raises(ChainError, match="does not link"):
+        chain.check_append(orphan)
+    with pytest.raises(ChainError, match="does not link"):
+        chain.append(orphan)
+
+
+def test_replicas_adopt_one_shared_genesis(cs1_keys: KeyPair) -> None:
+    from bsfr_sh.blockchain.chain import build_genesis
+
+    genesis = build_genesis(owner_id="CS_0", private_key=cs1_keys.private, timestamp=1000.0)
+    a, b = Chain(BC_DTBU), Chain(BC_DTBU)
+    a.adopt_genesis(genesis)
+    b.adopt_genesis(genesis)
+    assert a.head_hash() == b.head_hash()
+    extend(a, cs1_keys, timestamp=1001.0)
+    assert len(b) == 1, "sharing the frozen genesis block shares no chain state"
+
+
+def test_adopt_genesis_refuses_a_non_genesis_block_and_a_second_genesis(cs1_keys: KeyPair) -> None:
+    chain = started_chain(cs1_keys)
+    extend(chain, cs1_keys, timestamp=1001.0)
+    with pytest.raises(ChainError, match="already has a genesis"):
+        chain.adopt_genesis(chain.block_at(0))
+    with pytest.raises(ChainError, match="zero prev_hash"):
+        Chain(BC_DTBU).adopt_genesis(chain.block_at(1))

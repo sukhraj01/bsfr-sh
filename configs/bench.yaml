@@ -22,6 +22,26 @@ timing:
   # inside the timer.
   measure_span: [block_construction, consensus, append]
 
+# Network latency and Target 3 (DEV-21) — read before interpreting any Fig. 6 number.
+#
+# The consensus bus has a per-message delay, `consensus.message_delay_s` in chain.yaml, default
+# 0.0. It lives there, not here, because it is a property of the modelled network, not of the
+# harness. What it does to Target 3:
+#
+#   * delay = 0 (default): instant delivery. Wall-clock around `consensus` is pure compute —
+#     ECDSA sign/verify over 32-byte digests, hashing, chain validation — on the order of 1 ms per
+#     100-tx block against the paper's ~380 ms. Fig. 6's shape is then dominated by hybrid
+#     encryption during block construction, not by consensus. Defensible, but it is a different
+#     claim from the paper's, and the write-up must say so.
+#   * delay = d > 0: the bus runs on a SIMULATED clock and never sleeps, so wall-clock does not
+#     change. The modelled network cost is read from the bus clock (`network.now`): about 3d per
+#     committed block (pre-prepare -> prepare -> commit), serial, because one height is in flight
+#     at a time (DEV-20).
+#
+# M6 runs both and reports measured compute seconds and modelled network seconds as SEPARATE
+# columns. The modelled column is not `measured` (CLAUDE.md §2) and is never summed into a
+# measured number without a label saying so.
+
 derived:
   # DEV-08. TPS is arithmetic on the timing above, never a separately measured quantity:
   #   tps = total_transactions / total_seconds

@@ -14,7 +14,7 @@ Table I itself is a raster figure in the PDF.
 | `P2PCS` | peer-to-peer cloud server network | `consensus.network.P2PCSNetwork` |
 | `HP_RW` | ransomware honeypot | `honeypot.collector.Honeypot` |
 | `DM_CSl` | detection module hosted on `CS_l` | `detection.detector.DetectionModule` |
-| `L` | pBFT leader (primary) for a consensus round | `consensus.pbft.Leader` |
+| `L` | pBFT leader (primary) for a consensus round | `Membership.primary(view)` — round-robin, not a class |
 | `A` | adversary | threat model only, no class |
 
 ## Data
@@ -65,6 +65,23 @@ these are `Honeypot` and `Block.prev_hash` respectively — never abbreviate eit
 | `SK_{CS_l, SYS_i}` | cloud server ↔ system session key | established in Phase 1 |
 | `SK_{CS_l, HP_RW}` | cloud server ↔ honeypot session key | established in Phase 2 |
 | `SK_{CS'_l, CS_l}` | cloud server ↔ cloud server session key | used in Alg. 5 line 4 |
+
+## Consensus
+
+Castro–Liskov symbols the paper does not define but M2b needs. Not in Table I.
+
+| Symbol | Meaning | Code |
+|---|---|---|
+| `n`, `f` | replicas, and byzantine replicas tolerated; `n = 3f + 1` | `Membership.n`, `Membership.f` |
+| `v` | view number; the primary of `v` is `ids[v mod n]` | `Replica.view` |
+| `s` | sequence number = the chain height the block will occupy | `PrePrepare.seq` |
+| `d` | block digest = `HC_βj` | `PrePrepare.digest` |
+| `⟨PRE-PREPARE, v, s, d⟩` | primary's signed proposal; block travels beside it | `protocol.PrePrepare` in a `protocol.Proposal` |
+| `⟨PREPARE, v, s, d, i⟩` / `⟨COMMIT, v, s, d, i⟩` | replica `i`'s signed votes | `protocol.Prepare` / `protocol.Commit` |
+| `P` | prepared certificate: pre-prepare + `2f` matching prepares | `protocol.PreparedCertificate` |
+| `C` | commit certificate: `2f+1` matching commits | `protocol.CommitCertificate` |
+| `⟨VIEW-CHANGE, v+1, h, C, P, i⟩` | leave for view `v+1` with evidence | `protocol.ViewChange` |
+| `⟨NEW-VIEW, v+1, V, O⟩` | new primary's justification and re-proposals | `protocol.NewView` |
 
 ## ML
 

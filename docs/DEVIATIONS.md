@@ -138,6 +138,13 @@ control-flow contribution is preserved; the harmful capability is not.
 **Ours:** standard `2f+1` of `n = 3f+1`; with the paper's 4 nodes that is 3 of 4, `f = 1`.
 Configurable. View change on leader timeout, per Castro & Liskov [24].
 
+**Amendment (M2b, 2026-09-11).** Built. The view change is the *reduced* form, not full
+Castro–Liskov — DEV-20 names exactly what is omitted. The message format is DEV-19 and the bus's
+latency model is DEV-21. Certificate sizes are the standard ones: prepared = accepted
+pre-prepare + `2f` matching prepares from distinct non-primary replicas; committed = prepared +
+`2f+1` matching commits from distinct replicas; new-view = `2f+1` view-changes from distinct
+replicas. All counted by signed sender identity.
+
 ### DEV-11 · FILL+FIX · Merkle tree construction detail
 **Paper:** `MTR` appears in the block header with no construction spec.
 **Ours:** binary Merkle tree over transaction digests, odd nodes duplicate the last hash.
@@ -246,3 +253,118 @@ and a note; its `config_hash` is `null` — that run had no governing config —
 affected, and the field records which era the file belongs to.
 **Impact on reproduction:** none yet, since no `measured` row depends on a config hash. It is
 recorded now because the cost of adding it later, after M6 has written figures, is much higher.
+
+### DEV-19 · FILL · pBFT message format — digest-only signed pre-prepare, chain-bound (closes Q7)
+**Paper:** Alg. 1/2 say only that the leader "broadcasts `β_j`" and the miners run pBFT. No
+message format is given.
+**Ours:** every pBFT message is an ECDSA signature over a canonical struct
+(`util.serialization.encode_struct`) whose domain is specific to the message *type*
+(`bsfr_sh.pbft.prepare.v1`, `...commit.v1`, ...), with signed fields
+`(chain, view, seq, digest, replica_id)`. A pre-prepare signs only the digest; the `Block`
+travels alongside it, outside the signature, and a replica rejects the pair unless
+`block.current_hash == digest`. That is what real pBFT does and still matches the paper's text —
+the block *is* broadcast.
+
+Three things in the signed body are load-bearing, each pinned by a test:
+- **`view`** — without it a prepare from view 0 is a valid prepare in view 1, and a replica that
+  voted once can be counted in every later view.
+- **`seq`** — without it a vote for height `n` is a vote for height `n+1`.
+- **`chain`** — our addition. `BC_DTBU` and `BC_SigRW` run independent clusters (CLAUDE.md §4),
+  but nothing stops a deployment reusing a cloud server's key on both. Without the chain name in
+  the pre-image, a prepare signed for one chain verifies on the other.
+
+Per-type domains mean a prepare's signature is never a valid commit signature for the same
+`(view, seq, digest)`.
+**Impact on reproduction:** none on correctness targets. On Target 3, signing a 32-byte digest
+rather than the whole block keeps per-message ECDSA cost constant in block size, which is the
+standard design and what makes consensus cost roughly independent of transactions per block.
+
+### DEV-20 · FILL · Reduced view change — what is omitted from Castro–Liskov, and what it costs
+**Paper:** no view change at all (DEV-10). A silent leader in the paper's design stalls its
+chain forever, which undercuts §V-3's resistance claim.
+**Ours:** timeout-triggered view change with prepared-certificate carry-over, in
+`consensus/view_change.py`:
+- a replica with an uncommitted request starts a timer (`consensus.view_change_timeout_s`);
+  on expiry it moves to `view+1` and broadcasts a signed `ViewChange` carrying every prepared
+  certificate it holds above its committed height, plus a commit certificate proving that height;
+- a replica that sees `f+1` view-changes for higher views joins the smallest of them without
+  waiting for its own timer;
+- the new primary, on `2f+1` view-changes from distinct replicas, broadcasts a signed `NewView`
+  that carries them and re-proposes the highest-view prepared block at the next height;
+- every receiver re-verifies each carried view-change and certificate and *recomputes* the
+  re-proposal set, rejecting a `NewView` whose proposals differ from what the evidence forces —
+  so a byzantine new primary cannot quietly drop a prepared block;
+- a view change that itself stalls escalates to `view+2` after twice the timeout.
+
+**Omitted, precisely:**
+1. **Checkpoints and stable-checkpoint garbage collection.** There are no `CHECKPOINT` messages.
+   Instead each replica proves its committed height in its view-change with the `2f+1` commits
+   that committed it — a one-block checkpoint. Log entries at or below the committed height are
+   dropped on commit. *Cost:* none for safety; the proof is exactly what a stable checkpoint
+   would give for the last block.
+2. **State transfer.** A replica that falls behind — misses the commits for a height the others
+   committed — has no way to fetch the missing block. It stays behind and cannot prepare later
+   blocks, because it cannot validate their `prev_hash`. *Cost:* **a lagging honest replica is
+   indistinguishable from a faulty one and uses up the single fault the cluster tolerates.** With
+   `n=4`, one lagging honest replica plus one byzantine replica stalls the chain. It is not
+   hypothetical: a byzantine primary that equivocates on blocks but votes honestly strands the
+   honest replica it showed the losing block —
+   `test_pbft_byzantine.py::test_equivocation_with_honest_votes_strands_one_honest_replica`
+   pins it. (When the equivocator also garbles its votes, nothing commits in the old view and the
+   view change's certificate carry-over rescues that replica instead — the neighbouring test.)
+   A lossy network would strand replicas the same way.
+3. **Pipelining / watermark window.** At most one height is in flight: a primary proposes height
+   `h+1` only after committing `h`. Messages for heights up to `h + consensus.log_window` are
+   buffered so reordering cannot lose them, but they are not processed early. *Cost:* throughput
+   under non-zero latency — each block pays the full three-hop round trip serially. This is a
+   Target 3 consideration and is recorded in `configs/bench.yaml`.
+4. **Null requests.** Castro–Liskov fills gaps in the new-view sequence range with null
+   requests. With one height in flight there are no gaps to fill, so the case never arises.
+5. **Client replies and request authentication.** Requests (a batch of transactions to put in a
+   block) are delivered to replicas unauthenticated and nothing replies to the submitter. Request
+   authentication belongs to the session layer (`crypto.session`, Phase 1) and is wired in M3.
+6. **Retransmission.** A dropped message is never resent; liveness under loss comes only from
+   the view-change timer.
+7. **Helping with already-committed heights.** A replica rejects every message for a height it
+   has committed (as the M2b brief requires). If a replica commits height `n` at the same moment
+   the others time out without it, it will not help re-commit `n` in the new view. Combined with
+   (2), this is a liveness race, not a safety one: timeouts are seconds, message delays default
+   to zero, and the tests do not reach it.
+
+**Impact on reproduction:** none on any paper number — the paper measures no faults. Safety
+(no two honest replicas commit different blocks at one height) holds for up to `f` byzantine
+replicas under the reduction; liveness is weaker than full Castro–Liskov only through (2), (6)
+and (7).
+
+### DEV-21 · FILL · Message bus on a simulated clock, per-message delay declared and zero by default
+**Paper:** §VII reports timings for pBFT over four miners and says nothing about the network
+between them — not whether nodes were separate machines, not the link latency.
+**Ours:** `consensus.network.P2PCSNetwork` is an in-process discrete-event scheduler. A message
+sent at simulated time `t` is delivered at `t + consensus.message_delay_s` (+ any per-node fault
+delay or jitter). View-change timers run on the same clock. Nothing sleeps. Default delay `0.0`,
+DECLARED in `configs/chain.yaml`.
+**Why simulated and not slept:** a view-change test on a slept clock waits seconds per case;
+`sleep` jitter on the dev box is the same order as the zero-delay consensus cost; and a simulated
+clock makes modelled network time exact and seed-reproducible.
+**Impact on reproduction — Target 3.** With delay `0`, wall-clock around consensus is pure
+compute (signing, verification, hashing, chain validation) and Fig. 6's shape is dominated by
+hybrid encryption. A non-zero delay does **not** change wall-clock; it adds `≈ 3 × delay` of
+simulated time per committed block (pre-prepare → prepare → commit, one height in flight per
+DEV-20). M6 reports the measured compute and the modelled network time as separate columns and
+labels the second as modelled — it is not `measured` in the CLAUDE.md §2 sense.
+
+### DEV-22 · FILL · The pBFT primary assembles the block; the collecting `CS_l` submits transactions
+**Paper:** Alg. 1 line 3 (and Alg. 2 line 8) has the collecting cloud server `CS_l` assemble
+`β_j`, line 4 broadcasts it, and line 5 has "the leader `L`" run pBFT. Whether `CS_l` and `L` are
+the same node is not said.
+**Ours:** `CS_l` encrypts the transactions (Alg. 1 line 2 / Alg. 2 line 7, unchanged) and submits
+them as a `ClientRequest`; the primary of the current view assembles and signs the block, so
+`OID`/`OKU` name the leader that proposed it. After a view change a re-proposed block keeps its
+original owner, so replicas accept any member as owner, not only the current primary.
+**Why:** `β_j` carries `HP_βj-1`. Only the node ordering the chain knows which head the next block
+extends; if every collecting `CS_l` assembled its own block, two of them would build on the same
+head and one block would fail `Chain.append` after consensus had already been spent on it. In
+pBFT the primary is that node. This is the standard client/primary split.
+**Impact on reproduction:** Target 3's measured span — block construction + consensus + append —
+contains the same work either way (hybrid encryption happens before submission in both); sealing
+a block is one Merkle root and one ECDSA signature. No correctness target is affected.

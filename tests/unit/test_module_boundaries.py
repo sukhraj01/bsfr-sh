@@ -95,6 +95,24 @@ def test_util_depends_on_nothing_else_in_the_package(path: Path) -> None:
     assert not offenders, f"{_rel(path)} imports {sorted(offenders)}; util may not depend upward"
 
 
+@pytest.mark.parametrize("path", PY_FILES, ids=_rel)
+def test_consensus_depends_only_on_crypto_blockchain_and_util(path: Path) -> None:
+    """CLAUDE.md §3: `consensus/` depends only on `crypto/` and `blockchain/` (and `util`).
+
+    And `consensus.network` depends on nothing internal: the bus carries opaque payloads, so it
+    must not know what a pBFT message is — that is what keeps it reusable for M7's async bus.
+    """
+    rel = _rel(path)
+    if not rel.startswith("consensus/"):
+        return
+    internal = {mod for mod in _imported_paths(_tree(path)) if mod.startswith("bsfr_sh")}
+    allowed = ("bsfr_sh.crypto", "bsfr_sh.blockchain", "bsfr_sh.util", "bsfr_sh.consensus")
+    offenders = {mod for mod in internal if not mod.startswith(allowed)}
+    assert not offenders, f"{rel} imports {sorted(offenders)}"
+    if rel == "consensus/network.py":
+        assert not internal, f"the bus must not import package code, found {sorted(internal)}"
+
+
 def test_serialization_does_not_hash_or_sign() -> None:
     """M0 scope boundary: `util.serialization` defines the encoding only.
 

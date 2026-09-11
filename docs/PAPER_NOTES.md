@@ -111,6 +111,18 @@ Five informal prose arguments: (1) session keys via mutual auth defeat replay/MI
 (4) blockchain immutability resists DoS/manipulation/leakage;
 (5) two separate chains isolate detection from recovery.
 
+**FINDING (M2b, 2026-09-11) — §V-3's "51%" framing is inverted for pBFT.** "51% attack" is a
+proof-of-work notion: an adversary needs a majority of hash power. pBFT's bound is stricter, not
+looser — safety holds only while fewer than **one third** of replicas are byzantine
+(`n >= 3f + 1`). With the paper's four miners, two colluding nodes (50%, below the "51%" the text
+invokes) can make two honest replicas commit different blocks at one height. Measured, not
+argued: `tests/unit/test_pbft_byzantine.py::test_f2_colluding_equivocators_can_fork_honest_replicas_the_bound_is_exactly_f`.
+What pBFT does give, and M2b shows: with one byzantine node of four, the chain commits and never
+forks, under all four tested behaviours; with two non-colluding faulty nodes, it stops rather than
+committing wrongly. "Selfish mining" has no pBFT analogue — there is no mining to withhold; the
+closest thing, a leader withholding proposals, is handled by view change. The §V-3 write-up must
+state the `f < n/3` bound rather than repeat the paper's wording.
+
 **[GAP-6]** No formal model. No ROR/BAN proof, no AVISPA or Scyther verification — unusual, since
 Das's other papers almost always include one. Reproducing §V means writing the argument, not
 running a tool. Optional extension: actually formalise it (Scyther is tractable) as project

@@ -53,6 +53,9 @@ def test_shipped_chain_config_matches_the_paper_setup() -> None:
     assert cfg.require("consensus.miner_nodes", int) == 4
     assert cfg.require("consensus.faulty_nodes_f", int) == 1
     assert cfg.require("consensus.commit_threshold", int) == 3  # 2f+1, DEV-10
+    # DEV-21: the bus delay is declared and defaults to instant delivery. A non-zero default
+    # would silently change what Target 3's consensus timing means (configs/bench.yaml).
+    assert cfg.get("consensus.message_delay_s") == 0.0
     assert cfg.require("block.transactions_per_block", int) == 100
     assert cfg.require("cases", dict) == {"case_1": 5, "case_2": 10, "case_3": 15}
     assert set(cfg.require("chains", dict)) == {"BC_DTBU", "BC_SigRW"}

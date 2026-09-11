@@ -112,17 +112,44 @@ the same configured value `crypto.session` uses — see DEV-17.
 ## `consensus/`
 
 pBFT per Castro & Liskov (paper ref [24]). Four miner nodes as in §VII, so `n = 4`, `f = 1`,
-commit threshold `2f + 1 = 3`.
+commit threshold `2f + 1 = 3` (DEV-10). One `Cluster` per chain — `BC_DTBU` and `BC_SigRW` each
+get their own bus, replicas and `Chain` instances.
 
-Three phases: pre-prepare (leader proposes) → prepare (replicas broadcast) → commit (threshold
-reached). View change on leader timeout. The paper says "a threshold fraction of miners commit";
-we make the threshold explicit and configurable, defaulting to the standard `2f+1`.
+| Module | Contents | Depends on |
+|---|---|---|
+| `network.py` | `P2PCSNetwork` — discrete-event bus on a **simulated clock**; per-message delay (config, default 0), per-sender `LinkFaults` (drop, delay, duplicate, jitter/reorder), timers | nothing internal |
+| `protocol.py` | signed messages (`PrePrepare`/`Prepare`/`Commit`, `ViewChange`, `NewView`), `Proposal` (pre-prepare + block), `Membership` and quorum sizes, certificate verification | `crypto`, `blockchain`, `util` |
+| `view_change.py` | build/verify view-changes and new-views, the deterministic re-proposal rule | `protocol` |
+| `pbft.py` | `Replica` state machine, `PBFTPolicy`, the `Behaviour` hook, `Cluster` builder | all of the above |
 
-Byzantine node behaviours for testing: silent, equivocating, wrong-signature, stale-view. Each is
-a fixture in `tests/unit/test_pbft_byzantine.py`.
+`protocol.py` exists so that `pbft` and `view_change` can share message types without importing
+each other. `network.py` carries opaque payloads and must never learn what a pBFT message is —
+pinned by `test_module_boundaries.py`, and what keeps it swappable for M7's async bus.
 
-Nodes run in-process with a simulated message bus by default. A `--async` mode using asyncio is
-planned for realistic latency modelling but is not required for the reproduction targets.
+**Signed bodies (DEV-19).** Every normal-case signature covers `(chain, view, seq, digest,
+replica_id)` under a per-message-type domain. A pre-prepare signs the digest only; the block
+travels beside it in a `Proposal` and is accepted only if `block.current_hash == digest` (Q7).
+
+**Consensus decides whether, `Chain` decides valid.** A replica prepares a block only if its own
+`Chain.check_append()` accepts it — the same code `append()` runs — and commits by calling
+`append()`. There is no second definition of block validity in the protocol layer.
+
+**Who builds the block (DEV-22).** The collecting `CS_l` encrypts transactions and submits them
+as a `ClientRequest`; the view's primary assembles and signs `β_j`. `seq` is the chain height, and
+one height is in flight at a time.
+
+**View change (DEV-20, reduced).** Timeout → `ViewChange` carrying prepared certificates and a
+commit certificate proving the sender's height → `NewView` from the next primary on `2f+1` →
+receivers recompute the forced re-proposal and reject a mismatch. Omitted from Castro–Liskov:
+checkpoint messages, state transfer, pipelining, null requests, retransmission — with costs in
+DEV-20.
+
+**Latency (DEV-21).** The bus never sleeps. Delay moves the simulated clock (`network.now`), not
+wall-clock, so M6 reads measured compute and modelled network time separately.
+
+**Byzantine behaviours** are test fixtures (`tests/unit/pbft_harness.py`): silent, equivocating,
+wrong-signature, stale-view, plus a colluding pair used to pin the `f` bound. Each is a
+`Behaviour` set on a running `Replica`; the protocol code has no knowledge of them.
 
 ---
 

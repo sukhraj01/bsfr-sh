@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M2b**
+**Current milestone: M3**
 
 ---
 
@@ -64,14 +64,20 @@ dependency of M2b and nothing else about the plan changed.
 **Exit:** `BC_DTBU` and `BC_SigRW` each build 15 blocks x 100 tx by direct single-node append,
 no consensus. **Met** — `tests/unit/test_chain_scale.py`.
 
-### M2b — Consensus `[ ]`
+### M2b — Consensus `[x]`
 
-- [ ] `consensus/network.py` — in-process P2PCS message bus
-- [ ] `consensus/pbft.py` — pre-prepare / prepare / commit, `2f+1`, view change (DEV-10)
-- [ ] Byzantine fixtures: silent, equivocating, bad-signature, stale-view
-- [ ] Tests: threshold enforcement, view change, `f=1` tolerated
+- [x] `consensus/network.py` — in-process P2PCS bus on a simulated clock; delay configurable,
+      default 0 (DEV-21); drop / delay / duplicate / reorder per node
+- [x] `consensus/pbft.py` — pre-prepare / prepare / commit, `2f+1`, certificates by distinct
+      signed sender; `(chain, view, seq, digest)` in every signature (DEV-19)
+- [x] `consensus/view_change.py` — reduced Castro–Liskov view change (DEV-20)
+- [x] `consensus/protocol.py` — shared message types, membership, certificate checks
+- [x] Byzantine fixtures: silent, equivocating, wrong-signature, stale-view (+ colluding pair)
+- [x] Tests: threshold enforcement, replay across views/sequences/chains, membership, view
+      change, `f=1` and `f=2` (153 new; 618 total); 15 mutants of the safety rules all killed
 
 **Exit:** `BC_DTBU` and `BC_SigRW` each build 15 blocks x 100 tx with 4 nodes, `f=1` tolerated.
+**Met** — `tests/unit/test_consensus_scale.py`, one byzantine replica per cluster.
 
 ---
 

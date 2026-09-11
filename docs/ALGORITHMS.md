@@ -13,9 +13,9 @@ Every module that implements a paper algorithm step carries a docstring referenc
 | 1 | `CS_l` collects `DT_BU` over `SK_{CS_l,SYS_i}` | `crypto.session.establish()` + `System.ship_backup()` |
 | 2 | Encrypt into transactions `E_KU(Tx_m)`, m = 1..`N_dTx` | `blockchain.transaction.encrypt_backup()` — hybrid, see DEV-01 |
 | 3 | Assemble block `β_j` with full header | `blockchain.block.Block.assemble()` |
-| 4 | Broadcast `β_j` to P2PCS | `consensus.network.broadcast()` |
-| 5 | Leader `L` runs pBFT | `consensus.pbft.PBFTEngine.run_round()` |
-| 6–10 | Threshold commit → append, else re-run consensus | `PBFTEngine.commit()` / retry loop |
+| 4 | Broadcast `β_j` to P2PCS | `consensus.pbft.Cluster.submit()` → `ClientRequest` to every replica over `consensus.network.P2PCSNetwork`; the primary broadcasts the block as a `Proposal` (DEV-19, DEV-22) |
+| 5 | Leader `L` runs pBFT | `consensus.pbft.Replica` — pre-prepare / prepare / commit; `L` = `Membership.primary(view)` |
+| 6–10 | Threshold commit → append, else re-run consensus | commit at `2f+1` → `Chain.append()`; "re-run" = view change on timeout, `consensus.view_change` (DEV-10, DEV-20) |
 | 11–15 | Terminate when all blocks added | `phase1_backup.run()` |
 
 **Watch:** line 6 of the paper reads "commit on addition of β_i" inside the β_j loop — index typo.

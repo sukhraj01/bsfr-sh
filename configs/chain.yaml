@@ -19,7 +19,16 @@ consensus:
                                   #   fraction of miners commit" and gives no number.
   leader_election: round_robin    # DECLARED — the paper is silent on leader selection.
   view_change_timeout_s: 2.0      # DECLARED — the paper describes no view change at all (DEV-10).
+                                  #   Simulated seconds, on the bus clock (DEV-21).
   message_bus: in_process         # DECLARED — async/networked bus is an M7 extension.
+  message_delay_s: 0.0            # DECLARED — DEV-21. Per-message delivery delay on the bus's
+                                  #   *simulated* clock. 0.0 = instant delivery. Non-zero adds
+                                  #   modelled network time (~3x this per block) without changing
+                                  #   wall-clock; see configs/bench.yaml for what that does to
+                                  #   Target 3.
+  log_window: 4                   # DECLARED — DEV-20. Heights above the committed one that a
+                                  #   replica buffers messages for. Bounds memory a byzantine peer
+                                  #   can make it spend; one height is ever in flight.
 
 block:
   version: 1
