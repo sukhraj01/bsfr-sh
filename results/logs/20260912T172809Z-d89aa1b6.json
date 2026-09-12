@@ -1,0 +1,164 @@
+{
+  "config_hash": "1f0edc64698e09b7c4d29bb86f1cf25b5d9552bc616b784d64ea9b4b72ee858e",
+  "config_hash_scheme": 2,
+  "dataset": {
+    "columns": [
+      "year",
+      "day",
+      "length",
+      "weight",
+      "count",
+      "looped",
+      "neighbors",
+      "income"
+    ],
+    "matches_paper_counts": false,
+    "n_negative": 197160,
+    "n_positive": 2840,
+    "n_rows": 200000,
+    "positive_rate": 0.0142,
+    "ransomware_families": 28,
+    "source": "BitcoinHeistData.csv"
+  },
+  "full_scale": false,
+  "git_rev": "8173bed",
+  "honest_mode": {
+    "baselines": {
+      "constant_negative": {
+        "accuracy": 0.9858,
+        "accuracy_for_contrast": 0.9858,
+        "confusion": {
+          "fn": 2840,
+          "fp": 0,
+          "tn": 197160,
+          "tp": 0
+        },
+        "f1": 0.0,
+        "f1_minority": 0.0,
+        "mcc": 0.0,
+        "pr_auc": 0.0142,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "constant_positive": {
+        "accuracy": 0.0142,
+        "accuracy_for_contrast": 0.0142,
+        "confusion": {
+          "fn": 0,
+          "fp": 197160,
+          "tn": 0,
+          "tp": 2840
+        },
+        "f1": 0.028002366397160323,
+        "f1_minority": 0.028002366397160323,
+        "mcc": 0.0,
+        "pr_auc": 0.0142,
+        "precision": 0.0142,
+        "recall": 1.0
+      },
+      "stratified_random": {
+        "accuracy": 0.97178,
+        "accuracy_for_contrast": 0.97178,
+        "confusion": {
+          "fn": 2798,
+          "fp": 2846,
+          "tn": 194314,
+          "tp": 42
+        },
+        "f1": 0.014664804469273743,
+        "f1_minority": 0.014664804469273743,
+        "mcc": 0.0003508463202015701,
+        "pr_auc": 0.014205071592992861,
+        "precision": 0.014542936288088643,
+        "recall": 0.014788732394366197
+      }
+    },
+    "deferred": {},
+    "folds": 5,
+    "models": {
+      "decision_tree": {
+        "accuracy_for_contrast": 0.98027,
+        "confusion": {
+          "fn": 1823,
+          "fp": 2123,
+          "tn": 195037,
+          "tp": 1017
+        },
+        "f1_minority": 0.34013377926421406,
+        "fit_seconds": 1.6318799999717157,
+        "folds": 5,
+        "mcc": 0.33057359902803274,
+        "pr_auc": 0.1253156990848132,
+        "precision": 0.3238853503184713,
+        "predict_seconds": 0.009610248991521075,
+        "recall": 0.3580985915492958
+      },
+      "k_nearest_neighbours": {
+        "accuracy_for_contrast": 0.98579,
+        "confusion": {
+          "fn": 2512,
+          "fp": 330,
+          "tn": 196830,
+          "tp": 328
+        },
+        "f1_minority": 0.18753573470554602,
+        "fit_seconds": 0.18676195899024606,
+        "folds": 5,
+        "mcc": 0.23516447392139223,
+        "pr_auc": 0.11687244335904093,
+        "precision": 0.49848024316109424,
+        "predict_seconds": 0.3215291250089649,
+        "recall": 0.11549295774647887
+      },
+      "logistic_regression": {
+        "accuracy_for_contrast": 0.9858,
+        "confusion": {
+          "fn": 2840,
+          "fp": 0,
+          "tn": 197160,
+          "tp": 0
+        },
+        "f1_minority": 0.0,
+        "fit_seconds": 1.5050246239989065,
+        "folds": 5,
+        "mcc": 0.0,
+        "pr_auc": 0.018075388938892746,
+        "precision": 0.0,
+        "predict_seconds": 0.003335876011988148,
+        "recall": 0.0
+      },
+      "random_forest": {
+        "accuracy_for_contrast": 0.986995,
+        "confusion": {
+          "fn": 2473,
+          "fp": 128,
+          "tn": 197032,
+          "tp": 367
+        },
+        "f1_minority": 0.22008995502248876,
+        "fit_seconds": 8.323431625991361,
+        "folds": 5,
+        "mcc": 0.3061607010905924,
+        "pr_auc": 0.33491685474865385,
+        "precision": 0.7414141414141414,
+        "predict_seconds": 0.24379650098853745,
+        "recall": 0.12922535211267605
+      }
+    },
+    "n_rows": 200000,
+    "positive_rate": 0.0142,
+    "wall_seconds": 13.306608708022395
+  },
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "load_seconds": 1.291248749999795,
+  "purpose": "M4a \u2014 BitcoinHeist reproduction (Targets 1-2, DEV-06)",
+  "run_id": "20260912T172809Z-d89aa1b6",
+  "seed": 20260912
+}

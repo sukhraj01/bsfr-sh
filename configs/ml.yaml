@@ -69,6 +69,11 @@ models:
     n_jobs: -1
   logistic_regression:
     enabled: true
+    # DECLARED, and deliberately still spelled the old way. scikit-learn 1.8 deprecated `penalty`
+    # and 1.10 removes it (`l1_ratio=0` is the replacement for L2). Dropping it here would mean
+    # silently accepting a library default for a value the paper never reports, which is the one
+    # thing M4a must not do — so the declaration stays and the migration is carried debt (D5).
+    # Every run under sklearn >= 1.8 emits a FutureWarning for this line; that is expected.
     penalty: l2
     C: 1.0
     solver: lbfgs

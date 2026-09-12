@@ -122,19 +122,41 @@ per block, a 201-chunk backup across three blocks), four replicas; also with a s
 
 ---
 
-## M4 — Detection (Phase 3) `[ ]`
+## M4 — Detection (Phase 3)
 
-- [ ] `detection/dataset.py` — `BitcoinHeistBackend` + `HoneypotBackend`
-- [ ] BitcoinHeist loader, `address` dropped, binary label
-- [ ] `paper_mode` 90/10 resample · `honest_mode` natural balance (DEV-06)
-- [ ] `detection/models.py` — RF, LR, DT, KNN with declared hyperparameters
+**Split into M4a and M4b on 2026-09-12.** The two halves answer different questions and fail
+differently. M4a reproduces the paper's *own* evaluation on BitcoinHeist, where the work is data
+handling, class balance and honest baselines, and where the risk is quoting a number the split
+manufactured. M4b runs the framework's own data path — the honeypot corpus and Alg. 3 — where the
+risk is a leak in data we generated ourselves. Sharing `metrics.py` is the only overlap.
+
+### M4a — the BitcoinHeist pipeline `[x]`
+
+- [x] `make data` — fetches and verifies BitcoinHeist against §VII's counts before anything else
+- [x] `detection/dataset.py` — loader, `address` dropped at read, binary label
+- [x] `paper_mode` 90/10 resample · `honest_mode` natural balance, stratified k-fold (DEV-06)
+- [x] `detection/models.py` — RF, LR, DT, KNN with the hyperparameters declared in `configs/ml.yaml`
+- [x] `detection/metrics.py` — both metric sets, constant and stratified-random baselines
+- [x] Sidecars in `results/logs/`, a `measured` line in `RESULTS.md` for every run
+- [x] 100 new unit tests (1093 total); `--mode paper` refuses a subsampled load
+
+**Exit:** the `paper_mode` experiment ran and is recorded with `n=46,014`; `honest_mode` ran
+locally for all four models at the configured 200K subsample; baselines are published beside every
+number. **The published BSFR-SH row did not reproduce** — best here is random forest at
+0.9479 / 0.9717 against a reported 0.9898 / 0.990, and the paper's own best algorithm (decision
+tree) reaches 0.9262. That gap is the M4a result, recorded in `RESULTS.md` and carried into the
+write-up as an open question rather than explained away. Full-scale `honest_mode` (2.9M rows) is
+deferred to Ada: prepared as `scripts/ada_honest_mode.sbatch`, **unrun**.
+
+### M4b — the honeypot backend and Alg. 3 `[ ]`
+
+- [ ] `detection/dataset.py` — `HoneypotBackend` over the committed corpus (Q9: it is fixed)
 - [ ] `detection/profiles.py` — `NProf` / `AProf`
-- [ ] `detection/metrics.py` — both metric sets + constant-classifier baseline
 - [ ] `detection/detector.py` — Alg. 3 real-time loop
 - [ ] `framework/phase3_detection.py`
 
-**Exit:** Table II BSFR-SH row reproduced in `paper_mode`; `honest_mode` numbers produced
-alongside; baseline published.
+**Exit:** the framework's own data path runs end to end, and the honeypot backend's accuracy is
+reported against the corpus's stated 0.85 — a number near 1.0 is a leak to be found, not a result.
 
 ---
 

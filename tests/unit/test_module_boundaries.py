@@ -146,6 +146,29 @@ def test_honeypot_depends_only_on_crypto_blockchain_and_util(path: Path) -> None
 
 
 @pytest.mark.parametrize("path", PY_FILES, ids=_rel)
+def test_detection_does_not_orchestrate(path: Path) -> None:
+    """`detection` consumes data and returns numbers; sequencing phases is `framework`'s job.
+
+    `honeypot` is allowed because M4b's backend reads the corpus it produced, and `blockchain`
+    because the other backend reads records off `BC_SigRW`. `framework` and `consensus` are not:
+    a detector that starts a consensus round has stopped being a detector.
+    """
+    rel = _rel(path)
+    if not rel.startswith("detection/"):
+        return
+    internal = {mod for mod in _imported_paths(_tree(path)) if mod.startswith("bsfr_sh")}
+    allowed = (
+        "bsfr_sh.crypto",
+        "bsfr_sh.blockchain",
+        "bsfr_sh.util",
+        "bsfr_sh.honeypot",
+        "bsfr_sh.detection",
+    )
+    offenders = {mod for mod in internal if not mod.startswith(allowed)}
+    assert not offenders, f"{rel} imports {sorted(offenders)}"
+
+
+@pytest.mark.parametrize("path", PY_FILES, ids=_rel)
 def test_crypto_depends_only_on_util(path: Path) -> None:
     """docs/ARCHITECTURE.md: `crypto` has no internal dependencies beyond `util` (and itself)."""
     rel = _rel(path)

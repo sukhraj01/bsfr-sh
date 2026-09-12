@@ -122,6 +122,15 @@ cost separately and never inside a Target 3 number.
 **Paper:** §VII resamples BitcoinHeist to 90% ransomware / 10% benign, then reports accuracy
 (98.98%) and F1 (0.990). On that split a constant-positive classifier scores 90.0% accuracy and
 ≈0.947 F1.
+
+**Amendment (M4a, 2026-09-12): what the 90/10 split costs in sample size.** The paper cites a
+2,916,697-row dataset and then resamples it to 90% ransomware. Only **41,413 ransomware rows
+exist**, so the resample is bounded at `41,413 / 0.9 = 46,014` rows — **1.6% of the dataset it
+cites**, at a class balance that occurs nowhere outside the resample. The paper never states this.
+Its headline 98.98% is therefore a number from a ~46K-row experiment, not from 2.9M rows, and the
+reader is given no way to notice. `paper_mode_arithmetic()` is a pure function so the bound is
+asserted without touching the data
+(`test_detection_dataset.py::test_the_resample_is_bounded_by_the_positives_that_exist`).
 **Ours:** both modes.
 - `paper_mode` — exact 90/10 resample, reports accuracy and F1 as published. **Reproduction
   target.**
@@ -518,6 +527,14 @@ every model, and worth nothing. The two honest options were to drop the group or
 part both classes produce; we keep the observable prefix (arrival, enumeration, bulk transform,
 cleanup, capped at 4), because those four are genuinely observable for benign software. The full
 walk stays in `RawSample`/`CleanSample` as provenance, out of the feature vector.
+
+**Amendment (M4a, 2026-09-12): the committed corpus is the fixed dataset — Q9 closed.** M4 trains
+and evaluates on `data/honeypot/corpus_train.csv` and `corpus_eval.csv` exactly as committed;
+experiments never regenerate them. Regenerating per experiment would change the data underneath
+every comparison, so two M4 numbers would differ in both the model *and* the corpus, and no
+difference between them could be attributed to either. Regeneration stays reproducible from the
+manifest for a deliberate schema change — which bumps `GENERATOR_VERSION` and lands as its own
+commit — but it is never something a run does on the way past.
 
 **(b) The corpus is built to be hard, and says how hard.** The generator draws
 `AMBIGUOUS_FRACTION = 0.25` of both classes from confusable pairs that share one identical

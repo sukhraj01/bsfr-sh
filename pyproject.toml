@@ -112,7 +112,12 @@ warn_unused_configs = true
 show_error_codes = true
 pretty = true
 
-# No per-module overrides yet. sklearn and matplotlib ship no stubs, so M4/M6 will need a
-# narrowly scoped `ignore_missing_imports` block here — added when the import appears, not
-# before: `warn_unused_configs` reports a stanza for a module nothing imports, and a config that
-# warns on a clean run trains you to ignore its output.
+# Added in M4a, when the import actually appeared. scikit-learn ships no `py.typed` marker, so
+# `mypy --strict` cannot see its types at all. The scope is deliberately one library: estimators
+# are reached through `detection/models.py`, which annotates every value that crosses back into
+# our code, so the untyped region stops at that wrapper. matplotlib will need the same treatment
+# at M6 — added then, not now, because `warn_unused_configs` reports a stanza for a module
+# nothing imports and a config that warns on a clean run trains you to ignore its output.
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "pandas.*"]
+ignore_missing_imports = true

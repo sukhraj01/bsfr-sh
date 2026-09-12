@@ -17,6 +17,13 @@ roles.
 
 The manifest also carries the corpus's intended difficulty, so M4 can tell whether its accuracy is
 a result or an artefact.
+
+The committed corpus is the dataset (Q9, closed in M4a)
+-------------------------------------------------------
+`corpus_train.csv` and `corpus_eval.csv` as committed *are* M4's data. Experiments do not
+regenerate them. A corpus that moves between runs makes two results incomparable, because the model
+and the data would both have changed and no difference could be attributed to either. Regeneration
+is a deliberate act: it bumps `GENERATOR_VERSION` and lands as its own commit.
 """
 
 from __future__ import annotations

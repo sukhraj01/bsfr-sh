@@ -4,16 +4,16 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-12 · **Milestone:** M4 (Phase 3, detection) · **Sessions completed:** 6
+**Last updated:** 2026-09-12 · **Milestone:** M4b (honeypot backend, Alg. 3) · **Sessions completed:** 7
 
 ---
 
 ## One-line status
 
-M3 is closed. Phases 1, 2 and 5 all run end to end: systems back up and restore byte-identical
-through pBFT on `BC_DTBU`, and the honeypot's signature records reach `BC_SigRW` through the same
-pipeline. A labelled corpus exists on disk with its seeds and its **intended difficulty** recorded.
-`make test-all` runs 993 tests and `make lint` is clean. Next is M4, Phase 3.
+M4a is closed. BitcoinHeist is fetched, verified against §VII and run through both evaluation
+modes with baselines beside every number. **The paper's headline does not reproduce**: best here is
+0.9479 / 0.9717 against a published 0.9898 / 0.990. `make test-all` runs 1103 tests and `make lint`
+is clean. Next is M4b, the framework's own data path.
 
 ---
 
@@ -21,126 +21,121 @@ pipeline. A labelled corpus exists on disk with its seeds and its **intended dif
 
 | Layer | State | Notes |
 |---|---|---|
-| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-26, DEV-27 opened in M3b; DEV-05 amended twice |
-| `pyproject.toml`, `Makefile`, `.gitignore`, `configs/` | done | `timing.index_maintenance: separate_column` added (M3b) |
-| `util/`, `crypto/`, `blockchain/`, `consensus/` | done | `crypto/channel.py`, `blockchain/backup.py` from M3a |
-| `framework/` entities, pipeline, phases 1, 2, 5 | **done** | M3a + M3b |
-| `recovery/` | done | M3a |
-| `honeypot/` | **done** | M3b: collector, preprocess, signatures, features, corpus |
-| `data/honeypot/` corpus | **done** | 1467 train + 731 eval records, two seeds, manifest |
-| `detection/`, phase 3 | not started | **M4 — start here** |
+| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-06 and DEV-27 amended in M4a; M4 split into M4a/M4b |
+| `configs/`, `Makefile` | done | `make data` implemented; `ml.yaml` records the sklearn `penalty` deprecation |
+| `util/`, `crypto/`, `blockchain/`, `consensus/` | done | |
+| `framework/` entities, pipeline, phases 1, 2, 5 | done | M3a + M3b |
+| `recovery/`, `honeypot/` | done | M3a, M3b |
+| `data/honeypot/` corpus | done | fixed dataset (Q9): 1467 train + 731 eval, two seeds |
+| `data/raw/` BitcoinHeist | **local only** | gitignored; `make data` refetches (~56 min here) |
+| `detection/` dataset, models, metrics | **done** | M4a — BitcoinHeist only |
+| `detection/` profiles, detector; `phase3_detection` | not started | **M4b — start here** |
 | `mitigation/`, phase 4 | not started | M5 |
 | `bench/`, figures | not started | M6 |
 
 ## Current numbers
 
-One `measured` benchmark row exists: the Q1 ECDSA backend bake-off (`RESULTS.md` §Ours). M3a and
-M3b ran no benchmark, by design. Every reproduction target is still `paper_reported`.
+**BitcoinHeist, `paper_mode`** (n=46,014, run `20260912T172708Z-6d35b415`): RF 0.9479/0.9717 ·
+DT 0.9262/0.9590 · LR 0.9000/0.9474 · KNN 0.8861/0.9392 · constant-positive baseline
+**0.9000/0.9474**. Published row: 0.9898/0.990 — **not reproduced**.
 
-**The corpus's difficulty, which M4 needs before it interprets anything.** By construction the
-generator draws 25% of both classes from *confusable pairs* that share one parameter set, putting
-a floor of 0.125 under the Bayes error. **Intended Bayes-optimal accuracy ≈ 0.85**
-(`honeypot.corpus.EXPECTED_BAYES_ACCURACY`, also in the corpus manifest). Measured on the committed
-corpus: the most separable single feature is `extension_change_rate` at 0.816, and a simple
-baseline fitted on the train draw and scored on the eval draw reaches **0.830** balanced accuracy.
-**A detector reporting far above ~0.85 on this data is reading a leak, not detecting anything.**
+**BitcoinHeist, `honest_mode`** (200K subsample, 5-fold, run `20260912T172809Z-d89aa1b6`): best
+MCC is DT at 0.331, best PR-AUC is RF at 0.335, recall spans 0.00–0.36, and LR finds nothing at
+all. A constant-negative classifier scores **0.9858 accuracy** — 0.4 points below the paper's
+headline. Full-scale (2.9M) `honest_mode` is **deferred to Ada, unrun**.
 
-## What M4 must not re-derive
+**Honeypot corpus** (M4b's data): intended Bayes-optimal ≈ **0.85**, measured baseline 0.830.
+A detector scoring far above that is reading a leak.
 
-Established in M1–M3b; take these as given.
+## What M4b must not re-derive
 
-- **The corpus contract.** Train on `data/honeypot/corpus_train.csv`, evaluate on
-  `corpus_eval.csv`. They are *independent draws from different seeds* — never shuffle one draw
-  into both roles, because samples within one generator call can share latent parameters.
-  `manifest.json` records both seeds, the schema and the expected difficulty.
-- **Features are exactly `honeypot.features.FEATURE_NAMES`** (22, order named by `ft_rw.v1`).
-  `label` is the target. `sample_id`, `profile`, `collected_at`, `content_digest`, `attestation`
-  and `missing_mask` are metadata and must never enter the model
-  (`honeypot.corpus.METADATA_COLUMNS` names them).
-- **`missing_mask` marks unobserved features**; their values are placeholder zeros, not
-  measurements. Impute if you like, but knowingly (DEV-27).
-- **Do not "improve" the kill-chain feature.** `observed_stages` is truncated to the observable
-  prefix on purpose. Restoring the full `stage_reached` puts the label in the feature vector and
-  every model will find it (DEV-27, `test_honeypot_features.py`).
-- **Two data sources, reported side by side** (FLAW-2): `bitcoinheist` for the paper's own
-  evaluation, `honeypot` for the framework as described. Selected by config, never hardcoded.
-- **Reading records off the chain:** decrypt with the key holder's key into
-  `SignatureRecordPayload`; check `schema` before reading `features`.
-- **Phase 2 is a payload builder over `_block_pipeline`** and changed nothing in it; Phase 3 has
-  no reason to touch the pipeline either.
-- **`honeypot/` never imports `framework/`.** `HP_RW`'s synthesis is `honeypot.collector.Honeypot`
-  (no keys, no network); its session side is `framework.entities.HoneypotNode`. Pinned by
-  `test_module_boundaries.py`.
-- **Index maintenance is not in Alg. 1's timed path** — `phase1_backup.maintain_index()` is a
-  separate call (DEV-05 M3b amendment, `configs/bench.yaml`).
-- **Do not add per-transaction digest checks to `Chain`** — M3a tried, reverted; the block
-  signature already covers every transaction's full encoding.
-- **Test harnesses:** `pbft_harness.py` (clusters, byzantine behaviours), `m3a_harness.py`
-  (entities, direct-append chains), `m3b_harness.py` (honeypot nodes, draws, AUC and baseline
-  helpers). `tests/integration/conftest.py` puts them on the path.
+- **The corpus is fixed (Q9).** Train on `data/honeypot/corpus_train.csv`, evaluate on
+  `corpus_eval.csv`, as committed. Never regenerate per experiment; never shuffle one draw into
+  both roles. Features are exactly `honeypot.features.FEATURE_NAMES` (22); `label` is the target;
+  everything in `corpus.METADATA_COLUMNS` is provenance and must not enter a model.
+- **Do not restore the full kill-chain feature** — `observed_stages` is truncated on purpose
+  (DEV-27); the whole chain is the label in disguise.
+- **Both modes, always, with baselines first** (DEV-06). `detection.metrics.baselines()` runs
+  before any estimator is fitted, and no model number is reported without it.
+- **`paper_mode` needs the whole dataset.** It uses every ransomware row, so a subsampled load
+  runs a different, much smaller experiment; `run_detection.py` refuses it (`--full`).
+- **The §VII counts are the anchor** — `load_bitcoinheist(verify=True)` raises rather than
+  continuing on a file that is not the paper's. `make data` re-fetches and re-verifies.
+- **Project compute before running it** (CLAUDE.md §6): `knn_projection()` decided KNN's fate at
+  both scales; 1.23 GB at 200K ran, 17.94 GB at 2.9M is the Ada job.
+- **`detection/` may not import `framework/` or `consensus/`**; `honeypot/` may not import
+  `framework/`. Pinned by `test_module_boundaries.py`.
+- **Every run writes a sidecar and a `measured` RESULTS.md line with its run_id.** A number
+  without a line does not exist.
+- **Test harnesses:** `pbft_harness.py`, `m3a_harness.py`, `m3b_harness.py`.
 
 ## Next task
 
-**M4 — Phase 3 detection.** Build `detection/dataset.py` with both backends
-(`BitcoinHeistBackend`, `HoneypotBackend` reading the corpus or the chain), `detection/models.py`
-(the four estimators with the declared hyperparameters in `configs/ml.yaml`),
-`detection/profiles.py` (`NProf`/`AProf`), `detection/metrics.py` (both metric sets plus the
-constant-classifier baselines), and `framework/phase3_detection.py` (Alg. 3). Exit: Table II's
-BSFR-SH row reproduced in `paper_mode`, `honest_mode` numbers produced alongside (DEV-06), and the
-honeypot backend's accuracy reported against the corpus's stated 0.85 — if it lands near 1.0,
-stop and find the leak. If the two backends do not fit one session, split them and say so first.
+**M4b — the honeypot backend and Alg. 3.** Add `HoneypotBackend` to `detection/dataset.py`
+(reading the committed corpus, and the chain path via `SignatureRecordPayload`),
+`detection/profiles.py` (`NProf`/`AProf`), `detection/detector.py` (Alg. 3's loop) and
+`framework/phase3_detection.py`. Reuse `detection/metrics.py` unchanged. Exit: the framework's own
+data path runs end to end and its accuracy is reported against the corpus's stated 0.85 — **a
+number near 1.0 is a leak to find, not a result**. Report the honeypot and BitcoinHeist backends
+side by side (FLAW-2).
 
 ## Blockers
 
-None.
+None. Note that `data/raw/` is gitignored, so a fresh clone needs `make data` (~56 minutes at this
+environment's throughput) before any BitcoinHeist run.
 
 ## Open questions
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q2 | Transaction payload size — 4096 B *declared* (DEV-15), not justified | M6 result validity | **Deferred, deliberately.** Needs M6's sweep. DEV-24 pins the meaning and the measured framing overhead. |
-| Q3 | Does BitcoinHeist need the full 2.9M rows locally, or is a stratified subsample enough for `paper_mode`? | M4 | measure at M4 start; full runs go to Ada regardless |
-| Q4 | Do we need real feature-space evasion for M7, or is that out of scope for a course deliverable? | M7 | defer until M6 lands |
-| Q5 | Should entry points load one merged config object or the three files independently? | M6 | decide when `bench/` becomes the first multi-config consumer |
-| Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M6 | only matters if M6 benchmarks a lossy network; decide at M6 start |
-| Q9 | Should the honeypot corpus be regenerated per experiment, or is the committed pair the fixed dataset? | M4 | decide at M4 start; the manifest makes either reproducible |
+| Q2 | Transaction payload size — 4096 B *declared* (DEV-15), not justified | M6 result validity | **Deferred.** Needs M6's sweep; DEV-24 pins the meaning and the measured framing overhead. |
+| Q4 | Do we need real feature-space evasion for M7? | M7 | defer until M6 lands |
+| Q5 | One merged config object or three files at the entry points? | M6 | decide when `bench/` becomes the first multi-config consumer |
+| Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M6 | only if M6 benchmarks a lossy network |
+| Q10 | **Why doesn't 98.98% reproduce?** Leading hypothesis: `address` kept as a feature, which leaks the label. Also possible: undeclared hyperparameters, or a different resample. | the write-up's central claim | M4b or a follow-up — hypothesis (1) is a one-run experiment |
+
+**Q3 closed** (M4a): the 200K stratified subsample is enough for `honest_mode` locally — all four
+models ran in 13 s. `paper_mode` needs the full file regardless, and it loads in ~1.3 s of the run.
+**Q9 closed** (M4a): the committed corpus is the fixed dataset (DEV-27).
 
 ## For the write-up
 
-**§V-3.** pBFT's threshold is one *third*, not one half, so "PoW is 51%-vulnerable, therefore
-pBFT" lowers the bar. At the paper's four nodes, two colluders fork it, and a test asserts the
-fork. [FLAW-5] in `docs/PAPER_NOTES.md` §V; mapping in the M2b session file.
+**§V-3.** pBFT's threshold is one *third*, not one half, so "PoW is 51%-vulnerable, therefore pBFT"
+lowers the bar; at four nodes two colluders fork it, and a test asserts the fork. [FLAW-5].
 
-**§V-1 / §V-5 (M3a).** §V-1 holds at every place Phases 1, 2 and 5 use session keys. But session
-keys protect bytes *in transit*, not at the servers, which is why §IV-E's two plaintext-holding
-hops needed DEV-23's attested digest (GAP-8). §V-5 is substantiated only structurally.
+**§V-1 / §V-5 (M3a).** §V-1 holds wherever Phases 1, 2 and 5 use session keys, but session keys
+protect bytes in transit, not at the servers — hence DEV-23's attested digest (GAP-8). §V-5 is
+substantiated only structurally.
 
 **GAP-3 / FLAW-2 (M3b).** The paper defines neither the honeypot's output nor its features, then
-evaluates on an unrelated Bitcoin dataset. M3b supplies the missing layer, so Phase 3 can consume
-Phase 2's own output — the thing the paper claims and never does. Two further silences became
-decisions: "remove the abnormalities" (DEV-26), which read as anomaly removal would delete the
-positive class, and the kill-chain feature (DEV-27), which taken whole would be the label itself.
+evaluates on an unrelated Bitcoin dataset. M3b supplies the missing layer.
+
+**FLAW-4, extended, and the non-reproduction (M4a).** The 90/10 resample is degenerate *and*
+bounded at 46,014 rows — 1.58% of the cited 2.9M. On it, a constant classifier scores 0.9000/0.9474
+and our best model reaches 0.9479/0.9717, well short of the published 0.9898/0.990. At the natural
+rate, never predicting ransomware scores 0.9858 — 0.4 points below the paper's headline — while the
+four models recover 0–36% of it at a best MCC of 0.331. The reproduction attempt is the finding.
 
 ## Carried debt
 
 | # | Item | Retire by |
 |---|---|---|
-| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/` now has two files. | M6 |
-| D3 | The bus passes Python objects and never serialises, so wire-encoding cost is absent from the consensus span and record wire size is measured nowhere. | M6 — serialise at the bus, or state in Target 3 that it was not |
-| D4 | `ClientRequest` from `CS_l` to the replicas is still unauthenticated (DEV-20 item 5). Junk transactions can be committed; they can never be restored or attributed. | when a claim needs it |
+| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/` now has four files, including both M4a entry points. | M6 |
+| D3 | The bus never serialises, so wire-encoding cost is absent from the consensus span. | M6 |
+| D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
+| D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8 and **removed in 1.10**; `configs/ml.yaml` still declares it (dropping it would silently accept a library default). Migrate to `l1_ratio=0` before upgrading. | before sklearn 1.10 |
 
 ## Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| We wrote both the corpus generator and, in M4, its classifier — a result could measure the generator | M4's headline number means nothing | difficulty stated up front (0.85) and enforced: overlap, no single-feature giveaway, label-independent missingness, baseline on a separate draw (DEV-27) |
-| Python timings diverge from the paper's Java | Targets 3 and 4 unverifiable | report ratios and shape, not seconds (DEV-13) |
-| Zero-delay consensus is ~1 ms/block, so Fig. 6 measures encryption, not consensus | Target 3 claims something different | DEV-21: M6 runs delay 0 and delay > 0 in separate columns |
-| KNN OOMs the 8 GB box on full BitcoinHeist | M4 stalls | subsample by default, `--full` goes to Ada |
-| `honest_mode` numbers look like implementation failure | write-up confusion | publish the constant-classifier baseline next to every number |
-| The canonical encoding changes after hashes exist | every stored hash silently unreproducible | `ENCODING_VERSION` plus pinned golden vectors |
+| We wrote both the corpus generator and, in M4b, its classifier | M4b's number could measure the generator | difficulty stated up front (0.85) and enforced by the M3b leakage tests |
+| Python timings diverge from the paper's Java | Targets 3 and 4 unverifiable | report ratios and shape (DEV-13) |
+| Zero-delay consensus measures encryption, not consensus | Target 3 claims something different | DEV-21: delay 0 and delay > 0 in separate columns |
+| The non-reproduction is read as our bug rather than a finding | the write-up's central claim collapses | baselines published beside every number; Q10 names the testable hypothesis |
+| `data/raw/` is gitignored and slow to fetch | a fresh machine cannot rerun M4a quickly | `make data` verifies counts; `provenance.json` records the sha256 |
+| The canonical encoding changes after hashes exist | stored hashes silently unreproducible | `ENCODING_VERSION` plus pinned golden vectors |
 | Validation migrates out of `Chain` | two definitions of a valid block | `check_append` / `verify_block` are the only validators |
-| On-chain storage at 4 KiB per transaction | GAP-2's practicality question gets worse | report storage honestly (M7); M6's sweep states framing is included |
 
 ---
 
@@ -157,9 +152,8 @@ This file is **replaced, not appended.** At session end:
    tracked at the wrong granularity — move it to `docs/ROADMAP.md`.
 
 **Why the cap exists:** we run one session per task, so this file is read at the start of *every*
-session. A 200-line file costs a few seconds of context. A 2,500-line one costs a meaningful
-fraction of the window before any work begins, and the agent will skim rather than read it — which
-is worse than not having it.
+session. A 200-line file costs a few seconds of context; a 2,500-line one costs a meaningful
+fraction of the window before any work begins, and gets skimmed rather than read.
 
 ## Boundaries with other docs
 

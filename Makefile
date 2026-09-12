@@ -28,6 +28,14 @@ setup:
 	$(VENV_PY) -m pip install -e ".[dev]"
 	@echo "setup complete: $(VENV) ($$($(VENV_PY) --version))"
 
+# --- M4a ---------------------------------------------------------------------------------------
+# Fetches BitcoinHeist into data/raw/ (gitignored, ~50 MB zipped) and verifies it against §VII's
+# counts before anything can use it. A dataset that does not match is a stop, not a warning:
+# every reproduction claim in M4 is anchored to 2,916,697 / 2,875,284 / 41,413.
+data:
+	$(REQUIRE_VENV)
+	$(VENV_PY) scripts/fetch_bitcoinheist.py
+
 test:
 	$(REQUIRE_VENV)
 	$(VENV_PY) -m pytest tests/unit
@@ -45,12 +53,6 @@ lint:
 # --- later milestones ---------------------------------------------------------------------------
 # These exist so the contract in CLAUDE.md §5 is complete and so a caller gets a milestone
 # number instead of "No rule to make target".
-data:
-	@echo "make data: not implemented until M4 (detection layer)."
-	@echo "  It will fetch and checksum BitcoinHeist (2,916,697 rows) into data/raw/."
-	@echo "  See docs/EXPERIMENTS.md 'Target 2 — Dataset' and docs/ROADMAP.md M4."
-	@exit 1
-
 repro:
 	@echo "make repro: not implemented until M6 (benchmarks and figures)."
 	@echo "  It will run the paper-faithful path: 90/10 resample, cases 1-3 (5/10/15 blocks)."

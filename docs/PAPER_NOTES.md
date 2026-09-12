@@ -175,6 +175,17 @@ headline is not evidence of a good detector.
 Correct evaluation, which we add: preserve the natural ≈1.4% imbalance, stratified k-fold,
 report precision/recall/PR-AUC/MCC on the minority class, plus a confusion matrix.
 
+**[FLAW-4, extended] *(found in M4a, 2026-09-12)* — the split also shrinks the experiment by 98%,
+and the paper never says so.** The resample is bounded by the scarce class: only 41,413 ransomware
+rows exist, so a 90%-ransomware sample holds at most `41,413 / 0.9 = 46,014` rows. The headline
+98.98% is therefore a number from a **~46K-row experiment**, reported directly beneath a
+2,916,697-row dataset description, with nothing in between to mark the change. Two separate
+problems compound here: the balance is degenerate (the original FLAW-4), *and* the evidence base is
+1.6% of the cited data. Either alone would warrant a caveat; together they mean the reported
+comparison against [11]–[14] is between a 46K-row resample and four other papers' full corpora.
+Arithmetic only — no data needed to check it — so it is asserted as a unit test, and the realised
+`n` is recorded with every `paper_mode` run.
+
 **[FINDING] — TPS is arithmetic, not measurement.** Verified against §VII-C and §VII-D:
 
 | Chain | Case | Blocks | Tx | Time (s) | Reported TPS | tx/time |
