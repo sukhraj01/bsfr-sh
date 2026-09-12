@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M3b**
+**Current milestone: M4**
 
 ---
 
@@ -105,13 +105,20 @@ Its real work (DEV-03's signatures and features) is design work of a different k
 **Met** — `tests/integration/test_backup_recovery.py`, configured sizes (4096-byte chunks, 100
 per block, a 201-chunk backup across three blocks), four replicas; also with a silent primary.
 
-### M3b — Phase 2: honeypot, signatures, features `[ ]`
+### M3b — Phase 2: honeypot, signatures, features `[x]`
 
-- [ ] `honeypot/collector.py`, `preprocess.py` — Alg. 2 lines 1–4
-- [ ] `honeypot/signatures.py`, `features.py` — Alg. 2 lines 5–6 (DEV-03, the design work)
-- [ ] `framework/phase2_collection.py` — Alg. 2, on M3a's `_block_pipeline` with no changes to it
+- [x] `honeypot/collector.py` — emulated episodes, confusable profile pairs, blind sensor groups
+- [x] `honeypot/preprocess.py` — Alg. 2 lines 3–4, five rules (DEV-26)
+- [x] `honeypot/signatures.py` — Alg. 2 line 5, digest + attestation (DEV-03)
+- [x] `honeypot/features.py` — Alg. 2 line 6, 22 features, kill chain truncated (DEV-27)
+- [x] `honeypot/corpus.py` + `scripts/make_honeypot_corpus.py` — two independent draws on disk
+- [x] `framework/phase2_collection.py` — Alg. 2, on M3a's `_block_pipeline` with no changes to it
+- [x] Leakage and difficulty checks: overlap, no single-feature giveaway, baseline near the
+      intended Bayes accuracy rather than at ceiling
 
 **Exit:** signature records land on `BC_SigRW` through consensus and decrypt to what was built.
+**Met** — `tests/integration/test_sigrw_scale.py` builds case-3 (15 × 100) from real records, and
+`tests/unit/test_phase2_collection.py` asserts the full round trip.
 
 ---
 

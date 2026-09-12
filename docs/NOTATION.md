@@ -12,7 +12,7 @@ Table I itself is a raster figure in the PDF.
 | `SYS_i` | i-th protected system in the smart healthcare network | `framework.entities.System` |
 | `CS_l` | l-th cloud server in the P2P cloud server network | `framework.entities.CloudServer` |
 | `P2PCS` | peer-to-peer cloud server network | `consensus.network.P2PCSNetwork` |
-| `HP_RW` | ransomware honeypot | `honeypot.collector.Honeypot` |
+| `HP_RW` | ransomware honeypot | synthesis: `honeypot.collector.Honeypot`; its session side: `framework.entities.HoneypotNode` (`honeypot/` may not import `framework/`) |
 | `DM_CSl` | detection module hosted on `CS_l` | `detection.detector.DetectionModule` |
 | `L` | pBFT leader (primary) for a consensus round | `Membership.primary(view)` — round-robin, not a class |
 | `A` | adversary | threat model only, no class |

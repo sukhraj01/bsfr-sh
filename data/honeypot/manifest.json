@@ -1,0 +1,54 @@
+{
+  "ambiguous_fraction": 0.25,
+  "draws": {
+    "eval": {
+      "dropped": 19,
+      "kept": 731,
+      "requested": 750,
+      "seed": 20260913
+    },
+    "train": {
+      "dropped": 33,
+      "kept": 1467,
+      "requested": 1500,
+      "seed": 20260912
+    }
+  },
+  "expected_bayes_accuracy": 0.85,
+  "feature_names": [
+    "files_touched_per_s",
+    "read_write_ratio",
+    "rename_rate_per_s",
+    "extension_change_rate",
+    "directory_breadth",
+    "write_entropy_mean",
+    "write_entropy_var",
+    "entropy_delta",
+    "crypto_call_rate",
+    "key_generation_events",
+    "crypto_ngram_novelty",
+    "child_process_spawns",
+    "injection_attempts",
+    "privilege_escalation_attempts",
+    "c2_beacon_count",
+    "dns_entropy",
+    "outbound_burst_rate",
+    "autostart_writes",
+    "shadow_copy_deletions",
+    "backup_path_accesses",
+    "observed_stages",
+    "stage_dwell_mean_s"
+  ],
+  "generator_version": "hp-gen.v1",
+  "malicious_fraction": 0.5,
+  "metadata_columns": [
+    "sample_id",
+    "label",
+    "profile",
+    "collected_at",
+    "missing_mask",
+    "content_digest"
+  ],
+  "note": "Train and eval are independent draws from different seeds, never one draw shuffled. Features are the columns named in feature_names; every other column is provenance. A classifier scoring far above expected_bayes_accuracy is reading a leak, not a signal.",
+  "schema": "ft_rw.v1"
+}

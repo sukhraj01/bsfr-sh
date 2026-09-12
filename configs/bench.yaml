@@ -22,6 +22,13 @@ timing:
   # inside the timer.
   measure_span: [block_construction, consensus, append]
 
+  # DEV-05's backup index is OURS; the paper's design has no index. Timing it inside the span
+  # above would compare our indexed append against their unindexed one, which is not the
+  # comparison Fig. 6(a) claims to make. `framework.phase1_backup.run()` therefore does no index
+  # work at all, and `maintain_index()` is a separate call. M6 reports it as its own column when
+  # it reports it, and never folds it into a Target 3 number.
+  index_maintenance: separate_column
+
 # Network latency and Target 3 (DEV-21) — read before interpreting any Fig. 6 number.
 #
 # The consensus bus has a per-message delay, `consensus.message_delay_s` in chain.yaml, default

@@ -37,6 +37,7 @@ __all__ = [
     "BackupReport",
     "backup_transactions",
     "collect",
+    "maintain_index",
     "run",
 ]
 
@@ -101,6 +102,17 @@ def backup_transactions(
     )
 
 
+def maintain_index(index: BackupIndex, cluster: Cluster) -> int:
+    """Bring the key holder's `BackupIndex` level with the committed chain. Returns blocks indexed.
+
+    DEV-05's "maintained on append", as a step of its own rather than a tail of `run()`. The
+    paper's design has no index, so anything that times Alg. 1 must be able to exclude ours or
+    report it separately: with this split, index maintenance cannot end up inside a measured
+    append span by default (`configs/bench.yaml`, Target 3).
+    """
+    return index.sync(pipeline.read_chain(cluster))
+
+
 def run(
     *,
     systems: Sequence[System],
@@ -109,14 +121,13 @@ def run(
     policy: BackupPolicy,
     captured_at: int,
     timestamp: float,
-    index: BackupIndex | None = None,
 ) -> BackupReport:
     """Implements Alg. 1, lines 1-15: back up every system in `systems` onto `BC_DTBU`.
 
     `collector` is `CS_l`; the backups are encrypted to its public key, so it is also the key
-    holder `CS'_l` for recovering them (DEV-25). `index`, if given, is that key holder's
-    `BackupIndex`, and it is brought level with the chain once the blocks commit. That is the
-    "maintained on append" of DEV-05.
+    holder `CS'_l` for recovering them (DEV-25). This function does **not** touch the
+    `BackupIndex`: call `maintain_index()` for that, so index maintenance stays outside the span
+    M6 times.
     """
     received = list(collect(systems, collector, captured_at=captured_at))
 
@@ -133,8 +144,6 @@ def run(
     result = pipeline.run(
         cluster, received, build, chain=BC_DTBU, policy=policy.pipeline, timestamp=timestamp
     )
-    if index is not None:
-        index.sync(pipeline.read_chain(cluster))
     receipts = tuple(
         BackupReceipt(
             system_id=manifest.system_id,

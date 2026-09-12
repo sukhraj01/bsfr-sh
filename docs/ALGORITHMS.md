@@ -28,12 +28,12 @@ Treat as β_j.
 
 | Lines | Step | Implementation |
 |---|---|---|
-| 1 | Deploy `HP_RW` | `honeypot.collector.Honeypot.deploy()` |
-| 2 | Collect `DT_RW` over `SK_{CS_l,HP_RW}` | `Honeypot.harvest()` |
-| 3–4 | Pre-process and clean → `DT_RWC` | `honeypot.preprocess.clean()` |
-| 5 | Generate `Sig_RW` | `honeypot.signatures.build()` — **design ours, GAP-3** |
-| 6 | Generate `FT_RW` | `honeypot.features.build()` — **design ours, GAP-3** |
-| 7 | Encrypt into `E_KU(Tx_i)`, i = 1..`N_Tx` | `blockchain.transaction.encrypt_signature_record()` |
+| 1 | Deploy `HP_RW` | `honeypot.collector.Honeypot.deploy()`, via `framework.entities.HoneypotNode.deploy()` |
+| 2 | Collect `DT_RW` over `SK_{CS_l,HP_RW}` | `Honeypot.harvest()` → `HoneypotNode.ship_samples()` → `CloudServer.receive_samples()` over a `crypto.channel.Channel` |
+| 3–4 | Pre-process and clean → `DT_RWC` | `honeypot.preprocess.clean()` — five rules, **design ours, DEV-26** |
+| 5 | Generate `Sig_RW` | `honeypot.signatures.build()` — digest + attestation, **design ours, DEV-03** |
+| 6 | Generate `FT_RW` | `honeypot.features.build()` — 22 features, kill-chain truncated, **design ours, DEV-27** |
+| 7 | Encrypt into `E_KU(Tx_i)`, i = 1..`N_Tx` | `phase2_collection.build_records()` → `blockchain.transaction.encrypt_signature_record()` |
 | 8–9 | Assemble and broadcast `β_i` | `framework._block_pipeline.run()` — built in M3a, shared with Alg. 1 |
 | 10–15 | pBFT round, commit or retry | `framework._block_pipeline.run()` — built in M3a, shared with Alg. 1 |
 | 16–20 | Terminate when all blocks added | `phase2_collection.run()` |

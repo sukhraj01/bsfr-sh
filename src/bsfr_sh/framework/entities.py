@@ -37,18 +37,28 @@ from bsfr_sh.crypto.session import (
     SessionPolicy,
     SessionResponse,
 )
+from bsfr_sh.honeypot.collector import (
+    Honeypot,
+    HoneypotError,
+    RawSample,
+    pack_samples,
+    unpack_samples,
+)
 from bsfr_sh.recovery import restore as alg5
 
 __all__ = [
     "PURPOSE_BACKUP",
+    "PURPOSE_COLLECT",
     "CloudServer",
     "EntityError",
+    "HoneypotNode",
     "Participant",
     "System",
     "establish_session",
 ]
 
 PURPOSE_BACKUP: Final = "alg1.backup"
+PURPOSE_COLLECT: Final = "alg2.collect"
 
 
 class EntityError(ValueError):
@@ -182,6 +192,45 @@ class CloudServer(Participant):
     def accept_recovery_request(self, envelope: Envelope) -> str:
         """Front-server side of Alg. 5, line 1. Returns the system to recover: the requester."""
         return alg5.accept_request(envelope, self.channel(envelope.sender))
+
+    def receive_samples(self, envelope: Envelope) -> tuple[RawSample, ...]:
+        """Implements Alg. 2, line 2 (the `CS_l` side): open `DT_RW` from `SK_{CS_l,HP_RW}`."""
+        raw = self.channel(envelope.sender).open(envelope, PURPOSE_COLLECT)
+        try:
+            return unpack_samples(raw)
+        except HoneypotError as exc:
+            raise EntityError(f"malformed harvest from {envelope.sender!r}: {exc}") from exc
+
+
+@dataclass(eq=False)
+class HoneypotNode(Participant):
+    """`HP_RW`'s network side: the identity and session that carry a harvest to `CS_l`.
+
+    The honeypot itself is `honeypot.collector.Honeypot`, which has no keys and no network.
+    They are separate because `honeypot/` sits below `framework/` in the dependency order and may
+    not import it — so the thing that *synthesizes* records cannot be the thing that *ships* them.
+    """
+
+    honeypot: Honeypot | None = field(default=None, repr=False)
+
+    def deploy(self) -> None:
+        """Implements Alg. 2, line 1."""
+        self._device().deploy()
+
+    def ship_samples(
+        self, collector_id: str, *, count: int, malicious_fraction: float = 0.5
+    ) -> Envelope:
+        """Implements Alg. 2, line 2 (the `HP_RW` side): harvest and ship over `SK_{CS_l,HP_RW}`."""
+        device = self._device()
+        if not device.deployed:
+            device.deploy()
+        samples = device.harvest(count, malicious_fraction=malicious_fraction)
+        return self.channel(collector_id).seal(PURPOSE_COLLECT, pack_samples(samples))
+
+    def _device(self) -> Honeypot:
+        if self.honeypot is None:
+            raise EntityError(f"{self.identity!r} has no honeypot attached")
+        return self.honeypot
 
 
 def establish_session(initiator: Participant, responder: CloudServer) -> None:

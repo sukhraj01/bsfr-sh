@@ -109,6 +109,15 @@ If a warm index's anchor block hash no longer matches the chain, the index is di
 by full scan. `tests/unit/test_backup_index.py` asserts that the index and the cold scan return
 identical locations.
 
+**Amendment (M3b, 2026-09-12): index maintenance is not part of Alg. 1's timed path.** Until now
+`phase1_backup.run()` synced the index once the blocks committed, which put our index inside
+anything that times Alg. 1 — and the paper has no index, so Fig. 6(a) would have compared our
+indexed append against their unindexed one. `run()` no longer touches the index, and
+`phase1_backup.maintain_index(index, cluster)` is an explicit step. A flag would have left the
+cost one default away from the span; a separate function makes it structurally absent.
+`configs/bench.yaml` (`timing.index_maintenance: separate_column`) records that M6 reports this
+cost separately and never inside a Target 3 number.
+
 ### DEV-06 · FIX · Class balance in ML evaluation
 **Paper:** §VII resamples BitcoinHeist to 90% ransomware / 10% benign, then reports accuracy
 (98.98%) and F1 (0.990). On that split a constant-positive classifier scores 90.0% accuracy and
@@ -463,3 +472,78 @@ to go to (a server holds no session with itself), and `framework.phase5_recovery
 still succeeds, which shows the hop is there for fidelity to §IV-E, not because recovery needs it.
 Tested: `test_restore.py::test_one_server_in_both_roles_skips_the_fidelity_hop`.
 **Impact on reproduction:** none; Alg. 5 is not benchmarked.
+
+### DEV-26 · FILL · What "remove the abnormalities" means (Alg. 2, line 3)
+**Paper:** Alg. 2 line 3 pre-processes `DT_RW` and "removes the abnormalities". Nothing else is
+said anywhere.
+**Problem:** the obvious reading is catastrophic. If "abnormalities" means statistical outliers,
+then this step **deletes the positive class**: ransomware behaviour *is* the outlier in a corpus of
+ordinary software. A pipeline that removes anomalies before training a ransomware detector removes
+exactly what the detector exists to find, and it does so silently — leaving a clean-looking dataset
+and a model that has never seen an attack. Phase 3 would then report a fine-looking accuracy on
+data with almost no positives left in it.
+**Ours:** "abnormalities" means **sensor defects, never unusual behaviour**, implemented as five
+rules in `honeypot/preprocess.py`:
+1. *Structural* — no observed stage, or a non-positive duration: the record describes no episode.
+   Dropped.
+2. *Impossible values* — entropies outside [0, 8] bits/byte, ratios outside [0, 1], negative
+   magnitudes. Out-of-range values are clamped to the bound; a negative **count** is marked
+   unreadable instead, because "the sensor returned nonsense" and "the program did nothing" are
+   different facts and must not become the same number.
+3. *Duplicates* — two records with a byte-identical canonical trace are one observation reported
+   twice. The first is kept.
+4. *Missing, marked* — a counter the sensor never reported stays missing and is recorded. Nothing
+   is imputed at collection time, because imputation hides the honeypot's blind spots inside the
+   data where M4 cannot see them.
+5. *Normalisation* — `files_touched`, `renames` and `crypto_calls` are absolute counts; divided by
+   the episode duration they become the rates the feature schema declares.
+
+No outlier filtering, no smoothing, no winsorising, no class balancing. `CleaningReport` counts
+what each rule did, so survivor counts are measured rather than assumed, and
+`test_honeypot_preprocess.py::test_cleaning_does_not_remove_the_positive_class` pins the property
+that matters.
+**Impact on reproduction:** none — the paper reports no number from this step. It changes what
+Phase 3 receives, which is the point.
+
+### DEV-27 · FILL · `FT_RW` as built: 22 features, a truncated kill chain, and a corpus with a stated difficulty
+**Paper:** Alg. 2 line 6 "generates features". GAP-3: no definition of any feature anywhere, and
+the paper's own evaluation then abandons this data for an unrelated Bitcoin dataset (FLAW-2).
+**Ours:** the 22-feature, 7-group schema in `docs/ARCHITECTURE.md` §honeypot, named `ft_rw.v1`,
+plus the record schema M4 reads. Three parts of it are decisions rather than details:
+
+**(a) The kill-chain group is truncated.** §II-C's chain ends notification → payment →
+decryption, and no benign program reaches those stages. A `stage_reached` feature over the full
+chain would be *the label wearing a feature's clothes*: perfectly predictive, trivially found by
+every model, and worth nothing. The two honest options were to drop the group or to keep only the
+part both classes produce; we keep the observable prefix (arrival, enumeration, bulk transform,
+cleanup, capped at 4), because those four are genuinely observable for benign software. The full
+walk stays in `RawSample`/`CleanSample` as provenance, out of the feature vector.
+
+**(b) The corpus is built to be hard, and says how hard.** The generator draws
+`AMBIGUOUS_FRACTION = 0.25` of both classes from confusable pairs that share one identical
+parameter set, so those samples carry no label information at all — a floor of 0.125 under the
+Bayes error before any other overlap. Four benign profiles are deliberately ransomware-shaped
+(backup agent, disk-encryption tool, installer, cleanup utility). `EXPECTED_BAYES_ACCURACY = 0.85`
+is recorded in the corpus manifest and in `PROJECT_STATE.md`, because **M4 needs it to tell a
+result from an artefact**: a detector scoring far above it is reading a leak. Enforced by
+`test_honeypot_features.py`: every feature's class ranges overlap, no single feature (or group
+mean) reaches 0.90 separability, missingness does not encode the label, and a baseline fitted on
+one draw and scored on another lands near the intended figure rather than at ceiling.
+
+**Measured on the committed corpus** (1467 train / 731 eval records, 48.9% malicious): the most
+separable single feature is `extension_change_rate` at 0.816, followed by `rename_rate_per_s`
+(0.803) and `observed_stages` (0.796); the baseline reaches **0.830** balanced accuracy, trained
+on the train draw and scored on the eval draw. That sits just under the intended 0.85 and nowhere
+near ceiling, which is the point. It took tuning: the first parameter set put
+`extension_change_rate` alone at 0.885, which is exactly the single-feature giveaway the leakage
+test exists to catch.
+
+**(c) Two carriers, and two draws.** A record travels either as `SignatureRecordPayload` on
+`BC_SigRW` or as a CSV row in `data/honeypot/`; both carry `schema`, `missing_mask` and `label`.
+`label` is the target and never a feature; `missing_mask` marks unobserved entries rather than
+imputing them (the canonical encoder has no NaN). Train and eval draws come from **different
+seeds, never one draw shuffled**, because samples within one generator call can share latent
+parameters.
+**Impact on reproduction:** none on any published number — the paper evaluates on BitcoinHeist,
+not on this. It is what lets M4 run the framework's *own* data path at all, and per FLAW-2 both
+backends are reported side by side.

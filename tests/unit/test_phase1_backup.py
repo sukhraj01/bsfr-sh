@@ -67,7 +67,9 @@ def test_a_backup_larger_than_a_block_spans_blocks() -> None:
 def test_the_key_holders_index_is_brought_level_on_append() -> None:
     collector = make_server(10)
     index = BackupIndex(collector.decrypt)
-    cluster, _ = _run([make_system(1, 300), make_system(2, 10)], collector, index=index)
+    cluster, _ = _run([make_system(1, 300), make_system(2, 10)], collector)
+    # Index maintenance is its own step, outside the span M6 times (DEV-05, M3b amendment).
+    assert phase1.maintain_index(index, cluster) == read_chain(cluster).height + 1
     chain = read_chain(cluster)
     assert not index.cold
     assert index.height == chain.height

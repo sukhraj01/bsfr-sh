@@ -55,6 +55,8 @@ __all__ = [
     "DOMAIN_MERKLE_LEAF",
     "DOMAIN_MERKLE_NODE",
     "DOMAIN_MERKLE_ROOT",
+    "DOMAIN_SAMPLE_ATTESTATION",
+    "DOMAIN_SAMPLE_TRACE",
     "DOMAIN_SESSION_TRANSCRIPT",
     "DOMAIN_TRANSACTION",
     "HASH_NAME",
@@ -104,6 +106,11 @@ DOMAIN_BACKUP_PAYLOAD: Final = "bsfr_sh.hash.backup.payload.v1"
 DOMAIN_BACKUP_ATTESTATION: Final = "bsfr_sh.hash.backup.attestation.v1"
 DOMAIN_BACKUP_ID: Final = "bsfr_sh.hash.backup.id.v1"
 DOMAIN_BACKUP_TX_ID: Final = "bsfr_sh.hash.backup.tx_id.v1"
+
+#: `Sig_RW`'s two senses (DEV-03), which must never share a pre-image: the content digest over a
+#: sample's canonical behavioural trace, and the pre-image `CS_l` signs to attest to that digest.
+DOMAIN_SAMPLE_TRACE: Final = "bsfr_sh.hash.sample.trace.v1"
+DOMAIN_SAMPLE_ATTESTATION: Final = "bsfr_sh.hash.sample.attestation.v1"
 
 
 def h(data: bytes) -> bytes:

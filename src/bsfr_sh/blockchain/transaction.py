@@ -159,9 +159,24 @@ class SignatureRecordPayload:
     """`Sig_RW` + `FT_RW` — one ransomware sample record from the honeypot. Alg. 2 line 7.
 
     `content_digest` and `attestation` are DEV-03's two senses of `Sig_RW`, kept apart: the
-    identification digest and the `CS_l` authenticity signature. `features` is `FT_RW`. M3 builds
+    identification digest and the `CS_l` authenticity signature. `features` is `FT_RW`. M3b builds
     the real values; this layer only transports them, so the fields are typed as bytes and a
     float vector rather than as honeypot types — `blockchain` must not depend on `honeypot`.
+
+    The last three fields are M3b's, and they are what makes the vector readable by a consumer
+    that did not build it (`detection.dataset.HoneypotBackend` in M4, docs/ARCHITECTURE.md
+    §honeypot):
+
+    * `schema` names the feature order, e.g. `"ft_rw.v1"`. A bare vector of floats with no schema
+      is not a dataset, it is a guess.
+    * `missing_mask` — bit `i` set means `features[i]` was **not observed**. The canonical encoder
+      rejects NaN, and imputing here would hide the honeypot's blind spots inside the data, so
+      absence is carried explicitly and the consumer decides what to do with it (DEV-27).
+    * `label` is the emulator's ground truth, `"RW"` or `"benign"`, and is **metadata, never a
+      feature**. Real deployments get it from an analyst; ours knows it because it synthesized
+      the sample (DEV-27).
+
+    The defaults keep M2a's five-field construction valid.
     """
 
     sample_id: str
@@ -169,6 +184,18 @@ class SignatureRecordPayload:
     attestation: bytes
     features: tuple[float, ...]
     collected_at: int
+    schema: str = ""
+    missing_mask: int = 0
+    label: str = ""
+
+    def __post_init__(self) -> None:
+        if self.missing_mask < 0:
+            raise TransactionError(f"missing_mask must be non-negative, got {self.missing_mask}")
+        if self.missing_mask >= 1 << len(self.features):
+            raise TransactionError(
+                f"missing_mask {self.missing_mask:#x} has bits set beyond the "
+                f"{len(self.features)} features it describes"
+            )
 
     def to_bytes(self) -> bytes:
         return encode(
@@ -178,14 +205,15 @@ class SignatureRecordPayload:
                 "attestation": self.attestation,
                 "features": list(self.features),
                 "collected_at": self.collected_at,
+                "schema": self.schema,
+                "missing_mask": self.missing_mask,
+                "label": self.label,
             }
         )
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> SignatureRecordPayload:
-        fields = _decode_mapping(
-            raw, ("sample_id", "content_digest", "attestation", "features", "collected_at")
-        )
+        fields = _decode_mapping(raw, _RECORD_FIELDS)
         features = fields["features"]
         if not isinstance(features, list):
             raise TransactionError("payload field 'features' is not a list")
@@ -195,7 +223,22 @@ class SignatureRecordPayload:
             attestation=_as_bytes(fields["attestation"], "attestation"),
             features=tuple(_as_float(value, "features") for value in features),
             collected_at=_as_int(fields["collected_at"], "collected_at"),
+            schema=_as_str(fields["schema"], "schema"),
+            missing_mask=_as_int(fields["missing_mask"], "missing_mask"),
+            label=_as_str(fields["label"], "label"),
         )
+
+
+_RECORD_FIELDS: Final = (
+    "sample_id",
+    "content_digest",
+    "attestation",
+    "features",
+    "collected_at",
+    "schema",
+    "missing_mask",
+    "label",
+)
 
 
 # --------------------------------------------------------------------------------------------

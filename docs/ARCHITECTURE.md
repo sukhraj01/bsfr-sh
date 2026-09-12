@@ -164,8 +164,35 @@ wrong-signature, stale-view, plus a colluding pair used to pin the `f` bound. Ea
 
 The paper says "signatures and features are built" and stops. Our design:
 
-**Sample model.** A synthesized ransomware sample is a record of an emulated infection walking
-the seven kill-chain stages from §II-C. It is a *data structure*, never executable code.
+**Sample model.** A synthesized sample is a record of an emulated episode walking the seven
+kill-chain stages from §II-C. It is a *data structure*, never executable code (CLAUDE.md §2,
+enforced by `tests/unit/test_honeypot_is_inert.py`). `HP_RW` is modelled as a decoy host whose
+monitor records *every* program's behaviour, not only ransomware: Phase 3 has to learn `NProf` as
+well as `AProf`, and it cannot learn "normal" from malicious samples alone.
+
+**Modules.** `collector.py` synthesizes episodes (`RawSample`, `DT_RW`) and holds every
+distribution; `preprocess.py` cleans them to `CleanSample` (`DT_RWC`) under DEV-26's five rules;
+`signatures.py` builds `Sig_RW`; `features.py` extracts `FT_RW`; `corpus.py` writes the on-disk
+draws. `HP_RW`'s *network* side is `framework.entities.HoneypotNode`, because `honeypot/` sits
+below `framework/` and may not import it — so the thing that synthesizes records is not the thing
+that ships them over `SK_{CS_l,HP_RW}`.
+
+**Why the generator is built to be hard (DEV-27).** We write the generator and, in M4, the
+classifier that consumes it. If the classes came from visibly different distributions, M4 would
+report ~100% and that number would describe `collector.py` rather than any detector. So:
+
+* four benign profiles are deliberately ransomware-shaped — a backup agent (thousands of files
+  fast), a disk-encryption tool (key generation, high-entropy writes), an installer (child
+  processes, autostart entries) and a cleanup utility (shadow-copy deletions);
+* `AMBIGUOUS_FRACTION` (0.25) of every draw comes from a **confusable pair** whose two members
+  share one identical parameter set, so those samples carry no information about the label at all
+  and put a floor of 0.125 under the Bayes error;
+* every counter is noised, and whole sensor groups go unobserved at a rate that does **not**
+  depend on the label.
+
+The corpus therefore has an **intended Bayes-optimal accuracy of about 0.85**
+(`corpus.EXPECTED_BAYES_ACCURACY`). M4 must read any result far above it as a leak rather than a
+success.
 
 **`Sig_RW` — two distinct things, deliberately separated:**
 - `content_digest`: SHA-256 over the sample's canonical behavioural trace — the malware-signature
@@ -187,13 +214,46 @@ sense.
 | Process | child process spawns, injection attempts, privilege escalation attempts |
 | Network | C2 beacon count, DNS entropy, outbound connection burst rate |
 | Persistence | registry/autostart writes, shadow-copy deletion attempts, backup-path access |
-| Kill-chain | stage reached, dwell time per stage |
+| Kill-chain | **observed stages, truncated to the observable prefix** (see below), mean stage dwell |
 
 Benign samples are generated from the same schema with distributions drawn from normal
 application behaviour, so `NProf` and `AProf` are learned rather than asserted.
 
-**This is our design, not the paper's.** Documented as DEV-03. It is what makes Phase 3 actually
-consume Phase 2's output, which the paper never achieves.
+**The kill-chain group is truncated, and that is load-bearing (DEV-27).** §II-C's chain ends
+notification → payment → decryption, and only ransomware reaches those. `stage_reached` over the
+full chain is therefore not a feature but the label in disguise, and every model would find it.
+`FT_RW` keeps only the prefix both classes genuinely produce — arrival, enumeration, bulk
+transform, cleanup — capped at `OBSERVABLE_STAGES = 4`. The full walk stays in `RawSample` and
+`CleanSample` for provenance, where no model can reach it.
+
+**This is our design, not the paper's.** Documented as DEV-03, DEV-26 and DEV-27. It is what makes
+Phase 3 actually consume Phase 2's output, which the paper never achieves.
+
+### The record schema M4 reads
+
+One schema, two carriers. On-chain it is `blockchain.transaction.SignatureRecordPayload`,
+decrypted from `BC_SigRW` by the key holder; on disk it is a row of `data/honeypot/corpus_*.csv`.
+The fields are the same values under the same names, and `features.SCHEMA` (`"ft_rw.v1"`) names
+the column order in both.
+
+| Field | Meaning | For M4 |
+|---|---|---|
+| `sample_id` | stable id, `hp-<seed>-<index>` | metadata, never an input |
+| `content_digest` | `Sig_RW` identification digest over the canonical trace | integrity, never an input |
+| `attestation` | `CS_l`'s ECDSA signature over digest ‖ timestamp ‖ collector id | authenticity, never an input |
+| `features` | `FT_RW`, 22 floats in `FEATURE_NAMES` order | **the only inputs** |
+| `collected_at` | observation time | metadata |
+| `schema` | `"ft_rw.v1"` — what the vector means | check before reading `features` |
+| `missing_mask` | bit `i` set ⇒ `features[i]` was not observed, and its value is a placeholder zero | impute or model as you like — but *knowingly* |
+| `label` | `"RW"` or `"benign"`, from the emulator | **the target**, never a feature |
+
+The CSV carries `profile` as well (which generator profile produced the sample). It is provenance
+for analysis and is not an input either; `corpus.METADATA_COLUMNS` names every non-feature column.
+
+`data/honeypot/` holds `corpus_train.csv`, `corpus_eval.csv` and `manifest.json`. **The two draws
+come from different seeds, never from shuffling one draw**: samples within one generator call can
+share latent parameters, so a shuffled split would leak. The manifest records both seeds, the
+schema, the class balance, the ambiguous fraction and the expected Bayes accuracy.
 
 ---
 

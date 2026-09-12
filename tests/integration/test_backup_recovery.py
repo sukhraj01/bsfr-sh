@@ -40,8 +40,10 @@ def _deploy(sizes=SIZES, *, silent=None):
         policy=POLICY,
         captured_at=100,
         timestamp=1001.0,
-        index=index,
     )
+    # Separate step on purpose: the paper has no index, so it stays out of Alg. 1's timed path
+    # (DEV-05, M3b amendment).
+    phase1.maintain_index(index, cluster)
     return cluster, key_holder, front, systems, index, report
 
 
