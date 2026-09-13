@@ -139,6 +139,44 @@ asserted without touching the data
 
 Both appear in every report. Neither is presented without the other.
 
+**Amendment (2026-09-13, Q10) — the random split was leaking too, and closing it does not close
+the gap.** M4a's `paper_mode` split (`stratified_holdout`) stratifies by label only; it never
+grouped by address. Checked directly against the real file before running anything: every address
+carries exactly one label end to end (0 of 2,631,095 addresses have two), and ransomware addresses
+repeat far more than benign ones (mean 1.99 rows/address, 12.2% appearing more than once, vs 1.10
+and 3.6% for benign) — so a random split lets near-duplicate ransomware rows land on both sides of
+the boundary at a rate the resample's own 90% skew amplifies. `scripts/q10_leakage_ablation.py`
+ran the 2x2 this implies — {`address` dropped, kept} x {random, grouped split} — at the same
+declared hyperparameters and seed as reference run `20260912T172708Z-6d35b415` (config hash
+verified identical across all four cells). Findings, random forest (best of the four throughout):
+
+| Cell | Accuracy | F1 | vs. M4a's 0.9479 | vs. published 0.9898 |
+|---|---|---|---|---|
+| address dropped x **grouped** split | 0.9442 | 0.9697 | −0.37pt | −4.56pt |
+| address dropped x random split *(= M4a)* | 0.9479 | 0.9717 | +0.00pt | −4.19pt |
+| address kept x grouped split | 0.9484 | 0.9719 | +0.05pt | −4.14pt |
+| address kept x random split | 0.9540 | 0.9749 | +0.61pt | −3.58pt |
+
+Both leakage sources are real, both are small, and stacking them does not explain the reported
+98.98%. The largest single effect anywhere in the 2x2 is decision tree's `address kept x random
+split`, +0.92pt over its own honest baseline — and that effect vanishes under a grouped split
+(kept x grouped is flat against dropped x grouped for decision tree), which is the expected
+signature of an identifier memorised across a train/test boundary that grouping closes. Even that
+largest cell (decision tree, 0.9354) sits 5.44 points under the published figure. **Q10 is closed
+as unexplained**, not resolved: neither `address` as a feature nor the split strategy, alone or
+together, accounts for the gap between our reproduction and the paper's headline. Full numbers
+and per-model deltas in `RESULTS.md`; the ablation and its 2x2 arithmetic are pure functions of
+declared config plus the verified file, asserted where practical in
+`test_detection_dataset.py`'s grouped-split tests.
+
+**Consequence for the reported figure.** The honest `paper_mode` reproduction number is revised
+from M4a's 0.9479/0.9717 (address dropped, random split) to **0.9442/0.9697** (address dropped,
+**grouped** split) — grouping is the methodologically correct choice once duplication is
+address-keyed, and this is now what Table II's BSFR-SH row should read as "ours". Random forest
+stays best of the four models. `scripts/run_detection.py`'s default `paper_mode` pipeline has not
+been changed to use `grouped_stratified_holdout` — that is carried debt (`PROJECT_STATE.md` D6),
+not done in this session, so the two entry points currently disagree until it lands.
+
 ### DEV-07 · FIX · Annotate Table II with source datasets
 **Paper:** Table II compares BSFR-SH's BitcoinHeist score against four schemes evaluated on
 entirely different data (network traces, dynamic analysis logs, PE features).

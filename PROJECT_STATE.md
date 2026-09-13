@@ -4,16 +4,20 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-12 · **Milestone:** M4b (honeypot backend, Alg. 3) · **Sessions completed:** 7
+**Last updated:** 2026-09-13 · **Milestone:** M4b (honeypot backend, Alg. 3) · **Sessions completed:** 8
 
 ---
 
 ## One-line status
 
-M4a is closed. BitcoinHeist is fetched, verified against §VII and run through both evaluation
-modes with baselines beside every number. **The paper's headline does not reproduce**: best here is
-0.9479 / 0.9717 against a published 0.9898 / 0.990. `make test-all` runs 1103 tests and `make lint`
-is clean. Next is M4b, the framework's own data path.
+M4a is closed and Q10 is closed. BitcoinHeist is fetched, verified against §VII and run through
+both evaluation modes with baselines beside every number. A follow-up ablation (Q10) tested
+`address`-as-feature and split-grouping as leakage sources for the reproduction gap: both are
+real, both are small, and **neither explains it**, alone or stacked. The honest `paper_mode`
+headline is revised to **0.9442 / 0.9697** (address dropped, grouped split — M4a's original
+0.9479/0.9717 used a random split and is superseded). Published row: 0.9898/0.990 — still **not
+reproduced**, now stated as unexplained rather than attributed. `make test-all` runs 1112 tests
+and `make lint` is clean. Next is M4b, the framework's own data path.
 
 ---
 
@@ -21,28 +25,40 @@ is clean. Next is M4b, the framework's own data path.
 
 | Layer | State | Notes |
 |---|---|---|
-| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-06 and DEV-27 amended in M4a; M4 split into M4a/M4b |
+| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-06 amended in M4a and Q10; DEV-07 in M4a; M4 split into M4a/M4b |
 | `configs/`, `Makefile` | done | `make data` implemented; `ml.yaml` records the sklearn `penalty` deprecation |
 | `util/`, `crypto/`, `blockchain/`, `consensus/` | done | |
 | `framework/` entities, pipeline, phases 1, 2, 5 | done | M3a + M3b |
 | `recovery/`, `honeypot/` | done | M3a, M3b |
 | `data/honeypot/` corpus | done | fixed dataset (Q9): 1467 train + 731 eval, two seeds |
-| `data/raw/` BitcoinHeist | **local only** | gitignored; `make data` refetches (~56 min here) |
-| `detection/` dataset, models, metrics | **done** | M4a — BitcoinHeist only |
+| `data/raw/` BitcoinHeist | **local only** | gitignored; `make data` refetches (~56 min here); README states the wait and the sha256 |
+| `detection/` dataset, models, metrics | **done** | M4a — BitcoinHeist only; `dataset.py` gained `grouped_stratified_holdout` and `encode_group_column` (Q10) |
 | `detection/` profiles, detector; `phase3_detection` | not started | **M4b — start here** |
 | `mitigation/`, phase 4 | not started | M5 |
 | `bench/`, figures | not started | M6 |
 
 ## Current numbers
 
-**BitcoinHeist, `paper_mode`** (n=46,014, run `20260912T172708Z-6d35b415`): RF 0.9479/0.9717 ·
-DT 0.9262/0.9590 · LR 0.9000/0.9474 · KNN 0.8861/0.9392 · constant-positive baseline
-**0.9000/0.9474**. Published row: 0.9898/0.990 — **not reproduced**.
+**BitcoinHeist, `paper_mode`, honest baseline** (n=46,014, address dropped, **grouped** split, run
+`20260913T014022Z-c54c3974`): RF 0.9442/0.9697 · DT 0.9224/0.9569 · LR 0.9002/0.9475 ·
+KNN 0.8892/0.9410 · constant-positive baseline **0.9000/0.9474**. Published row: 0.9898/0.990 —
+**not reproduced**. (M4a's original figure — address dropped, *random* split, run
+`20260912T172708Z-6d35b415` — was RF 0.9479/0.9717; kept for provenance, no longer "the" figure.)
+
+**Q10 ablation** (same config hash and seed as the run above; `scripts/q10_leakage_ablation.py`
+ran all four `{dropped, kept} x {grouped, random}` cells): best of all 16 model x cell
+combinations is RF, address **kept** x **random** split, at 0.9540/0.9749 — still 3.58 accuracy
+points under published. Neither `address`-as-feature nor split strategy, alone or stacked,
+accounts for the gap. Full table in `docs/DEVIATIONS.md` DEV-06; source data checked directly:
+every address carries one label end to end, but ransomware addresses repeat far more than benign
+ones (mean 1.99 vs 1.10 rows/address).
 
 **BitcoinHeist, `honest_mode`** (200K subsample, 5-fold, run `20260912T172809Z-d89aa1b6`): best
 MCC is DT at 0.331, best PR-AUC is RF at 0.335, recall spans 0.00–0.36, and LR finds nothing at
-all. A constant-negative classifier scores **0.9858 accuracy** — 0.4 points below the paper's
-headline. Full-scale (2.9M) `honest_mode` is **deferred to Ada, unrun**.
+all. A constant-negative classifier scores **0.9858 accuracy** — this is an illustration of
+accuracy's distribution-sensitivity against the paper's 90/10-derived 0.9898, not a like-for-like
+comparison (framing fixed in `docs/EXPERIMENTS.md` Target 1 and `docs/PAPER_NOTES.md`). Full-scale
+(2.9M) `honest_mode` is **deferred to Ada, unrun**.
 
 **Honeypot corpus** (M4b's data): intended Bayes-optimal ≈ **0.85**, measured baseline 0.830.
 A detector scoring far above that is reading a leak.
@@ -82,7 +98,7 @@ side by side (FLAW-2).
 ## Blockers
 
 None. Note that `data/raw/` is gitignored, so a fresh clone needs `make data` (~56 minutes at this
-environment's throughput) before any BitcoinHeist run.
+environment's throughput) before any BitcoinHeist run; README now states this and the sha256.
 
 ## Open questions
 
@@ -92,11 +108,10 @@ environment's throughput) before any BitcoinHeist run.
 | Q4 | Do we need real feature-space evasion for M7? | M7 | defer until M6 lands |
 | Q5 | One merged config object or three files at the entry points? | M6 | decide when `bench/` becomes the first multi-config consumer |
 | Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M6 | only if M6 benchmarks a lossy network |
-| Q10 | **Why doesn't 98.98% reproduce?** Leading hypothesis: `address` kept as a feature, which leaks the label. Also possible: undeclared hyperparameters, or a different resample. | the write-up's central claim | M4b or a follow-up — hypothesis (1) is a one-run experiment |
 
-**Q3 closed** (M4a): the 200K stratified subsample is enough for `honest_mode` locally — all four
-models ran in 13 s. `paper_mode` needs the full file regardless, and it loads in ~1.3 s of the run.
-**Q9 closed** (M4a): the committed corpus is the fixed dataset (DEV-27).
+**Q10 closed** (2026-09-13): neither `address` as a feature nor a random (vs. address-grouped)
+split explains the reproduction gap — best of the 2x2's 16 model x cell combinations is 3.58
+accuracy points under published. See `docs/DEVIATIONS.md` DEV-06 amendment and `RESULTS.md`.
 
 ## For the write-up
 
@@ -110,20 +125,26 @@ substantiated only structurally.
 **GAP-3 / FLAW-2 (M3b).** The paper defines neither the honeypot's output nor its features, then
 evaluates on an unrelated Bitcoin dataset. M3b supplies the missing layer.
 
-**FLAW-4, extended, and the non-reproduction (M4a).** The 90/10 resample is degenerate *and*
-bounded at 46,014 rows — 1.58% of the cited 2.9M. On it, a constant classifier scores 0.9000/0.9474
-and our best model reaches 0.9479/0.9717, well short of the published 0.9898/0.990. At the natural
-rate, never predicting ransomware scores 0.9858 — 0.4 points below the paper's headline — while the
-four models recover 0–36% of it at a best MCC of 0.331. The reproduction attempt is the finding.
+**FLAW-4, extended, and the non-reproduction (M4a, Q10).** The 90/10 resample is degenerate *and*
+bounded at 46,014 rows — 1.58% of the cited 2.9M. Our honest reproduction (address dropped,
+grouped split) reaches 0.9442/0.9697 against a published 0.9898/0.990; Q10 tested and ruled out
+`address`-as-feature and split-grouping as the explanation, so the gap is reported as
+**unexplained**, not attributed. At the natural rate, never predicting ransomware scores 0.9858 —
+stated as an illustration of accuracy's distribution-sensitivity, not a like-for-like comparison
+against the paper's 0.9898 (`docs/PAPER_NOTES.md` NOTE). The airtight within-split comparison:
+constant-positive on the paper's own 90/10 split scores 0.9000/0.9474, and Sharmeen et al.'s
+published F1 of 0.960 — presented in Table II as a competitive prior technique — clears that floor
+by only 0.013 (FLAW-1, extended).
 
 ## Carried debt
 
 | # | Item | Retire by |
 |---|---|---|
-| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/` now has four files, including both M4a entry points. | M6 |
+| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/` now has five files, including both M4a entry points and the Q10 ablation. | M6 |
 | D3 | The bus never serialises, so wire-encoding cost is absent from the consensus span. | M6 |
 | D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
 | D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8 and **removed in 1.10**; `configs/ml.yaml` still declares it (dropping it would silently accept a library default). Migrate to `l1_ratio=0` before upgrading. | before sklearn 1.10 |
+| D6 | `scripts/run_detection.py`'s `paper_mode` still splits with row-random `stratified_holdout`. The honest headline (address dropped, grouped split) is currently produced only by `scripts/q10_leakage_ablation.py`, so the two entry points disagree. Fold `grouped_stratified_holdout` into the production pipeline. | before M6/figures cite `run_detection.py` as the paper_mode source |
 
 ## Risks
 
@@ -132,8 +153,8 @@ four models recover 0–36% of it at a best MCC of 0.331. The reproduction attem
 | We wrote both the corpus generator and, in M4b, its classifier | M4b's number could measure the generator | difficulty stated up front (0.85) and enforced by the M3b leakage tests |
 | Python timings diverge from the paper's Java | Targets 3 and 4 unverifiable | report ratios and shape (DEV-13) |
 | Zero-delay consensus measures encryption, not consensus | Target 3 claims something different | DEV-21: delay 0 and delay > 0 in separate columns |
-| The non-reproduction is read as our bug rather than a finding | the write-up's central claim collapses | baselines published beside every number; Q10 names the testable hypothesis |
-| `data/raw/` is gitignored and slow to fetch | a fresh machine cannot rerun M4a quickly | `make data` verifies counts; `provenance.json` records the sha256 |
+| The non-reproduction is read as our bug rather than a finding | the write-up's central claim collapses | baselines published beside every number; Q10 tested and ruled out address/split leakage |
+| `data/raw/` is gitignored and slow to fetch | a fresh machine cannot rerun M4a quickly | `make data` verifies counts; README + `provenance.json` state the wait and the sha256 |
 | The canonical encoding changes after hashes exist | stored hashes silently unreproducible | `ENCODING_VERSION` plus pinned golden vectors |
 | Validation migrates out of `Chain` | two definitions of a valid block | `check_append` / `verify_block` are the only validators |
 

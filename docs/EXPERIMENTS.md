@@ -40,7 +40,18 @@ the BSFR-SH row is reproducible by us. The `dataset` column is our addition (DEV
 
 **Baseline we must publish alongside it.** On the paper's 90/10 split, a constant "always
 ransomware" classifier achieves accuracy 0.900 and F1 0.947. Any reproduction that omits this
-baseline is misleading.
+baseline is misleading. This is the baseline every number in this table should be judged against —
+including Sharmeen et al. [13]'s published F1 of 0.960, which clears it by only 0.013 while Table
+II presents it as a competitive prior technique (`docs/PAPER_NOTES.md` FLAW-1, extended).
+
+**This is a within-split baseline. Do not pair it across distributions.** `honest_mode`'s
+constant-negative baseline (≈98.58% accuracy at the dataset's natural 1.42% positive rate) is
+computed under a *different* class distribution than the 90/10 baseline above. Setting the two
+side by side — "the published 98.98% barely beats a natural-rate do-nothing classifier at 98.58%"
+— reads as a refutation but is not one: a constant classifier's accuracy is a direct function of
+the positive rate it is scored against, so the pairing compares two distributions, not two
+detectors. Keep it, but label it **illustration of accuracy's distribution-sensitivity**, not a
+head-to-head. The head-to-head is the row above, computed on one split.
 
 ---
 

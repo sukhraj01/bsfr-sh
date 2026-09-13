@@ -39,6 +39,14 @@ analysis logs, PE-file features. Table II puts their accuracy next to a BitcoinH
 Nothing about that comparison is valid. We reproduce the table (because reproducing the paper
 means reproducing its claims) but annotate every row with the source dataset.
 
+**[FLAW-1, extended]** — one row in Table II is weak even setting FLAW-1 aside. Sharmeen et al.
+[13] report F1 0.960. On the paper's *own* 90/10 resample, a constant "always ransomware"
+classifier — looking at no feature at all — scores F1 0.9474 (measured; see FLAW-4). So Sharmeen's
+0.960 clears a do-nothing baseline computed under that skew by 0.013 F1, not a wide margin, while
+Table II presents it as a competitive prior technique. This point does not need Sharmeen's own
+data or class balance — it stands on the published Table II number and BSFR-SH's own resample
+arithmetic alone, which is what makes it usable without re-running anyone else's experiment.
+
 ## §IV — The framework
 
 Five phases, Algorithms 1–5, Fig. 2 (architecture), Fig. 3 (sequence diagram).
@@ -185,6 +193,34 @@ problems compound here: the balance is degenerate (the original FLAW-4), *and* t
 comparison against [11]–[14] is between a 46K-row resample and four other papers' full corpora.
 Arithmetic only — no data needed to check it — so it is asserted as a unit test, and the realised
 `n` is recorded with every `paper_mode` run.
+
+**[NOTE] — the cross-distribution comparison is illustration, not a head-to-head.** M4a's
+`honest_mode` reports a constant-negative baseline of ≈98.58% accuracy at the dataset's natural
+1.42% positive rate, and it is tempting to set that beside the paper's published 98.98% (90/10)
+and say the headline barely beats finding nothing. **Don't present that pairing as commensurable
+evidence** — the two numbers are computed under different class distributions, and a constant
+classifier's accuracy is a direct function of the positive rate it is scored against (see
+`metrics.analytic_constant_positive`). The pairing is worth keeping as an *illustration* of how
+distribution-sensitive accuracy is, labelled as such, not as a within-split refutation. The
+airtight, distribution-matched version is FLAW-4's own comparison, stated in Table II terms: on
+the paper's own 90/10 split, constant-positive scores accuracy 0.900 / F1 0.9474 (measured,
+confirming the analytic value), against which BSFR-SH's published 98.98% / 0.990 is the number
+that has to be judged, and Sharmeen's 0.960 is the one that barely clears it (FLAW-1, extended).
+`docs/EXPERIMENTS.md` Target 2 states the same distinction.
+
+**[Q10, closed 2026-09-13] — address and split leakage do not explain the gap.** Two candidate
+leakage sources for why our reproduction (0.9479, M4a) undershoots the published 98.98%: `address`
+kept as a feature, and a random (not address-grouped) train/test split. `scripts/
+q10_leakage_ablation.py` ran the resulting 2x2, `paper_mode`, all four models, at M4a's exact
+config hash and seed. Both sources are real and both are small — the largest single effect is
+decision tree's +0.92pt from keeping `address` under a random split, and it vanishes under a
+grouped split, which is the expected signature of exactly that leak. The best of all 16 model x
+cell combinations is 0.9540/0.9749 (random forest, address kept, random split) — still 3.58 points
+of accuracy under the published figure. **The gap is not accounted for by either candidate, alone
+or together.** Full numbers: `docs/DEVIATIONS.md` DEV-06 amendment, `RESULTS.md`. One correction
+falls out of this: M4a's headline used the random split, which this ablation shows was inflating
+it slightly; the honest `paper_mode` figure is revised to `address dropped x grouped split`
+(0.9442/0.9697, random forest) going forward.
 
 **[FINDING] — TPS is arithmetic, not measurement.** Verified against §VII-C and §VII-D:
 

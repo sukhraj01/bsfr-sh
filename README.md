@@ -76,6 +76,16 @@ make figures    # emit Table II and Figs. 4, 5, 6a-6d
 Requires Python 3.11+. Heavy ML runs (full 2.9M-row dataset, KNN in particular) belong on a
 cluster, not an 8 GB laptop — see `CLAUDE.md` §6.
 
+**`make data` is slow, and that is expected.** It fetches a ~116 MB archive (235.9 MB CSV) from
+the UCI repository and has taken **roughly an hour at ~37 KiB/s** in this environment — your
+throughput will vary, but expect it to be minutes, not seconds. `data/raw/` is gitignored, so a
+fresh clone cannot run `paper_mode`, `honest_mode`, or any other BitcoinHeist experiment until it
+completes; do not kill it for looking stuck. It verifies the fetched file against
+`docs/EXPERIMENTS.md` Target 2's row/class counts and writes `data/raw/provenance.json`, whose
+`csv_sha256` should read `8ecc3744e444f35534a1bcabedc7a3b405fb5bbf41a752e51ee9a57987b8c438` —
+check that file if you want to confirm a fetch finished with the right bytes without waiting on
+`make test`'s dataset check.
+
 ---
 
 ## Reproduction targets

@@ -38,6 +38,7 @@ from typing import Final
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
 
 from bsfr_sh.util.config import Config
 
@@ -49,10 +50,13 @@ __all__ = [
     "EXPECTED_ROWS",
     "EXPECTED_WHITE",
     "FEATURE_COLUMNS",
+    "GROUP_COLUMN",
     "LABEL_COLUMN",
     "DatasetError",
     "DatasetSpec",
     "LoadedDataset",
+    "encode_group_column",
+    "grouped_stratified_holdout",
     "load_bitcoinheist",
     "paper_mode_arithmetic",
     "paper_mode_resample",
@@ -71,6 +75,9 @@ LABEL_COLUMN: Final = "label"
 BENIGN_LABEL: Final = "white"
 #: Identifier, never a feature. See the module docstring.
 DROPPED_COLUMNS: Final = ("address",)
+#: Q10 (docs/DEVIATIONS.md DEV-06): the grouping key for a split that keeps one address's rows
+#: together, and the column an "address kept" ablation would encode.
+GROUP_COLUMN: Final = "address"
 FEATURE_COLUMNS: Final = (
     "year",
     "day",
@@ -93,6 +100,7 @@ _DTYPES: Final = {
     "neighbors": "int32",
     "income": "float64",  # satoshi counts reach 5e15; float32 would round them
     "label": "string",
+    "address": "string",
 }
 
 
@@ -111,6 +119,11 @@ class DatasetSpec:
     drop_columns: tuple[str, ...] = DROPPED_COLUMNS
     subsample_rows: int | None = None
     subsample_stratified: bool = True
+    #: Q10 only — the production config path never sets these. `group_column` loads a column
+    #: purely for grouping (e.g. a later `grouped_stratified_holdout`); it never reaches the
+    #: feature matrix unless `encode_group_as_feature` also asks for that.
+    group_column: str | None = None
+    encode_group_as_feature: bool = False
 
     @classmethod
     def from_config(
@@ -145,6 +158,9 @@ class LoadedDataset:
     #: True when the full file matched §VII exactly. False after subsampling, and recorded as such.
     matches_paper_counts: bool
     families: int
+    #: Q10 only. The raw grouping key per row (e.g. `address`), aligned with `features`/`labels`.
+    #: `None` unless `DatasetSpec.group_column` was set — the production config path never sets it.
+    groups: np.ndarray | None = None
 
     @property
     def positive_rate(self) -> float:
@@ -195,6 +211,8 @@ def load_bitcoinheist(spec: DatasetSpec, *, verify: bool = True, seed: int = 0) 
             "gitignored because it is 2.9M rows."
         )
     usecols = [*spec.feature_columns, spec.label_column]
+    if spec.group_column and spec.group_column not in usecols:
+        usecols = [*usecols, spec.group_column]
     dtypes = {name: _DTYPES[name] for name in usecols if name in _DTYPES}
     frame = pd.read_csv(spec.path, usecols=usecols, dtype=dtypes)
 
@@ -212,6 +230,14 @@ def load_bitcoinheist(spec: DatasetSpec, *, verify: bool = True, seed: int = 0) 
         verify_counts(n_rows, n_positive, n_negative)
 
     features = frame[list(spec.feature_columns)]
+    if spec.encode_group_as_feature:
+        if not spec.group_column:
+            raise DatasetError("encode_group_as_feature requires group_column to be set")
+        features = features.copy()
+        features[spec.group_column] = encode_group_column(frame[spec.group_column])
+
+    groups = frame[spec.group_column].to_numpy() if spec.group_column else None
+
     matches = (n_rows, n_negative, n_positive) == (
         EXPECTED_ROWS,
         EXPECTED_WHITE,
@@ -224,6 +250,8 @@ def load_bitcoinheist(spec: DatasetSpec, *, verify: bool = True, seed: int = 0) 
         )
         features = features.iloc[index]
         labels = labels[index]
+        if groups is not None:
+            groups = groups[index]
         n_rows = len(index)
         n_positive = int(labels.sum())
         n_negative = n_rows - n_positive
@@ -238,7 +266,20 @@ def load_bitcoinheist(spec: DatasetSpec, *, verify: bool = True, seed: int = 0) 
         n_negative=n_negative,
         matches_paper_counts=matches,
         families=families,
+        groups=groups,
     )
+
+
+def encode_group_column(values: pd.Series) -> np.ndarray:
+    """Ordinal-encode a string column via scikit-learn's `LabelEncoder`. Q10 only.
+
+    This is the encoding a straightforward implementation reaches for when told to keep an
+    identifier column as a feature: one call, sorted unique values, dense integer codes, no
+    awareness that it is handing the model a near-unique key. That is deliberate here — it names
+    what an unexamined "kept address" baseline actually does, not a strawman built to fail.
+    """
+    codes: np.ndarray = LabelEncoder().fit_transform(values.to_numpy()).astype(np.int64)
+    return codes
 
 
 def _subsample_index(labels: np.ndarray, rows: int, *, stratified: bool, seed: int) -> np.ndarray:
@@ -289,6 +330,8 @@ class Resample:
     positive_fraction: float
     #: Rows in the dataset this was drawn from — the contrast the paper never states.
     drawn_from: int
+    #: Q10 only. Carried through from `LoadedDataset.groups` when present.
+    groups: np.ndarray | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -319,6 +362,7 @@ def paper_mode_resample(
         n_negative=n_neg,
         positive_fraction=positive_fraction,
         drawn_from=data.n_rows,
+        groups=data.groups[index] if data.groups is not None else None,
     )
 
 
@@ -341,6 +385,46 @@ def stratified_holdout(
         test.append(rows[:cut])
         train.append(rows[cut:])
     return np.sort(np.concatenate(train)), np.sort(np.concatenate(test))
+
+
+def grouped_stratified_holdout(
+    labels: np.ndarray, groups: np.ndarray | None, *, test_size: float, seed: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """A train/test split where every group lands entirely on one side. Q10 (DEV-06 follow-up).
+
+    BitcoinHeist rows are `(address, year, day)` tuples and every address carries exactly one
+    label end to end (checked directly against the real file: 0 of 2,631,095 addresses have two).
+    `weight`/`length`/`count`/`looped`/`neighbors`/`income` are address-level graph features, so
+    rows sharing an address are near duplicates — `stratified_holdout` can put them on both sides
+    of the boundary, and this cannot.
+
+    Stratified per label the same way `stratified_holdout` is: unique groups within one label are
+    shuffled and assigned to test in shuffle order until the running row count first reaches the
+    target, so the whole group that crosses the target goes to test. Group sizes are lumpy (up to
+    420 rows for one address), so the achieved test share is only approximate — callers should
+    read it back off the returned indices rather than assume `test_size` was hit exactly.
+    """
+    if not 0.0 < test_size < 1.0:
+        raise DatasetError(f"test_size must be in (0, 1), got {test_size}")
+    if groups is None:
+        raise DatasetError("grouped_stratified_holdout requires groups, got None")
+    rng = np.random.default_rng(seed)
+    train_parts: list[np.ndarray] = []
+    test_parts: list[np.ndarray] = []
+    for value in np.unique(labels):
+        row_idx = np.flatnonzero(labels == value)
+        group_ids = groups[row_idx]
+        unique_groups, counts = np.unique(group_ids, return_counts=True)
+        order = rng.permutation(len(unique_groups))
+        unique_groups = unique_groups[order]
+        counts = counts[order]
+        target = round(len(row_idx) * test_size)
+        cut = int(np.searchsorted(np.cumsum(counts), target)) + 1
+        cut = min(cut, len(unique_groups))
+        in_test = np.isin(group_ids, unique_groups[:cut])
+        test_parts.append(row_idx[in_test])
+        train_parts.append(row_idx[~in_test])
+    return np.sort(np.concatenate(train_parts)), np.sort(np.concatenate(test_parts))
 
 
 def stratified_folds(

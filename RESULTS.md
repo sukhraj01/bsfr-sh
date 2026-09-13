@@ -113,3 +113,52 @@ there needs ~17.94 GB for the distance block against an 8 GB ceiling, and 1.36e1
 computations per fold (`detection.models.knn_projection`, projected before running anything per
 CLAUDE.md §6). `scripts/ada_honest_mode.sbatch` is prepared and **unrun**; no number may cite it
 until it has.
+
+### Q10 — address / split leakage ablation, `paper_mode` (2026-09-13)
+
+`scripts/q10_leakage_ablation.py`, same declared hyperparameters and seed (20260912) as reference
+run `20260912T172708Z-6d35b415`, verified identical `config_hash`
+(`1f0edc64…ee858e`) across all four cells. `address_dropped x random_split` reproduces the
+reference run's random-forest number exactly (0.9479/0.9717), confirming M4a's split was in fact
+row-level random, not grouped by address — see the session brief in
+`sessions/2026-09-13-01-q10-address-and-split-leakage.md`.
+
+```
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x grouped_split, random_forest, n=46014 | acc=0.9442 f1=0.9697 d_m4a=-0.0037 d_pub=-0.0456 | measured | 20260913T014022Z-c54c3974 | Q10 ablation, new honest baseline
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x grouped_split, logistic_regression, n=46014 | acc=0.9002 f1=0.9475 d_m4a=-0.0477 d_pub=-0.0896 | measured | 20260913T014022Z-c54c3974 | Q10 ablation, new honest baseline
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x grouped_split, decision_tree, n=46014 | acc=0.9224 f1=0.9569 d_m4a=-0.0255 d_pub=-0.0674 | measured | 20260913T014022Z-c54c3974 | Q10 ablation, new honest baseline
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x grouped_split, k_nearest_neighbours, n=46014 | acc=0.8892 f1=0.9410 d_m4a=-0.0587 d_pub=-0.1006 | measured | 20260913T014022Z-c54c3974 | Q10 ablation, new honest baseline
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x random_split, random_forest, n=46014 | acc=0.9479 f1=0.9717 d_m4a=+0.0000 d_pub=-0.0419 | measured | 20260913T014027Z-6b9021ae | Q10 ablation, exact M4a reproduction
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x random_split, logistic_regression, n=46014 | acc=0.9000 f1=0.9474 d_m4a=-0.0479 d_pub=-0.0898 | measured | 20260913T014027Z-6b9021ae | Q10 ablation, exact M4a reproduction
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x random_split, decision_tree, n=46014 | acc=0.9262 f1=0.9590 d_m4a=-0.0217 d_pub=-0.0636 | measured | 20260913T014027Z-6b9021ae | Q10 ablation, exact M4a reproduction
+2026-09-13 | detection/bitcoinheist-q10 | address_dropped x random_split, k_nearest_neighbours, n=46014 | acc=0.8861 f1=0.9392 d_m4a=-0.0618 d_pub=-0.1037 | measured | 20260913T014027Z-6b9021ae | Q10 ablation, exact M4a reproduction
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x grouped_split, random_forest, n=46014 | acc=0.9484 f1=0.9719 d_m4a=+0.0005 d_pub=-0.0414 | measured | 20260913T014027Z-ca9f3d58 | Q10 ablation
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x grouped_split, logistic_regression, n=46014 | acc=0.9001 f1=0.9474 d_m4a=-0.0478 d_pub=-0.0897 | measured | 20260913T014027Z-ca9f3d58 | Q10 ablation
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x grouped_split, decision_tree, n=46014 | acc=0.9221 f1=0.9566 d_m4a=-0.0258 d_pub=-0.0677 | measured | 20260913T014027Z-ca9f3d58 | Q10 ablation
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x grouped_split, k_nearest_neighbours, n=46014 | acc=0.8894 f1=0.9411 d_m4a=-0.0585 d_pub=-0.1004 | measured | 20260913T014027Z-ca9f3d58 | Q10 ablation
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x random_split, random_forest, n=46014 | acc=0.9540 f1=0.9749 d_m4a=+0.0061 d_pub=-0.0358 | measured | 20260913T014037Z-47d61ade | Q10 ablation, largest single cell
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x random_split, logistic_regression, n=46014 | acc=0.8996 f1=0.9471 d_m4a=-0.0483 d_pub=-0.0902 | measured | 20260913T014037Z-47d61ade | Q10 ablation
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x random_split, decision_tree, n=46014 | acc=0.9354 f1=0.9642 d_m4a=-0.0125 d_pub=-0.0544 | measured | 20260913T014037Z-47d61ade | Q10 ablation, largest single leak (+0.92pt over honest DT)
+2026-09-13 | detection/bitcoinheist-q10 | address_kept x random_split, k_nearest_neighbours, n=46014 | acc=0.8901 f1=0.9414 d_m4a=-0.0578 d_pub=-0.0997 | measured | 20260913T014037Z-47d61ade | Q10 ablation
+```
+
+**Conclusion: neither candidate, alone or stacked, explains the gap.** Best of all 16 model x cell
+combinations is `address_kept x random_split` random forest at 0.9540/0.9749 — still 3.58 points
+of accuracy and 2.41 points of F1 below the published 0.9898/0.990. The random split's leakage
+(candidate 2) is real but small: isolating it (`dropped x random` minus `dropped x grouped`) moves
+random forest by +0.37pt and decision tree by +0.38pt. Address kept as a naive label-encoded
+feature (candidate 1) is also real and small alone, but compounds with the random split for
+decision tree specifically: `kept x random` reaches +0.92pt over the honest `dropped x grouped`
+baseline for that model — the largest single effect measured, and it disappears under a grouped
+split (kept x grouped is statistically flat against dropped x grouped), which is exactly the
+signature of an identifier being memorised across a train/test boundary that a grouped split
+closes. Even that largest effect leaves decision tree at 0.9354, 5.44 points under published.
+**Q10 is closed as unexplained**: the paper's 98.98%/0.990 is not accounted for by `address` as a
+feature, by the split strategy, or by both together. `docs/DEVIATIONS.md` DEV-06 amended.
+
+**Correction to the honest baseline:** M4a's headline (0.9479/0.9717, random forest) used a
+random split and is revised down to `address_dropped x grouped_split`'s 0.9442/0.9697 as the
+honest `paper_mode` reproduction figure going forward — grouping by address is the methodologically
+correct choice once duplication is address-keyed, and random forest remains best of the four
+models under it. `scripts/run_detection.py` still runs the random split by default; see
+`PROJECT_STATE.md` carried debt D6.

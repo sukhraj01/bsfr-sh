@@ -1,0 +1,220 @@
+{
+  "cell": {
+    "achieved_test_positive_rate": 0.9000362187613183,
+    "achieved_train_positive_rate": 0.8999968952777174,
+    "address_kept": false,
+    "baselines": {
+      "constant_negative": {
+        "accuracy": 0.09996378123868163,
+        "accuracy_for_contrast": 0.09996378123868163,
+        "confusion": {
+          "fn": 12425,
+          "fp": 0,
+          "tn": 1380,
+          "tp": 0
+        },
+        "f1": 0.0,
+        "f1_minority": 0.0,
+        "mcc": 0.0,
+        "pr_auc": 0.9000362187613183,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "constant_positive": {
+        "accuracy": 0.9000362187613183,
+        "accuracy_for_contrast": 0.9000362187613183,
+        "confusion": {
+          "fn": 0,
+          "fp": 1380,
+          "tn": 0,
+          "tp": 12425
+        },
+        "f1": 0.9473884864658788,
+        "f1_minority": 0.9473884864658788,
+        "mcc": 0.0,
+        "pr_auc": 0.9000362187613183,
+        "precision": 0.9000362187613183,
+        "recall": 1.0
+      },
+      "stratified_random": {
+        "accuracy": 0.8198478812024629,
+        "accuracy_for_contrast": 0.8198478812024629,
+        "confusion": {
+          "fn": 1239,
+          "fp": 1248,
+          "tn": 132,
+          "tp": 11186
+        },
+        "f1": 0.8999557504324389,
+        "f1_minority": 0.8999557504324389,
+        "mcc": -0.004077983625680222,
+        "pr_auc": 0.8996705494431148,
+        "precision": 0.8996300466462924,
+        "recall": 0.900281690140845
+      }
+    },
+    "feature_columns": [
+      "year",
+      "day",
+      "length",
+      "weight",
+      "count",
+      "looped",
+      "neighbors",
+      "income"
+    ],
+    "models": {
+      "decision_tree": {
+        "accuracy": 0.9224194132560667,
+        "delta_vs_m4a_best": -0.025480586743933276,
+        "delta_vs_published": -0.06738058674393332,
+        "f1": 0.9569274080032174,
+        "fit_seconds": 0.0976161660219077,
+        "honest": {
+          "accuracy_for_contrast": 0.9224194132560667,
+          "confusion": {
+            "fn": 528,
+            "fp": 543,
+            "tn": 837,
+            "tp": 11897
+          },
+          "f1_minority": 0.9569274080032174,
+          "mcc": 0.5667753353705262,
+          "pr_auc": 0.9539664751846226,
+          "precision": 0.9563504823151125,
+          "recall": 0.9575050301810866
+        },
+        "model": "decision_tree",
+        "n_test": 13805,
+        "n_train": 32209,
+        "predict_seconds": 0.0010627919982653111
+      },
+      "k_nearest_neighbours": {
+        "accuracy": 0.8892430278884462,
+        "delta_vs_m4a_best": -0.05865697211155374,
+        "delta_vs_published": -0.10055697211155379,
+        "f1": 0.9410267288926601,
+        "fit_seconds": 0.0071678750100545585,
+        "honest": {
+          "accuracy_for_contrast": 0.8892430278884462,
+          "confusion": {
+            "fn": 226,
+            "fp": 1303,
+            "tn": 77,
+            "tp": 12199
+          },
+          "f1_minority": 0.9410267288926601,
+          "mcc": 0.07699228851555615,
+          "pr_auc": 0.9307530240012601,
+          "precision": 0.9034957784031995,
+          "recall": 0.9818108651911469
+        },
+        "model": "k_nearest_neighbours",
+        "n_test": 13805,
+        "n_train": 32209,
+        "predict_seconds": 0.032304625026881695
+      },
+      "logistic_regression": {
+        "accuracy": 0.9001810938065918,
+        "delta_vs_m4a_best": -0.04771890619340813,
+        "delta_vs_published": -0.08961890619340818,
+        "f1": 0.947460728991917,
+        "fit_seconds": 0.06461941701127216,
+        "honest": {
+          "accuracy_for_contrast": 0.9001810938065918,
+          "confusion": {
+            "fn": 0,
+            "fp": 1378,
+            "tn": 2,
+            "tp": 12425
+          },
+          "f1_minority": 0.947460728991917,
+          "mcc": 0.03611909909566007,
+          "pr_auc": 0.8952979370169726,
+          "precision": 0.9001666304426574,
+          "recall": 1.0
+        },
+        "model": "logistic_regression",
+        "n_test": 13805,
+        "n_train": 32209,
+        "predict_seconds": 0.00027512499946169555
+      },
+      "random_forest": {
+        "accuracy": 0.9442231075697212,
+        "delta_vs_m4a_best": -0.0036768924302787998,
+        "delta_vs_published": -0.04557689243027885,
+        "f1": 0.9697160387005428,
+        "fit_seconds": 0.35992733397870325,
+        "honest": {
+          "accuracy_for_contrast": 0.9442231075697212,
+          "confusion": {
+            "fn": 97,
+            "fp": 673,
+            "tn": 707,
+            "tp": 12328
+          },
+          "f1_minority": 0.9697160387005428,
+          "mcc": 0.6461641193258318,
+          "pr_auc": 0.9887000142872423,
+          "precision": 0.9482347511729867,
+          "recall": 0.9921931589537223
+        },
+        "model": "random_forest",
+        "n_test": 13805,
+        "n_train": 32209,
+        "predict_seconds": 0.02794654099852778
+      }
+    },
+    "n_test": 13805,
+    "n_train": 32209,
+    "resample": {
+      "drawn_from_rows": 2916697,
+      "n_negative": 4601,
+      "n_positive": 41413,
+      "n_rows": 46014,
+      "positive_fraction": 0.9,
+      "share_of_dataset": 0.01577606450035777
+    },
+    "split": "grouped",
+    "test_size": 0.3
+  },
+  "config_hash": "1f0edc64698e09b7c4d29bb86f1cf25b5d9552bc616b784d64ea9b4b72ee858e",
+  "config_hash_scheme": 2,
+  "dataset": {
+    "columns": [
+      "year",
+      "day",
+      "length",
+      "weight",
+      "count",
+      "looped",
+      "neighbors",
+      "income"
+    ],
+    "matches_paper_counts": true,
+    "n_negative": 2875284,
+    "n_positive": 41413,
+    "n_rows": 2916697,
+    "positive_rate": 0.014198595191752863,
+    "ransomware_families": 28,
+    "source": "BitcoinHeistData.csv"
+  },
+  "git_rev": "b2ce9e7",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "published_accuracy": 0.9898,
+  "published_f1": 0.99,
+  "purpose": "Q10 \u2014 address / split leakage ablation, paper_mode only (DEV-06)",
+  "reference_best_accuracy": 0.9479,
+  "reference_best_f1": 0.9717,
+  "reference_run_id": "20260912T172708Z-6d35b415",
+  "run_id": "20260913T014022Z-c54c3974",
+  "seed": 20260912,
+  "wall_seconds": 2.5129102090140805
+}

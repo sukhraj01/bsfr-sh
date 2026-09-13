@@ -19,6 +19,8 @@ from bsfr_sh.detection.dataset import (
     DatasetError,
     DatasetSpec,
     class_rate,
+    encode_group_column,
+    grouped_stratified_holdout,
     load_bitcoinheist,
     paper_mode_arithmetic,
     paper_mode_resample,
@@ -191,6 +193,73 @@ def test_every_fold_holds_the_class_rate_and_is_disjoint_from_its_training_half(
 def test_too_few_folds_is_refused() -> None:
     with pytest.raises(DatasetError, match="folds"):
         list(stratified_folds(np.array([0, 1, 0, 1]), folds=1, seed=0))
+
+
+# -- Q10: address as a group and/or a feature --------------------------------------------------
+def test_group_column_is_not_a_feature_unless_asked(tmp_path) -> None:
+    path = _write_csv(tmp_path / "bh.csv", n_benign=500, n_ransom=20)
+    data = load_bitcoinheist(_spec(path, drop_columns=(), group_column="address"), verify=False)
+    assert "address" not in data.columns
+    assert data.groups is not None
+    assert len(data.groups) == data.n_rows
+
+
+def test_encode_group_as_feature_appends_a_dense_ordinal_column(tmp_path) -> None:
+    path = _write_csv(tmp_path / "bh.csv", n_benign=500, n_ransom=20)
+    data = load_bitcoinheist(
+        _spec(path, drop_columns=(), group_column="address", encode_group_as_feature=True),
+        verify=False,
+    )
+    assert "address" in data.columns
+    codes = data.features["address"].to_numpy()
+    assert codes.dtype == np.int64
+    assert set(codes) == set(range(data.n_rows))  # every synthetic address is unique
+
+
+def test_encode_group_as_feature_without_a_group_column_is_refused(tmp_path) -> None:
+    path = _write_csv(tmp_path / "bh.csv", n_benign=50, n_ransom=5)
+    with pytest.raises(DatasetError, match="group_column"):
+        load_bitcoinheist(_spec(path, encode_group_as_feature=True), verify=False)
+
+
+def test_resample_carries_groups_through(tmp_path) -> None:
+    path = _write_csv(tmp_path / "bh.csv", n_benign=5000, n_ransom=300)
+    data = load_bitcoinheist(_spec(path, drop_columns=(), group_column="address"), verify=False)
+    resample = paper_mode_resample(data, seed=5)
+    assert resample.groups is not None
+    assert len(resample.groups) == resample.n_rows
+
+
+def test_encode_group_column_is_dense_and_sorted() -> None:
+    codes = encode_group_column(pd.Series(["b", "a", "c", "a"]))
+    assert codes.dtype == np.int64
+    assert codes.tolist() == [1, 0, 2, 0]  # sorted alphabetically, "a" first
+
+
+def test_grouped_split_keeps_every_group_on_one_side() -> None:
+    labels = np.array([0] * 40 + [1] * 40, dtype=np.int8)
+    groups = np.array([f"g{i // 4}" for i in range(80)])  # groups of 4 rows each
+    train, test = grouped_stratified_holdout(labels, groups, test_size=0.3, seed=1)
+    assert not set(train) & set(test)
+    assert len(train) + len(test) == len(labels)
+    assert not (set(groups[train]) & set(groups[test]))
+
+
+def test_grouped_split_preserves_class_rate_approximately() -> None:
+    labels = np.array([0] * 900 + [1] * 100, dtype=np.int8)
+    groups = np.array([f"addr{i}" for i in range(1000)])  # all singletons here
+    _train, test = grouped_stratified_holdout(labels, groups, test_size=0.3, seed=2)
+    assert class_rate(labels[test]) == pytest.approx(0.10, abs=0.02)
+
+
+def test_grouped_split_refuses_bad_test_size() -> None:
+    with pytest.raises(DatasetError, match="test_size"):
+        grouped_stratified_holdout(np.array([0, 1]), np.array(["a", "b"]), test_size=0.0, seed=0)
+
+
+def test_grouped_split_refuses_missing_groups() -> None:
+    with pytest.raises(DatasetError, match="groups"):
+        grouped_stratified_holdout(np.array([0, 1]), None, test_size=0.3, seed=0)
 
 
 # -- the real file, when it is here ------------------------------------------------------------

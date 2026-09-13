@@ -148,6 +148,14 @@ tree) reaches 0.9262. That gap is the M4a result, recorded in `RESULTS.md` and c
 write-up as an open question rather than explained away. Full-scale `honest_mode` (2.9M rows) is
 deferred to Ada: prepared as `scripts/ada_honest_mode.sbatch`, **unrun**.
 
+**Q10, closed 2026-09-13 (follow-up session, not a milestone).** Ran the `address`-kept / split-
+grouping 2x2 ablation (`scripts/q10_leakage_ablation.py`); neither leakage source, alone or
+stacked, explains the gap — best of 16 model x cell combinations is 3.58 accuracy points under
+published. Revised the honest `paper_mode` figure to address-dropped x **grouped** split
+(0.9442/0.9697, random forest); M4a's random-split number is superseded but kept for provenance.
+See `docs/DEVIATIONS.md` DEV-06 and `PROJECT_STATE.md` D6 (production pipeline not yet updated to
+match).
+
 ### M4b — the honeypot backend and Alg. 3 `[ ]`
 
 - [ ] `detection/dataset.py` — `HoneypotBackend` over the committed corpus (Q9: it is fixed)
