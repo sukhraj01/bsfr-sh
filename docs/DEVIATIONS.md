@@ -173,9 +173,19 @@ declared config plus the verified file, asserted where practical in
 from M4a's 0.9479/0.9717 (address dropped, random split) to **0.9442/0.9697** (address dropped,
 **grouped** split) — grouping is the methodologically correct choice once duplication is
 address-keyed, and this is now what Table II's BSFR-SH row should read as "ours". Random forest
-stays best of the four models. `scripts/run_detection.py`'s default `paper_mode` pipeline has not
-been changed to use `grouped_stratified_holdout` — that is carried debt (`PROJECT_STATE.md` D6),
-not done in this session, so the two entry points currently disagree until it lands.
+stays best of the four models.
+
+**Amendment (2026-09-13, M4b) — D6 retired.** `configs/ml.yaml` now declares
+`dataset.group_column: address`, and `scripts/run_detection.py`'s `_run_paper_mode` calls
+`grouped_stratified_holdout` instead of the row-random `stratified_holdout` it used through M4a
+and Q10. Re-run at the same seed (20260912): random forest reproduces 0.9442/0.9697 exactly,
+matching `q10_leakage_ablation.py`'s `address_dropped x grouped_split` cell (run
+`20260913T014022Z-c54c3974`) from the production entry point (run `20260913T131623Z-97f51129`).
+The two entry points no longer disagree. Fixing this exposed a real bug: `load_bitcoinheist`'s
+drop-column check assumed `drop_columns` never reach the raw frame, which broke the instant a
+column was both dropped *and* the group column (`configs/ml.yaml` declares `address` as both).
+Fixed by exempting `group_column` from that check — it is loaded for grouping only and, per the
+test added alongside it, never reaches the feature matrix.
 
 ### DEV-07 · FIX · Annotate Table II with source datasets
 **Paper:** Table II compares BSFR-SH's BitcoinHeist score against four schemes evaluated on
@@ -602,3 +612,31 @@ parameters.
 **Impact on reproduction:** none on any published number — the paper evaluates on BitcoinHeist,
 not on this. It is what lets M4 run the framework's *own* data path at all, and per FLAW-2 both
 backends are reported side by side.
+
+### DEV-28 · FILL · `NProf`/`AProf` as fitted profiles, and the Phase 4 handoff (Alg. 3, M4b)
+**Paper:** Alg. 3 line 3 says `DM_CSl` builds `NProf` and `AProf`, "definitions of normal and
+abnormal files... via the four algorithms," and line 4 "detects" through them. Neither term is
+defined, and collapsing them into "whatever the classifier predicts" would make line 3
+indistinguishable from line 2 — the profiles would exist in name only.
+
+**Ours:** a profile (`detection.profiles.NormalProfile`/`AbnormalProfile`) is the fitted
+class-conditional description of `DM_CSl`'s own soft-vote score on one class's training rows: its
+mean, its spread, and that class's mean feature vector. `detection.detector.DetectionModule`
+decides by nearest-profile membership — a fitted z-score against each profile's score
+distribution — rather than reading a raw `estimator.predict()`. This is what makes lines 2
+(train the four algorithms), 3 (build the profiles from their output) and 4 (detect through the
+profiles) one connected mechanism instead of three steps where the middle one is decorative.
+Alternative designs existed (e.g. two independent per-feature Gaussians fitted with no reference
+to the trained models at all); this one was chosen specifically so "built via the four
+algorithms" is literally true of the code, not just of the docstring.
+
+**Phase 4 does not exist yet (M5), so line 5's "call Algorithm 4" has nothing to call.** Ours:
+`detection.detector.Phase4Handoff`, a `Callable[[Detection], None]` `DetectionModule.decide()`
+invokes on every positive. Phase 3 raises the event; it never imports `mitigation` and does not
+need to change when that module lands. Line 4's "start detection" is a loop
+(`DetectionModule.run()`), and a positive never stops it — lines 7-9 re-loop regardless of the
+verdict, so a hit does not end monitoring.
+
+**Impact on reproduction:** none — the paper reports no numbers for this half of Phase 3 at all
+(FLAW-2). `RESULTS.md`'s M4b entry (balanced accuracy 0.8422, seed 20260912) is the first number
+this project has produced from it.

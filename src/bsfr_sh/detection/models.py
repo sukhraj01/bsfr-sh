@@ -38,7 +38,9 @@ __all__ = [
     "build_model",
     "build_models",
     "fit_and_score",
+    "fits_in_memory",
     "knn_projection",
+    "train_all",
 ]
 
 #: The four algorithms Table II requires, in the order `configs/ml.yaml` declares them.
@@ -85,6 +87,21 @@ def build_models(config: Config, *, seed: int) -> dict[str, BaseEstimator]:
         for name in MODEL_NAMES
         if models.get(name, {}).get("enabled", True)
     }
+
+
+def train_all(
+    x_train: np.ndarray, y_train: np.ndarray, config: Config, *, seed: int
+) -> dict[str, BaseEstimator]:
+    """Implements Alg. 3, line 2: fit every enabled model on one draw. `DM_CSl`, trained.
+
+    Unlike `fit_and_score`, this fits and stops — Phase 3 line 2 is "train", not "evaluate", and
+    the fitted estimators are what `detection.profiles.build()` and `detection.detector` both
+    consume next.
+    """
+    models = build_models(config, seed=seed)
+    for estimator in models.values():
+        estimator.fit(x_train, y_train)
+    return models
 
 
 @dataclass(frozen=True)

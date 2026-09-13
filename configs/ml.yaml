@@ -21,6 +21,10 @@ dataset:
   # straight into the model (docs/EXPERIMENTS.md, Target 2).
   drop_columns: [address]
   feature_columns: [year, day, length, weight, count, looped, neighbors, income]
+  # DECLARED, Q10/DEV-06 — rows sharing an address are near duplicates, so `paper_mode`'s split
+  # groups by this column rather than splitting rows independently. Never entered as a feature
+  # unless a caller explicitly asks (`DatasetSpec.encode_group_as_feature`); production never does.
+  group_column: address
   subsample:
     # DECLARED — an 8 GB box cannot hold a KNN neighbour search over 2.9M rows (CLAUDE.md §6).
     # Default runs are subsampled and say so in the sidecar; `--full` opts into the real thing

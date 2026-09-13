@@ -1,0 +1,153 @@
+{
+  "balanced_accuracy": 0.8421691622824767,
+  "collection_seconds": 1.2108559170155786,
+  "config_hash": "c72fe37a143deffa0b60734fad3bb2599a05f651819f96c340eb669c9fe8b2b7",
+  "config_hash_scheme": 2,
+  "eval_count": 750,
+  "expected_bayes_accuracy": 0.85,
+  "git_rev": "5ce4829",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "leak_margin": 0.05,
+  "leak_suspected": false,
+  "phase3_seconds": 10.744321749982191,
+  "purpose": "M4b \u2014 honeypot detection path, Alg. 3 end to end from BC_SigRW",
+  "report": {
+    "baselines": {
+      "constant_negative": {
+        "accuracy": 0.5170998632010944,
+        "accuracy_for_contrast": 0.5170998632010944,
+        "confusion": {
+          "fn": 353,
+          "fp": 0,
+          "tn": 378,
+          "tp": 0
+        },
+        "f1": 0.0,
+        "f1_minority": 0.0,
+        "mcc": 0.0,
+        "pr_auc": 0.4829001367989056,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "constant_positive": {
+        "accuracy": 0.4829001367989056,
+        "accuracy_for_contrast": 0.4829001367989056,
+        "confusion": {
+          "fn": 0,
+          "fp": 378,
+          "tn": 0,
+          "tp": 353
+        },
+        "f1": 0.6512915129151291,
+        "f1_minority": 0.6512915129151291,
+        "mcc": 0.0,
+        "pr_auc": 0.4829001367989056,
+        "precision": 0.4829001367989056,
+        "recall": 1.0
+      },
+      "stratified_random": {
+        "accuracy": 0.4829001367989056,
+        "accuracy_for_contrast": 0.4829001367989056,
+        "confusion": {
+          "fn": 190,
+          "fp": 188,
+          "tn": 190,
+          "tp": 163
+        },
+        "f1": 0.4630681818181818,
+        "f1_minority": 0.4630681818181818,
+        "mcc": -0.035605328785463436,
+        "pr_auc": 0.47435179231430236,
+        "precision": 0.46438746438746437,
+        "recall": 0.46175637393767704
+      }
+    },
+    "evaluation": {
+      "feature_names": [
+        "files_touched_per_s",
+        "read_write_ratio",
+        "rename_rate_per_s",
+        "extension_change_rate",
+        "directory_breadth",
+        "write_entropy_mean",
+        "write_entropy_var",
+        "entropy_delta",
+        "crypto_call_rate",
+        "key_generation_events",
+        "crypto_ngram_novelty",
+        "child_process_spawns",
+        "injection_attempts",
+        "privilege_escalation_attempts",
+        "c2_beacon_count",
+        "dns_entropy",
+        "outbound_burst_rate",
+        "autostart_writes",
+        "shadow_copy_deletions",
+        "backup_path_accesses",
+        "observed_stages",
+        "stage_dwell_mean_s"
+      ],
+      "n_negative": 378,
+      "n_positive": 353,
+      "n_rows": 731,
+      "positive_rate": 0.4829001367989056,
+      "source": "BC_SigRW (height 8)"
+    },
+    "honest": {
+      "accuracy_for_contrast": 0.8426812585499316,
+      "confusion": {
+        "fn": 61,
+        "fp": 54,
+        "tn": 324,
+        "tp": 292
+      },
+      "f1_minority": 0.8354792560801144,
+      "mcc": 0.6849134593020927,
+      "pr_auc": 0.9100243232724005,
+      "precision": 0.8439306358381503,
+      "recall": 0.8271954674220963
+    },
+    "positives_detected": 346,
+    "train": {
+      "feature_names": [
+        "files_touched_per_s",
+        "read_write_ratio",
+        "rename_rate_per_s",
+        "extension_change_rate",
+        "directory_breadth",
+        "write_entropy_mean",
+        "write_entropy_var",
+        "entropy_delta",
+        "crypto_call_rate",
+        "key_generation_events",
+        "crypto_ngram_novelty",
+        "child_process_spawns",
+        "injection_attempts",
+        "privilege_escalation_attempts",
+        "c2_beacon_count",
+        "dns_entropy",
+        "outbound_burst_rate",
+        "autostart_writes",
+        "shadow_copy_deletions",
+        "backup_path_accesses",
+        "observed_stages",
+        "stage_dwell_mean_s"
+      ],
+      "n_negative": 750,
+      "n_positive": 717,
+      "n_rows": 1467,
+      "positive_rate": 0.4887525562372188,
+      "source": "BC_SigRW (height 15)"
+    }
+  },
+  "run_id": "20260913T134602Z-ab45ac90",
+  "seed": 20260912,
+  "train_count": 1500
+}

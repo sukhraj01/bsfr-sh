@@ -38,6 +38,12 @@ trend and the ratios.** See DEV-13.
 Rows 1–4 are quoted from the source papers — labelled `paper_reported`, never `measured`. Only
 the BSFR-SH row is reproducible by us. The `dataset` column is our addition (DEV-07).
 
+**Our measured BSFR-SH row (address dropped, address-grouped split, random forest): 0.9442
+accuracy / 0.9697 F1** — not the published 0.9898/0.990 (`docs/DEVIATIONS.md` DEV-06,
+`RESULTS.md`). `scripts/run_detection.py` and `scripts/q10_leakage_ablation.py` agree on this
+figure as of M4b (D6 retired); a random row-level split without address grouping measures
+0.9479/0.9717 instead and is superseded, kept only for provenance.
+
 **Baseline we must publish alongside it.** On the paper's 90/10 split, a constant "always
 ransomware" classifier achieves accuracy 0.900 and F1 0.947. Any reproduction that omits this
 baseline is misleading. This is the baseline every number in this table should be judged against —

@@ -162,3 +162,51 @@ honest `paper_mode` reproduction figure going forward — grouping by address is
 correct choice once duplication is address-keyed, and random forest remains best of the four
 models under it. `scripts/run_detection.py` still runs the random split by default; see
 `PROJECT_STATE.md` carried debt D6.
+
+### D6 retired — `run_detection.py` grouped by address (2026-09-13, M4b)
+
+`configs/ml.yaml` now declares `dataset.group_column: address`; `scripts/run_detection.py`'s
+`_run_paper_mode` calls `grouped_stratified_holdout` instead of the row-random `stratified_holdout`
+it used through M4a and Q10. Same seed (20260912) and the same resample as every prior
+`paper_mode` run; the production pipeline now reproduces Q10's `address_dropped x grouped_split`
+cell (run `20260913T014022Z-c54c3974`) exactly, from the entry point `docs/EXPERIMENTS.md` and
+`make figures` will actually call.
+
+```
+2026-09-13 | detection/bitcoinheist-paper | random_forest, 90/10 n=46014, grouped split | acc=0.9442 f1=0.9697 | measured | 20260913T131623Z-97f51129 | Table II target, D6 retired (DEV-06)
+2026-09-13 | detection/bitcoinheist-paper | logistic_regression, 90/10 n=46014, grouped split | acc=0.9002 f1=0.9475 | measured | 20260913T131623Z-97f51129 | Table II target, D6 retired (DEV-06)
+2026-09-13 | detection/bitcoinheist-paper | decision_tree, 90/10 n=46014, grouped split | acc=0.9224 f1=0.9569 | measured | 20260913T131623Z-97f51129 | Table II target, D6 retired (DEV-06)
+2026-09-13 | detection/bitcoinheist-paper | k_nearest_neighbours, 90/10 n=46014, grouped split | acc=0.8892 f1=0.9410 | measured | 20260913T131623Z-97f51129 | Table II target, D6 retired (DEV-06)
+2026-09-13 | detection/bitcoinheist-paper | constant-positive, 90/10 n=46014, grouped split | acc=0.9000 f1=0.9474 | measured | 20260913T131623Z-97f51129 | baseline, looks at nothing
+```
+
+The two entry points no longer disagree: **0.9442/0.9697 (random forest) is the one honest
+`paper_mode` figure**, cited consistently in `docs/DEVIATIONS.md` DEV-06, `docs/EXPERIMENTS.md`,
+and `PROJECT_STATE.md`. The earlier 0.9479/0.9717 lines above stay for provenance — they are what
+M4a actually measured before Q10 found the split was leaking — but are no longer "the" figure.
+
+### M4b — the honeypot detection path, Alg. 3 end to end from `BC_SigRW` (2026-09-13)
+
+`scripts/run_phase3_detection.py --seed 20260912`: one honeypot deployed, harvested twice (train
+seed 20260912 count 1500, eval seed 20260913 count 750 — the same two draws
+`data/honeypot/manifest.json` records, reached here by re-running the generator at the same
+seeds rather than reading the committed CSVs), each draw carried through `framework.phase2_collection.run()`
+onto its own `BC_SigRW` cluster under real pBFT consensus, decrypted back out by
+`detection.dataset.load_from_chain()`, trained and profiled by
+`detection.profiles.build()`/`detection.models.train_all()`, detected by
+`detection.detector.DetectionModule`. Kept counts after cleaning (1467 train, 731 eval) match the
+manifest exactly, confirming the honeypot's generator is bit-reproducible through the chain.
+
+```
+2026-09-13 | detection/honeypot-phase3 | ensemble via NProf/AProf, train n=1467 eval n=731 | bal_acc=0.8422 prec=0.8439 rec=0.8272 mcc=0.6849 pr_auc=0.9100 | measured | 20260913T134602Z-ab45ac90 | FLAW-2 framework path, expect ~0.85
+2026-09-13 | detection/honeypot-phase3 | constant-positive baseline, eval n=731 (353 positive) | bal_acc=0.5000 prec=0.4829 rec=1.0000 mcc=0.0000 pr_auc=0.4829 | measured | 20260913T134602Z-ab45ac90 | baseline, looks at nothing
+```
+
+**0.8422 balanced accuracy** sits between the measured simple-Gaussian baseline (0.830,
+`test_honeypot_features.py::test_a_simple_baseline_lands_near_the_intended_difficulty_not_at_ceiling`)
+and the corpus's intended Bayes-optimal ceiling (0.85, `honeypot.corpus.EXPECTED_BAYES_ACCURACY`) —
+better than the naive baseline, not above the theoretical ceiling. `scripts/run_phase3_detection.py`
+checks this automatically (`leak_margin=0.05`) and refuses to print a `RESULTS.md` line rather than
+report a number that would mean the generator leaked, not that detection worked; it did not fire
+here. This is the first number in this project produced by Phase 2's output feeding Phase 3's
+input (FLAW-2's framework half, closed for M4b — see `docs/PAPER_NOTES.md` and `docs/DEVIATIONS.md`).

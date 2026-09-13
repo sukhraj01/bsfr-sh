@@ -259,19 +259,33 @@ schema, the class balance, the ambiguous fraction and the expected Bayes accurac
 
 ## `detection/`
 
-`dataset.py` exposes one interface with two backends:
+`dataset.py` exposes one interface (`DatasetBackend`, `.load() -> DetectionDataset`) with two
+backends, picked by `backend_from_config()` off `dataset.name`, never hardcoded:
 - `BitcoinHeistBackend` — loads the UCI CSV, applies the paper's 90/10 resample **or** the natural
   distribution, depending on config
-- `HoneypotBackend` — decrypts `BC_SigRW` and yields `FT_RW` vectors
+- `HoneypotBackend` — `load_from_chain()` decrypts `BC_SigRW` and yields `FT_RW` vectors, re-
+  verifying every block first (mirrors `recovery.locator.scan`'s discipline)
 
 `models.py` wraps the four required estimators with fixed hyperparameters recorded in config.
-The paper reports none, so ours are declared, not inferred.
+The paper reports none, so ours are declared, not inferred. `train_all()` fits all four on one
+draw — Alg. 3 line 2, `DM_CSl`.
 
 `profiles.py` builds `NProf` / `AProf` as the fitted class-conditional descriptions the paper
-describes at Alg. 3 line 3.
+describes at Alg. 3 line 3: each profile is the mean/spread of `DM_CSl`'s own soft-vote score on
+one class's training rows (DEV-28), not an independent statistic that ignores the trained models.
+
+`detector.py`'s `DetectionModule` implements Alg. 3 lines 4-9: it decides by nearest-profile
+membership (line 4, "detect via `NProf`/`AProf`") and, on a positive, calls `Phase4Handoff` — a
+plain callable, since Phase 4 does not exist yet (M5). The loop never stops on a positive; lines
+7-9 re-loop regardless of the verdict.
 
 `metrics.py` computes both metric sets: `paper_mode` (accuracy, F1 as reported) and
-`honest_mode` (precision, recall, PR-AUC, MCC, confusion matrix, minority-class F1).
+`honest_mode` (precision, recall, PR-AUC, MCC, confusion matrix, minority-class F1). Used by both
+backends' evaluation paths.
+
+`framework/phase3_detection.py` wires lines 1-9 end to end from two already-built `BC_SigRW`
+chains (a training draw and an evaluation draw) — the first place in this project where Phase 2's
+output feeds Phase 3's input (`tests/integration/test_phase2_feeds_phase3.py`).
 
 ---
 

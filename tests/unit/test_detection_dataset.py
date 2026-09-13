@@ -204,6 +204,21 @@ def test_group_column_is_not_a_feature_unless_asked(tmp_path) -> None:
     assert len(data.groups) == data.n_rows
 
 
+def test_group_column_may_also_be_a_declared_drop_column(tmp_path) -> None:
+    """D6: `configs/ml.yaml` sets both `drop_columns: [address]` and `group_column: address`.
+
+    The drop-check exists to catch a column reaching the frame *by accident*; `group_column`
+    reaching it on purpose, for grouping only, is not that failure and must not raise.
+    """
+    path = _write_csv(tmp_path / "bh.csv", n_benign=500, n_ransom=20)
+    data = load_bitcoinheist(
+        _spec(path, drop_columns=("address",), group_column="address"), verify=False
+    )
+    assert "address" not in data.columns
+    assert data.groups is not None
+    assert len(data.groups) == data.n_rows
+
+
 def test_encode_group_as_feature_appends_a_dense_ordinal_column(tmp_path) -> None:
     path = _write_csv(tmp_path / "bh.csv", n_benign=500, n_ransom=20)
     data = load_bitcoinheist(

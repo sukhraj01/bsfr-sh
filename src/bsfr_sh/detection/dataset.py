@@ -27,19 +27,39 @@ paper cites**. The headline 98.98% accuracy therefore comes from a ~46K-row expe
 class balance that does not occur anywhere outside the resample. `paper_mode_arithmetic()` is a
 pure function so this can be asserted without touching the file, and the realised `n` is recorded
 in `RESULTS.md`.
+
+M4b — the second half of FLAW-2's dual feature source
+-------------------------------------------------------
+Everything above is `bitcoinheist`: the paper's actual evaluation data. `BitcoinHeistBackend`,
+`HoneypotBackend`, `DatasetBackend` and `backend_from_config` at the bottom of this module are the
+"selected by config, never hardcoded" half `docs/ALGORITHMS.md` Alg. 3 promises — the honeypot
+path the framework actually describes (§IV-C), decrypted from `BC_SigRW` via `load_from_chain()`
+rather than read from `data/honeypot/*.csv` directly. Both backends produce a `DetectionDataset`,
+the one shape `detection.profiles` and `detection.detector` need; `LoadedDataset` above stays
+BitcoinHeist-specific (resamples, groups, `matches_paper_counts`) because none of that generalises
+to a corpus this project generated itself.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol, runtime_checkable
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
+from bsfr_sh.blockchain.chain import BC_SigRW, Chain, ChainError
+from bsfr_sh.blockchain.transaction import (
+    PAYLOAD_TYPE_SIGNATURE_RECORD,
+    SignatureRecordPayload,
+    Transaction,
+    TransactionError,
+)
+from bsfr_sh.honeypot import features as ft
+from bsfr_sh.honeypot.collector import BENIGN, MALICIOUS
 from bsfr_sh.util.config import Config
 
 __all__ = [
@@ -52,12 +72,19 @@ __all__ = [
     "FEATURE_COLUMNS",
     "GROUP_COLUMN",
     "LABEL_COLUMN",
+    "BitcoinHeistBackend",
+    "DatasetBackend",
     "DatasetError",
     "DatasetSpec",
+    "Decryptor",
+    "DetectionDataset",
+    "HoneypotBackend",
     "LoadedDataset",
+    "backend_from_config",
     "encode_group_column",
     "grouped_stratified_holdout",
     "load_bitcoinheist",
+    "load_from_chain",
     "paper_mode_arithmetic",
     "paper_mode_resample",
     "stratified_folds",
@@ -119,9 +146,10 @@ class DatasetSpec:
     drop_columns: tuple[str, ...] = DROPPED_COLUMNS
     subsample_rows: int | None = None
     subsample_stratified: bool = True
-    #: Q10 only — the production config path never sets these. `group_column` loads a column
-    #: purely for grouping (e.g. a later `grouped_stratified_holdout`); it never reaches the
-    #: feature matrix unless `encode_group_as_feature` also asks for that.
+    #: `group_column` loads a column purely for grouping (`grouped_stratified_holdout`); it never
+    #: reaches the feature matrix unless `encode_group_as_feature` also asks for that. The
+    #: production config (`configs/ml.yaml`) sets this to `address` (D6, DEV-06 amendment);
+    #: `encode_group_as_feature` stays Q10-only — production never turns the group into a feature.
     group_column: str | None = None
     encode_group_as_feature: bool = False
 
@@ -142,6 +170,7 @@ class DatasetSpec:
             drop_columns=tuple(config.require("dataset.drop_columns", list)),
             subsample_rows=rows if enabled else None,
             subsample_stratified=bool(config.get("dataset.subsample.stratified", True)),
+            group_column=config.get("dataset.group_column", None),
         )
 
 
@@ -158,8 +187,8 @@ class LoadedDataset:
     #: True when the full file matched §VII exactly. False after subsampling, and recorded as such.
     matches_paper_counts: bool
     families: int
-    #: Q10 only. The raw grouping key per row (e.g. `address`), aligned with `features`/`labels`.
-    #: `None` unless `DatasetSpec.group_column` was set — the production config path never sets it.
+    #: The raw grouping key per row (`address`), aligned with `features`/`labels`. `None` unless
+    #: `DatasetSpec.group_column` was set; the production config sets it (D6, DEV-06 amendment).
     groups: np.ndarray | None = None
 
     @property
@@ -217,6 +246,8 @@ def load_bitcoinheist(spec: DatasetSpec, *, verify: bool = True, seed: int = 0) 
     frame = pd.read_csv(spec.path, usecols=usecols, dtype=dtypes)
 
     for dropped in spec.drop_columns:
+        if dropped == spec.group_column:
+            continue  # loaded only for grouping (D6); never reaches `features` below
         if dropped in frame.columns:  # pragma: no cover - usecols already excluded it
             raise DatasetError(f"{dropped!r} reached the frame; it must be excluded at read time")
 
@@ -452,3 +483,181 @@ def stratified_folds(
 def class_rate(labels: Sequence[int] | np.ndarray) -> float:
     array = np.asarray(labels)
     return float(array.sum() / len(array)) if len(array) else 0.0
+
+
+# --------------------------------------------------------------------------------------------
+# M4b — the honeypot backend, and the interface both backends share (FLAW-2, Alg. 3 line 1)
+# --------------------------------------------------------------------------------------------
+#: One key holder's decryption of one transaction. Defined locally rather than imported from
+#: `recovery.locator` — `detection/` may depend on `blockchain/` but not on `recovery/`
+#: (docs/ARCHITECTURE.md dependency direction; `test_module_boundaries.py` pins the allowed set).
+Decryptor = Callable[[Transaction], bytes]
+
+
+@dataclass(frozen=True)
+class DetectionDataset:
+    """The one shape both backends produce: what `detection.profiles`/`detection.detector` need.
+
+    Deliberately smaller than `LoadedDataset`: `matches_paper_counts`, `families` and `groups`
+    are BitcoinHeist-specific bookkeeping that has no honeypot analogue, so they stay on
+    `LoadedDataset` rather than being forced onto a shared type with meaningless defaults.
+    """
+
+    features: np.ndarray
+    labels: np.ndarray
+    feature_names: tuple[str, ...]
+    sample_ids: tuple[str, ...]
+    source: str
+    n_rows: int
+    n_positive: int
+    n_negative: int
+
+    def __post_init__(self) -> None:
+        if len(self.sample_ids) != self.n_rows or len(self.labels) != self.n_rows:
+            raise DatasetError(
+                f"{self.source}: n_rows={self.n_rows} does not match "
+                f"{len(self.sample_ids)} sample_ids / {len(self.labels)} labels"
+            )
+
+    @property
+    def positive_rate(self) -> float:
+        return self.n_positive / self.n_rows if self.n_rows else 0.0
+
+    def as_dict(self) -> dict[str, object]:
+        """For a run sidecar — mirrors `LoadedDataset.as_dict()`."""
+        return {
+            "source": self.source,
+            "n_rows": self.n_rows,
+            "n_positive": self.n_positive,
+            "n_negative": self.n_negative,
+            "positive_rate": self.positive_rate,
+            "feature_names": list(self.feature_names),
+        }
+
+
+@runtime_checkable
+class DatasetBackend(Protocol):
+    """What `BitcoinHeistBackend` and `HoneypotBackend` both satisfy. Alg. 3 line 1, FLAW-2."""
+
+    def load(self) -> DetectionDataset: ...
+
+
+@dataclass(frozen=True)
+class BitcoinHeistBackend:
+    """The paper's actual evaluation data, wrapped into the shared interface (reproduction)."""
+
+    spec: DatasetSpec
+    seed: int
+    verify: bool = True
+
+    def load(self) -> DetectionDataset:
+        loaded = load_bitcoinheist(self.spec, verify=self.verify, seed=self.seed)
+        return DetectionDataset(
+            features=loaded.features.to_numpy(dtype=np.float64),
+            labels=loaded.labels.astype(np.int8),
+            feature_names=loaded.columns,
+            sample_ids=tuple(str(index) for index in range(loaded.n_rows)),
+            source=str(loaded.source),
+            n_rows=loaded.n_rows,
+            n_positive=loaded.n_positive,
+            n_negative=loaded.n_negative,
+        )
+
+
+def load_from_chain(chain: Chain, decrypt: Decryptor) -> DetectionDataset:
+    """Implements Alg. 3, line 1 for the honeypot path: decrypt `BC_SigRW` into `FT_RW` vectors.
+
+    Every block is re-verified before its transactions are trusted (mirrors
+    `recovery.locator.scan`'s discipline). A `SIG_RW` transaction this key cannot open is another
+    collector's and is skipped, not an error. `schema` and vector length are checked against
+    `honeypot.features` before a single value is trusted — a bare vector with no schema is a
+    guess, not a dataset (docs/ARCHITECTURE.md §honeypot).
+    """
+    if chain.name != BC_SigRW:
+        raise DatasetError(f"honeypot records live on {BC_SigRW}, not {chain.name} (§V-5)")
+    features: list[tuple[float, ...]] = []
+    labels: list[int] = []
+    sample_ids: list[str] = []
+    for height in range(chain.height + 1):
+        try:
+            block = chain.verify_block(height)
+        except ChainError as exc:
+            raise DatasetError(
+                f"{chain.name} failed verification at height {height}: {exc}"
+            ) from exc
+        for tx in block.transactions:
+            if tx.payload_type != PAYLOAD_TYPE_SIGNATURE_RECORD:
+                continue
+            try:
+                payload = SignatureRecordPayload.from_bytes(decrypt(tx))
+            except TransactionError:
+                continue  # encrypted to another key holder; see recovery.locator's equivalent
+            if payload.schema != ft.SCHEMA:
+                raise DatasetError(
+                    f"{tx.tx_id!r} has schema {payload.schema!r}, expected {ft.SCHEMA!r}"
+                )
+            if len(payload.features) != len(ft.FEATURE_NAMES):
+                raise DatasetError(
+                    f"{tx.tx_id!r} has {len(payload.features)} features, "
+                    f"expected {len(ft.FEATURE_NAMES)}"
+                )
+            if payload.label not in (MALICIOUS, BENIGN):
+                raise DatasetError(
+                    f"{tx.tx_id!r} has no ground-truth label; detection needs one to train on"
+                )
+            features.append(payload.features)
+            labels.append(1 if payload.label == MALICIOUS else 0)
+            sample_ids.append(payload.sample_id)
+    if not features:
+        raise DatasetError(f"{chain.name} has no SIG_RW records this key can decrypt")
+    y = np.array(labels, dtype=np.int8)
+    return DetectionDataset(
+        features=np.array(features, dtype=np.float64),
+        labels=y,
+        feature_names=ft.FEATURE_NAMES,
+        sample_ids=tuple(sample_ids),
+        source=f"{chain.name} (height {chain.height})",
+        n_rows=len(y),
+        n_positive=int(y.sum()),
+        n_negative=len(y) - int(y.sum()),
+    )
+
+
+@dataclass(frozen=True)
+class HoneypotBackend:
+    """Decrypts `BC_SigRW` and yields `FT_RW` vectors — the framework's own path (FLAW-2).
+
+    Takes a `Chain` and a `Decryptor` rather than building either: `detection/` does not run
+    consensus or orchestrate phases (`test_detection_does_not_orchestrate`), so whoever wired
+    `framework.phase2_collection` to a cluster hands this backend the result.
+    """
+
+    chain: Chain
+    decrypt: Decryptor
+
+    def load(self) -> DetectionDataset:
+        return load_from_chain(self.chain, self.decrypt)
+
+
+def backend_from_config(
+    config: Config,
+    *,
+    root: Path,
+    seed: int,
+    chain: Chain | None = None,
+    decrypt: Decryptor | None = None,
+) -> DatasetBackend:
+    """Alg. 3's dual feature source (FLAW-2): `dataset.name` picks the backend, never a hardcoded
+    call site. `chain`/`decrypt` are live objects a YAML file cannot name, so they are required
+    only when `dataset.name` is `honeypot`.
+    """
+    name = config.require("dataset.name", str)
+    if name == "bitcoinheist":
+        return BitcoinHeistBackend(spec=DatasetSpec.from_config(config, root=root), seed=seed)
+    if name == "honeypot":
+        if chain is None or decrypt is None:
+            raise DatasetError(
+                "dataset.name: honeypot requires both a chain and a decrypt callable"
+            )
+        return HoneypotBackend(chain=chain, decrypt=decrypt)
+    raise DatasetError(f"dataset.name is {name!r}; expected 'bitcoinheist' or 'honeypot'")

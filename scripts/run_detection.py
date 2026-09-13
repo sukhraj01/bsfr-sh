@@ -1,13 +1,17 @@
-"""Run the BitcoinHeist evaluation: both modes, all four models, baselines first. M4a.
+"""Run the BitcoinHeist evaluation: both modes, all four models, baselines first. M4a, M4b/D6.
 
 Thin wrapper. The loading, splitting, metrics and models are `bsfr_sh.detection`; this script
 sequences them, times them, writes the sidecar and prints the `RESULTS.md` lines.
 
-Two rules it enforces rather than assumes:
+Three rules it enforces rather than assumes:
 
 * **Baselines before models.** `baselines()` runs on each mode's labels before a single estimator
   is fitted, so no model number can be reported without the no-information number beside it
   (DEV-06).
+* **`paper_mode` splits by address, not by row.** `configs/ml.yaml` sets `dataset.group_column`
+  and `_run_paper_mode` calls `grouped_stratified_holdout`, so this is the honest 0.9442/0.9697
+  figure (DEV-06's Q10 amendment), not the earlier 0.9479/0.9717 a row-random split produced.
+  M4b/D6 retired the disagreement between this script and `scripts/q10_leakage_ablation.py`.
 * **Project before you run.** `honest_mode` at full scale is where KNN stops being feasible, so
   `knn_projection()` decides *in advance* whether a model runs locally or is recorded as deferred
   to Ada. A run that cannot fit is named, never silently skipped and never attempted first
@@ -17,7 +21,7 @@ Usage::
 
     python scripts/run_detection.py --seed 20260912                 # subsampled honest_mode
     python scripts/run_detection.py --seed 20260912 --full          # 2.9M rows, expect Ada
-    python scripts/run_detection.py --seed 20260912 --mode paper
+    python scripts/run_detection.py --seed 20260912 --mode paper --full
 """
 
 from __future__ import annotations
@@ -42,10 +46,10 @@ from bsfr_sh.detection.dataset import (  # noqa: E402
     DatasetError,
     DatasetSpec,
     LoadedDataset,
+    grouped_stratified_holdout,
     load_bitcoinheist,
     paper_mode_resample,
     stratified_folds,
-    stratified_holdout,
 )
 from bsfr_sh.detection.metrics import baselines, honest_metrics, paper_metrics  # noqa: E402
 from bsfr_sh.detection.models import (  # noqa: E402
@@ -74,7 +78,14 @@ def _git_rev() -> str:
 
 
 def _run_paper_mode(data: LoadedDataset, config: Any, seed: int, logger: Any) -> dict[str, Any]:
-    """§VII's 90/10 resample, a stratified holdout, and all four models."""
+    """§VII's 90/10 resample, an address-grouped holdout, and all four models.
+
+    D6/DEV-06 (Q10 amendment): split by `grouped_stratified_holdout` rather than the row-random
+    `stratified_holdout` this used through M4a. BitcoinHeist rows sharing an address are near
+    duplicates, so a random split leaks a near-duplicate across the train/test boundary; grouping
+    keeps every address on one side. This is the change that retired D6 — before it, this script
+    and `scripts/q10_leakage_ablation.py` disagreed on `paper_mode`'s honest figure.
+    """
     fraction = float(config.get("modes.paper_mode.positive_fraction", 0.90))
     test_size = float(config.get("modes.paper_mode.test_size", 0.30))
     resample = paper_mode_resample(data, positive_fraction=fraction, seed=seed)
@@ -86,10 +97,17 @@ def _run_paper_mode(data: LoadedDataset, config: Any, seed: int, logger: Any) ->
         negatives=resample.n_negative,
         share_of_dataset=round(resample.n_rows / data.n_rows, 5),
     )
+    if resample.groups is None:
+        raise DatasetError(
+            "paper_mode requires a grouped split (D6); configs/ml.yaml must set "
+            "dataset.group_column"
+        )
 
     x = resample.features.to_numpy(dtype=np.float64)
     y = resample.labels
-    train_idx, test_idx = stratified_holdout(y, test_size=test_size, seed=seed)
+    train_idx, test_idx = grouped_stratified_holdout(
+        y, resample.groups, test_size=test_size, seed=seed
+    )
     x_train, x_test = x[train_idx], x[test_idx]
     y_train, y_test = y[train_idx], y[test_idx]
 
@@ -120,6 +138,7 @@ def _run_paper_mode(data: LoadedDataset, config: Any, seed: int, logger: Any) ->
         )
     return {
         "resample": resample.as_dict(),
+        "split": "grouped_stratified_holdout",
         "test_size": test_size,
         "n_train": len(train_idx),
         "n_test": len(test_idx),
@@ -310,14 +329,14 @@ def _print_results_lines(sidecar: dict[str, Any], run_id: str) -> None:
         n = sidecar["paper_mode"]["resample"]["n_rows"]
         for name, row in sidecar["paper_mode"]["models"].items():
             sys.stdout.write(
-                f"{date} | detection/bitcoinheist-paper | {name}, 90/10 n={n} | "
+                f"{date} | detection/bitcoinheist-paper | {name}, 90/10 n={n}, grouped split | "
                 f"acc={row['accuracy']:.4f} f1={row['f1']:.4f} | measured | {run_id} | "
-                f"Table II target\n"
+                f"Table II target, D6 retired (DEV-06)\n"
             )
         base = sidecar["paper_mode"]["baselines"]["constant_positive"]
         sys.stdout.write(
-            f"{date} | detection/bitcoinheist-paper | constant-positive, 90/10 n={n} | "
-            f"acc={base['accuracy']:.4f} f1={base['f1']:.4f} | measured | {run_id} | "
+            f"{date} | detection/bitcoinheist-paper | constant-positive, 90/10 n={n}, grouped "
+            f"split | acc={base['accuracy']:.4f} f1={base['f1']:.4f} | measured | {run_id} | "
             f"baseline, looks at nothing\n"
         )
     if "honest_mode" in sidecar:

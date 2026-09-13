@@ -91,6 +91,19 @@ Our response: build **both** pipelines. `detection/` supports two feature source
 BitcoinHeist address pipeline (for reproduction) and the honeypot program-feature pipeline (for
 the framework to actually work as described).
 
+**[M4b, 2026-09-13] — the honeypot pipeline is not just possible, it is reachable through the
+paper's own sequence.** M4a's BitcoinHeist row never touches Phases 1, 2, 4 or 5 at all — it is a
+labelled CSV loaded straight into a classifier, with no `HP_RW`, no `BC_SigRW`, no consensus
+anywhere near it. Building `framework.phase3_detection.run()` against real `BC_SigRW` chains that
+`framework.phase2_collection.run()` produced through actual pBFT consensus
+(`tests/integration/test_phase2_feeds_phase3.py`) shows the honeypot half is not merely
+plausible — it is the one evaluation path in this project that actually walks Fig. 3's sequence
+end to end, and it scores a credible 0.8422 balanced accuracy against the corpus's stated 0.85
+ceiling (`RESULTS.md`, DEV-28), not a degenerate number. FLAW-2 is therefore sharper than "the
+paper evaluates on the wrong data": the paper's *own* framework, when actually run start to end,
+produces a real, boundable detection result, and the paper substitutes an unrelated dataset for
+it rather than reporting that result — a choice, not a necessity.
+
 ### §IV-D / Alg. 4 — Mitigation
 Isolate infected system, raise `AMsg`, then one of three cases:
 - Case-1: detection module erases the ransomware, system resumes.

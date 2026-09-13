@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M4b**
+**Current milestone: M5**
 
 ---
 
@@ -153,18 +153,27 @@ grouping 2x2 ablation (`scripts/q10_leakage_ablation.py`); neither leakage sourc
 stacked, explains the gap — best of 16 model x cell combinations is 3.58 accuracy points under
 published. Revised the honest `paper_mode` figure to address-dropped x **grouped** split
 (0.9442/0.9697, random forest); M4a's random-split number is superseded but kept for provenance.
-See `docs/DEVIATIONS.md` DEV-06 and `PROJECT_STATE.md` D6 (production pipeline not yet updated to
-match).
+See `docs/DEVIATIONS.md` DEV-06. **D6 retired in M4b:** `scripts/run_detection.py` now groups by
+address too, so the production pipeline and the ablation script agree.
 
-### M4b — the honeypot backend and Alg. 3 `[ ]`
+### M4b — the honeypot backend and Alg. 3 `[x]`
 
-- [ ] `detection/dataset.py` — `HoneypotBackend` over the committed corpus (Q9: it is fixed)
-- [ ] `detection/profiles.py` — `NProf` / `AProf`
-- [ ] `detection/detector.py` — Alg. 3 real-time loop
-- [ ] `framework/phase3_detection.py`
+- [x] `detection/dataset.py` — `HoneypotBackend`/`load_from_chain`, decrypted from `BC_SigRW`;
+      `BitcoinHeistBackend`, `DatasetBackend` and `backend_from_config` complete the "selected by
+      config, never hardcoded" interface docs/ALGORITHMS.md Alg. 3 promised
+- [x] `detection/profiles.py` — `NProf`/`AProf` (DEV-28)
+- [x] `detection/detector.py` — Alg. 3 lines 4-9, `DetectionModule` and the `Phase4Handoff`
+      interface (Phase 4 does not exist yet — M5)
+- [x] `framework/phase3_detection.py` — Alg. 3 lines 1-9 end to end from two `BC_SigRW` chains
+- [x] D6 retired: `scripts/run_detection.py`'s `paper_mode` now groups by address too, matching
+      `q10_leakage_ablation.py` (DEV-06 amendment)
 
-**Exit:** the framework's own data path runs end to end, and the honeypot backend's accuracy is
-reported against the corpus's stated 0.85 — a number near 1.0 is a leak to be found, not a result.
+**Exit:** `scripts/run_phase3_detection.py --seed 20260912` runs the framework's own data path
+end to end — honeypot → Phase 2 → `BC_SigRW` (real pBFT consensus, two independent draws) →
+Phase 3 → detection — and scores **0.8422 balanced accuracy**, between the measured 0.830
+baseline and the corpus's intended 0.85 ceiling, not above it. `RESULTS.md`, `docs/DEVIATIONS.md`
+DEV-28. `tests/integration/test_phase2_feeds_phase3.py` is the first test in this project where
+Phase 2's output feeds Phase 3's input.
 
 ---
 
