@@ -67,22 +67,32 @@ Selected by config, never hardcoded.
 
 | Lines | Step | Implementation |
 |---|---|---|
-| 1–2 | `DM_CSl` discovers `RW` in `SYS_i` | input from Phase 3 |
-| 3 | Raise `AMsg`, isolate `SYS_i` | `mitigation.state.isolate()` |
-| 4 | Erase `InfSYS_i` via one of three cases | `mitigation.state.MitigationMachine` |
-| 5 | **Case-1** — erase `RW` | `mitigation.cases.case1_erase()` — quarantine model, GAP-4 |
-| 6 | **Case-2** — format + recover via Phase 5 | `mitigation.cases.case2_restore()` |
+| 1–2 | `DM_CSl` discovers `RW` in `SYS_i` | the `Detection` Phase 3's `Phase4Handoff` hands off |
+| 3 | Raise `AMsg`, isolate `SYS_i` | `mitigation.state.Detected.isolate()` |
+| 4 | Remediate `InfSYS_i` via one of three cases | `mitigation.state.Isolated.remediate()` |
+| 5 | **Case-1** — erase `RW` | `mitigation.cases.case1_quarantine()` — quarantine model, DEV-04 |
+| 6 | **Case-2** — format + recover via Phase 5 | `mitigation.cases.case2_restore()`, restore injected by `framework.phase4_mitigation.run()` |
 | 7 | **Case-3** — if `RW_amt < DT-SYS_i-amt`, pay and obtain `K_d` | `mitigation.cases.case3_simulated_payment()` |
-| 8–10 | Else re-run mitigation | `phase4_mitigation.run()` |
+| 8–10 | Else re-run mitigation | the caller's job — `framework.phase4_mitigation.run()` raises rather than looping; see its docstring |
+
+**Case-1/2/3 are reached only from `mitigation.state.Remediating`**, which is reachable only from
+`Isolated.remediate()`, which is reachable only from `Detected.isolate()` — illegal transitions
+(e.g. remediating before isolating) are unrepresentable rather than checked, mirroring
+`blockchain.block.BlockDraft.seal()` (M2a). `tests/unit/test_mitigation_state.py` tests every
+transition, legal and illegal.
 
 > **Case-3 is simulated only.** It returns a `PolicyDecision` dataclass and writes an audit log
 > record. It has no network access, no wallet, no transaction construction. This is enforced by
 > a unit test (`tests/unit/test_case3_is_inert.py`) that asserts the module imports no network
-> library and that the function is pure. See `CLAUDE.md` §2.
+> library and that the function's only observable effect is that one log record. See `CLAUDE.md` §2.
 
 Note the paper's own ordering bug: line 4 says "erases `InfSYS_i` using one of the following
 cases," but Case-2 and Case-3 do not erase — they restore and decrypt respectively. We model
-line 4 as *remediate*, not *erase*.
+line 4 as *remediate*, not *erase* — `Isolated.remediate()` is named accordingly.
+
+**Which case applies to a detection, and which system a detection names, are both gaps the paper
+leaves open.** `framework.phase4_mitigation.run()` takes `case: MitigationCase` and `system_id`
+explicitly from its caller rather than inferring either. See `docs/DEVIATIONS.md` DEV-29.
 
 ---
 

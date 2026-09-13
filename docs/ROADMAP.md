@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M5**
+**Current milestone: M6**
 
 ---
 
@@ -177,16 +177,22 @@ Phase 2's output feeds Phase 3's input.
 
 ---
 
-## M5 — Mitigation (Phase 4) `[ ]`
+## M5 — Mitigation (Phase 4) `[x]`
 
-- [ ] `mitigation/state.py` — state machine, isolation, `AMsg`
-- [ ] `mitigation/cases.py` — Case-1 quarantine (DEV-04), Case-2 restore, Case-3 simulated (DEV-09)
-- [ ] `mitigation/policy.py` — `RW_amt` vs `DT-SYS_i-amt` decision object
-- [ ] `tests/unit/test_case3_is_inert.py` — asserts no network imports, pure function
-- [ ] `framework/phase4_mitigation.py`
-- [ ] Integration test: full Fig. 3 sequence end to end
+- [x] `mitigation/state.py` — state machine, isolation, `AMsg`
+- [x] `mitigation/cases.py` — Case-1 quarantine (DEV-04), Case-2 restore, Case-3 simulated (DEV-09)
+- [x] `mitigation/policy.py` — `RW_amt` vs `DT-SYS_i-amt` decision object
+- [x] `tests/unit/test_case3_is_inert.py` — asserts no network imports, pure function
+- [x] `framework/phase4_mitigation.py`
+- [x] Integration test: full Fig. 3 sequence end to end
 
-**Exit:** all five phases wired; `test_full_sequence.py` green.
+**Exit:** all five phases wired; `test_full_sequence.py` green. Closed 2026-09-13:
+`mitigation.state`'s six frozen states make illegal transitions unrepresentable (mirroring
+`BlockDraft.seal()`); Case-2 restores byte-identical through `phase5_recovery.run` in both a fast
+unit test and the full pBFT integration test; Case-3's inertness is enforced by
+`test_case3_is_inert.py`, not by comment (DEV-09). DEV-29 records the two gaps the paper leaves
+open here: which case applies, and how a detection is attributed to a system. `make test-all`:
+1293 passed.
 
 ---
 

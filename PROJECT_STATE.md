@@ -4,23 +4,26 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-13 · **Milestone:** M5 (mitigation, Phase 4) · **Sessions completed:** 9
+**Last updated:** 2026-09-13 · **Milestone:** M6 (benchmarks and figures) · **Sessions completed:** 10
 
 ---
 
 ## One-line status
 
-M4b is closed. `detection.dataset` now has two backends behind one interface
-(`BitcoinHeistBackend`, `HoneypotBackend`), selected by `dataset.name`, never hardcoded.
-`NProf`/`AProf` are fitted profiles of the trained ensemble's own score, and `DetectionModule`
-detects through them, not a raw model call. `framework.phase3_detection.run()` reads two
-already-built `BC_SigRW` chains end to end and scores **0.8422 balanced accuracy** — between the
-measured 0.830 baseline and the corpus's stated ~0.85 ceiling, not a leak.
-`scripts/run_phase3_detection.py --seed 20260912` produces it from real Phase 2 + pBFT consensus.
-D6 is retired: `scripts/run_detection.py`'s `paper_mode` now groups by address, so it and
-`q10_leakage_ablation.py` agree at **0.9442/0.9697**. `make test` runs 1156 tests,
-`make test-all` adds the integration suite (including the first Phase 2 → Phase 3 demonstration),
-`make lint` is clean. Next is M5, mitigation.
+M5 is closed: all five phases are wired. `mitigation/state.py` is six frozen dataclasses —
+`DETECTED → ISOLATED → REMEDIATING → (RESTORED | CLEANED | POLICY_BLOCKED) → RESOLVED` — where
+each state nests its predecessor, so illegal transitions (remediating before isolating) are
+unrepresentable rather than checked, mirroring `blockchain.block.BlockDraft.seal()`.
+`mitigation/cases.py` implements Case-1 (quarantine, DEV-04), Case-2 (restore, calling
+`framework.phase5_recovery.run` through an injected callable), and Case-3 (SIMULATED ONLY, DEV-09:
+evaluates `RW_amt < DT-SYS_i-amt`, writes one audit log record, always terminates
+`POLICY_BLOCKED`) — inertness enforced structurally by `test_case3_is_inert.py`, not by comment.
+`framework/phase4_mitigation.py` wires `detection.detector.Phase4Handoff` to the state machine.
+`tests/integration/test_full_sequence.py` walks backup → collection → detection → mitigation →
+recovery through real pBFT on both `BC_DTBU` and `BC_SigRW`, ending byte-identical. DEV-29 records
+the two gaps the paper leaves open (which case applies; how a detection names a system) as explicit
+caller-supplied arguments rather than invented rules. `make test-all`: 1293 passed. `make lint`
+clean. Next is M6, benchmarks and figures — the last implementation milestone.
 
 ---
 
@@ -28,72 +31,65 @@ D6 is retired: `scripts/run_detection.py`'s `paper_mode` now groups by address, 
 
 | Layer | State | Notes |
 |---|---|---|
-| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-06 retired D6 (M4b); DEV-28 added (M4b) |
-| `configs/`, `Makefile` | done | `ml.yaml` gained `dataset.group_column: address` |
+| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-29 added (M5) |
+| `configs/`, `Makefile` | done | |
 | `util/`, `crypto/`, `blockchain/`, `consensus/` | done | |
-| `framework/` phases 1, 2, 3, 5 | done | M3a, M3b, M4b. Phase 4 is M5 |
-| `recovery/`, `honeypot/` | done | M3a, M3b |
+| `framework/` phases 1–5 | done | M3a, M3b, M4b, M5 |
+| `recovery/`, `honeypot/`, `mitigation/` | done | M3a, M3b, M5 |
 | `data/honeypot/` corpus | done | fixed dataset (Q9): 1467 train + 731 eval, two seeds |
 | `data/raw/` BitcoinHeist | **local only** | gitignored; `make data` refetches (~56 min here) |
-| `detection/` dataset, models, metrics | done | M4a (BitcoinHeist) + M4b (honeypot backend, `train_all`) |
-| `detection/` profiles, detector | done | M4b — `NProf`/`AProf`, `DetectionModule` |
-| `mitigation/`, phase 4 | **not started** | **M5 — start here** |
-| `bench/`, figures | not started | M6 |
+| `detection/` dataset, models, metrics, profiles, detector | done | M4a, M4b |
+| `bench/`, figures | **not started** | **M6 — start here** |
 
 ## Current numbers
 
 **BitcoinHeist, `paper_mode`, honest baseline** (n=46,014, address dropped, **grouped** split,
 production entry point, run `20260913T131623Z-97f51129`, D6 retired): RF **0.9442/0.9697** ·
 DT 0.9224/0.9569 · LR 0.9002/0.9475 · KNN 0.8892/0.9410 · constant-positive baseline
-0.9000/0.9474. Published row: 0.9898/0.990 — **not reproduced**, unexplained (Q10, closed). This
-is now the only figure `scripts/run_detection.py` and `scripts/q10_leakage_ablation.py` both
-produce; cited consistently in `docs/DEVIATIONS.md` DEV-06, `docs/EXPERIMENTS.md`, and here.
+0.9000/0.9474. Published row: 0.9898/0.990 — **not reproduced**, unexplained (Q10, closed).
 
 **BitcoinHeist, `honest_mode`** (200K subsample, 5-fold, run `20260912T172809Z-d89aa1b6`): best
 MCC is DT at 0.331, best PR-AUC is RF at 0.335, recall spans 0.00–0.36. A constant-negative
-classifier scores 0.9858 accuracy — an illustration of accuracy's distribution-sensitivity
-against the paper's 0.9898, not a like-for-like comparison. Full-scale (2.9M) is **deferred to
+classifier scores 0.9858 accuracy against the paper's 0.9898. Full-scale (2.9M) is **deferred to
 Ada, unrun**.
 
 **Honeypot detection, Alg. 3 end to end** (`scripts/run_phase3_detection.py --seed 20260912`,
 run `20260913T134602Z-ab45ac90`, train n=1467 eval n=731, real pBFT consensus both draws):
-**balanced accuracy 0.8422**, precision 0.8439, recall 0.8272, MCC 0.6849, PR-AUC 0.9100 —
-between the corpus's measured 0.830 baseline and its intended ~0.85 Bayes ceiling. Kept counts
-matched `data/honeypot/manifest.json` exactly, confirming the generator reproduces bit-for-bit
-through the real chain. Constant-positive baseline on the same eval draw: 0.5000 balanced
-accuracy (exact, by construction).
+**balanced accuracy 0.8422** — between the measured 0.830 baseline and the corpus's intended
+~0.85 ceiling. Constant-positive baseline: 0.5000.
 
-## What M5 must not re-derive
+M5 produced no numbers — mitigation has no bench target (`docs/DEVIATIONS.md` DEV-29's note that
+Alg. 4 is not benchmarked).
 
-- **Case-3 is simulated only, forever** (CLAUDE.md §2). It returns a `PolicyDecision` and writes a
-  log record. No network import, no wallet, no transaction construction. `test_case3_is_inert.py`
-  must assert this at import level, not just at the call site.
-- **`detection.detector.Phase4Handoff`** (`Callable[[Detection], None]`) is the interface M4b
-  built specifically for this milestone. Wire mitigation to it; do not add a new detection→
-  mitigation call path or reach back into `detection/` to add one.
-- **`detection/` and `honeypot/` may not import `framework/` or `mitigation/`** — pinned by
-  `test_module_boundaries.py`. `mitigation/` sits at the same layer as `recovery/`: it may depend
-  on `blockchain/`, `crypto/`, `util/`, and (for Case-2) `recovery/`, never on `framework/`.
-  `framework/phase4_mitigation.py` is what wires it to `detection`'s handoff.
-- **Isolation and recovery already exist.** Case-2 calls into `framework.phase5_recovery`, already
-  built (M3a) — do not reimplement backup restoration inside `mitigation/`.
-- **Every run writes a sidecar and a `measured` RESULTS.md line with its run_id.**
-- **Project compute before running it** (CLAUDE.md §6) — not expected to bind for M5 (no ML, no
-  full-dataset scale), but consensus fuzz tests (Colluding/Equivocating byzantine behaviours) are
-  already in `pbft_harness.py` and should be reused, not rebuilt, for any Case-2/isolation test
-  that needs a faulty replica.
-- **Test harnesses:** `pbft_harness.py`, `m3a_harness.py`, `m3b_harness.py`.
+## What M6 must not re-derive
+
+- **TPS is derived, never separately measured**: `tps = total_tx / total_seconds` (DEV-08). Report
+  marginal per-block cost alongside the average, not instead of it.
+- **Index maintenance (DEV-05) and message-delay modelling (DEV-21) are separate columns**, never
+  inside the Target 3 span (block construction + consensus + append). `configs/bench.yaml`
+  already declares this; a harness that folds either in silently changes what Target 3 means.
+- **Payload size is declared, not measured** (DEV-15): `configs/chain.yaml`
+  `transaction.payload_bytes: 4096`. `payload_bytes_sensitivity: [1024, 4096, 16384]` is the sweep
+  M6 owes; absolute seconds move with it, the trend/ratio targets (DEV-13) do not.
+- **Absolute timings are not the reproduction target** (DEV-13): Python vs. the paper's Java on
+  different hardware. Report trend and ratio; record our own hardware in every sidecar.
+- **`framework/`, `mitigation/`, `recovery/` are all closed as of M5.** `bench/` calls into them;
+  nothing below `framework/` may import `bench/` (`test_nothing_below_framework_imports_it`).
+- **Every run writes a sidecar and a `measured` RESULTS.md line with its run_id, seed and config
+  hash** (`crypto.hashing.CONFIG_HASH_SCHEME`, currently 2 — DEV-18).
+- **Project compute before running it** (CLAUDE.md §6): KNN on the full 2.9M-row BitcoinHeist is
+  the memory hazard on the 8 GB dev box. `--full` runs are opt-in and belong on Ada.
+- **Test harnesses:** `pbft_harness.py`, `m3a_harness.py`, `m3b_harness.py`. `bench/harness.py`
+  (new, M6) times cases 1/2/3 — reuse the cluster builders, do not rebuild them.
 
 ## Next task
 
-**M5 — Mitigation (Phase 4).** `mitigation/state.py` (the state machine
-`DETECTED → ISOLATED → REMEDIATING → (RESTORED | CLEANED | POLICY_BLOCKED) → RESOLVED`, already
-named in `docs/ARCHITECTURE.md`), `mitigation/cases.py` (Case-1 quarantine, GAP-4; Case-2 restore
-via Phase 5; Case-3 simulated payment decision, GAP-3/policy), `mitigation/policy.py`
-(`RW_amt` vs `DT-SYS_i-amt`), `framework/phase4_mitigation.py` wiring `detection.detector
-.Phase4Handoff` to the state machine. Exit: a new `tests/integration/test_full_sequence.py` walks
-Fig. 3 end to end (backup → collection → detection → mitigation → recovery), each of Cases 1-3
-covered by at least one test, `test_case3_is_inert.py` green.
+**M6 — Benchmarks and figures.** `bench/harness.py` (cases 1/2/3 = 5/10/15 blocks × 100 tx on both
+chains, median of N repeats, warm-up discard, marginal per-block cost alongside the total —
+DEV-08), `bench/emit.py` (Table II + Figs. 4, 5, 6a–6d + sidecar JSON), wire `make repro` / `make
+honest` / `make figures` (currently stubs that `exit 1`, per `Makefile`'s M5-era comment). Exit:
+every target in `docs/EXPERIMENTS.md` carries a `measured` or `paper_reported` label, and Figs.
+6(a)–(d)'s trend and marginal-cost-gap claims are verified against our own runs, not assumed.
 
 ## Blockers
 
@@ -104,7 +100,7 @@ BitcoinHeist run. README states the wait and the sha256.
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q2 | Transaction payload size — 4096 B *declared* (DEV-15), not justified | M6 result validity | **Deferred.** Needs M6's sweep; DEV-24 pins the meaning and the measured framing overhead. |
+| Q2 | Transaction payload size — 4096 B *declared* (DEV-15), not justified | M6 result validity | M6's sweep; DEV-24 pins the meaning and the measured framing overhead |
 | Q4 | Do we need real feature-space evasion for M7? | M7 | defer until M6 lands |
 | Q5 | One merged config object or three files at the entry points? | M6 | decide when `bench/` becomes the first multi-config consumer |
 | Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M6 | only if M6 benchmarks a lossy network |
@@ -118,36 +114,41 @@ lowers the bar; at four nodes two colluders fork it, and a test asserts the fork
 protect bytes in transit, not at the servers — hence DEV-23's attested digest (GAP-8). §V-5 is
 substantiated only structurally.
 
-**FLAW-2, closed for the framework's own path (M3b, M4b).** The paper defines neither the
+**FLAW-2, closed for the framework's own path (M3b, M4b, M5).** The paper defines neither the
 honeypot's output nor its features (GAP-3), then evaluates on an unrelated Bitcoin dataset. M3b
-supplied the missing feature layer; M4b proved it reachable through the paper's own sequence —
-`framework.phase3_detection.run()` reads real `BC_SigRW` chains `framework.phase2_collection.run()`
-built through actual pBFT consensus, and scores a credible 0.8422 balanced accuracy against the
-corpus's stated ~0.85 ceiling. M4a's BitcoinHeist row, by contrast, never touches Phases 1, 2, 4
-or 5 at all. FLAW-2 is therefore sharper than "wrong dataset": the paper's own framework produces
-a real, boundable result when actually run, and the paper substitutes an unrelated dataset for it.
+supplied the missing feature layer; M4b proved it reachable through the paper's own sequence; M5
+closed the loop — `tests/integration/test_full_sequence.py` runs backup, collection, detection,
+mitigation and recovery in one test, the sequence Fig. 3 draws and the paper itself never runs.
+FLAW-2 is therefore sharper than "wrong dataset": the paper's own framework produces a real,
+boundable, end-to-end result when actually run, and the paper substitutes an unrelated dataset for
+half of it and never demonstrates the other half at all.
 
 **FLAW-4, extended, and the non-reproduction (M4a, Q10).** The 90/10 resample is degenerate *and*
 bounded at 46,014 rows — 1.58% of the cited 2.9M. Our honest reproduction (address dropped,
 grouped split) reaches 0.9442/0.9697 against a published 0.9898/0.990; Q10 tested and ruled out
 `address`-as-feature and split-grouping as the explanation, so the gap is reported as
-**unexplained**. Constant-positive on the paper's own 90/10 split scores 0.9000/0.9474, and
-Sharmeen et al.'s published F1 of 0.960 clears that floor by only 0.013 (FLAW-1, extended).
+**unexplained**.
+
+**Alg. 4's two silent gaps (M5).** The paper never says which of Case-1/2/3 applies to a detection,
+or how a honeypot detection names the `SYS_i` it concerns — Fig. 3 draws "detect" straight into
+"mitigate" with nothing in between. DEV-29 makes both explicit caller inputs rather than guessing;
+worth a paragraph in the critique alongside GAP-4 (erasure semantics) and DEV-09 (Case-3's premise
+contradicting §II-C).
 
 ## Carried debt
 
 | # | Item | Retire by |
 |---|---|---|
-| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/` now has seven files. | M6 |
+| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. | M6 |
 | D3 | The bus never serialises, so wire-encoding cost is absent from the consensus span. | M6 |
 | D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
-| D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8 and **removed in 1.10**; `configs/ml.yaml` still declares it. Migrate to `l1_ratio=0` before upgrading. | before sklearn 1.10 |
+| D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10. | before sklearn 1.10 |
 
 ## Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| We wrote both the honeypot generator and its classifier | M4b's number could measure the generator | difficulty stated up front (0.85), enforced by M3b's leakage tests, and checked against the *trained* ensemble (not just raw features) by `scripts/run_phase3_detection.py`'s leak guard |
+| We wrote both the honeypot generator and its classifier | M4b's number could measure the generator | difficulty stated up front (0.85), enforced by M3b's leakage tests |
 | Python timings diverge from the paper's Java | Targets 3 and 4 unverifiable | report ratios and shape (DEV-13) |
 | Zero-delay consensus measures encryption, not consensus | Target 3 claims something different | DEV-21: delay 0 and delay > 0 in separate columns |
 | The non-reproduction is read as our bug rather than a finding | the write-up's central claim collapses | baselines published beside every number; Q10 tested and ruled out address/split leakage |

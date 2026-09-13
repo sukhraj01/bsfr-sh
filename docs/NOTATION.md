@@ -31,9 +31,9 @@ Table I itself is a raster figure in the PDF.
 | `FT_RW` | ransomware behavioural feature vector | `honeypot.features.FeatureVector` |
 | `InfSYS_i` | infected system record | `mitigation.state.InfectedSystem` |
 | `AMsg` | alert message | `mitigation.state.AlertMessage` |
-| `RW_amt` | ransom amount demanded | `mitigation.policy.ransom_amount` |
-| `DT-SYS_i-amt` | assessed value of data on `SYS_i` | `mitigation.policy.data_value` |
-| `K_d` | decryption key held by adversary | `mitigation.policy` (simulated only) |
+| `RW_amt` | ransom amount demanded | `mitigation.policy.PolicyDecision.ransom_amount`, an `evaluate()` argument |
+| `DT-SYS_i-amt` | assessed value of data on `SYS_i` | `mitigation.policy.PolicyDecision.data_value`, an `evaluate()` argument |
+| `K_d` | decryption key held by adversary | never retrieved — `mitigation.cases.case3_simulated_payment` is SIMULATED ONLY (DEV-09) |
 
 ## Chains and blocks
 

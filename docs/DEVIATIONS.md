@@ -91,6 +91,15 @@ framework coherent.
 **Ours:** modelled as quarantine + integrity verification state transition. We do not implement
 malware removal logic; there is nothing real to remove.
 
+**Amendment (M5, 2026-09-13): built as `mitigation.cases.case1_quarantine`.** It is a pure
+transition on an already-isolated system (`mitigation.state.Remediating.clean()`): the quarantine
+itself is Alg. 4 line 3's isolation, already done before Case-1 runs; `case1_quarantine` records
+whether the post-quarantine integrity check (`integrity_verified: bool`) passed, and always
+reaches `CLEANED` — a failed check is recorded, not hidden, and it is the caller's decision (Alg. 4
+lines 8-10, "else re-run mitigation") whether that means trying again. No file, process, or
+signature is scanned; there is no removal target in a corpus of synthesized feature vectors
+(CLAUDE.md §2). Tested in `tests/unit/test_mitigation_cases.py`.
+
 ### DEV-05 · ADD · Per-system backup index
 **Paper:** Alg. 5 line 1–2 implies scanning `BC_DTBU` for a system's backups.
 **Ours:** `recovery.locator.BackupIndex` maintained on append. Falls back to full scan when cold,
@@ -211,6 +220,19 @@ construction, no key retrieval. Enforced by `tests/unit/test_case3_is_inert.py`.
 **Rationale:** the paper itself notes (§II-C) there is no guarantee the key arrives or works;
 automated ransom payment funds attackers and is sanctioned conduct in several jurisdictions. The
 control-flow contribution is preserved; the harmful capability is not.
+
+**Amendment (M5, 2026-09-13): built as `mitigation.cases.case3_simulated_payment`, and the
+inertness is a test, not a comment.** `mitigation.policy.evaluate()` computes `RW_amt <
+DT-SYS_i-amt` (the boundary at equality resolves to `would_pay=False`, deliberately — see that
+module's docstring) into a `PolicyDecision`; `case3_simulated_payment` writes exactly one audit
+log record via `util.logging.event` and calls `mitigation.state.Remediating.block()`, which returns
+`PolicyBlocked` unconditionally. There is no state in `mitigation.state` representing a completed
+or attempted payment — `would_pay=True` and `would_pay=False` produce the same outcome *type*,
+differing only in the recorded decision. `tests/unit/test_case3_is_inert.py` enforces this three
+ways: an AST scan of every module in `mitigation/` for network/subprocess/socket imports and
+calls (mirroring `test_honeypot_is_inert.py`), a handler-based check that calling the function
+produces exactly one log record and nothing else, and a check that both sides of the policy
+boundary produce `PolicyBlocked`.
 
 ### DEV-10 · FILL · Explicit pBFT threshold and view change
 **Paper:** "a threshold fraction of miners commit," no value given; no view change described.
@@ -640,3 +662,28 @@ verdict, so a hit does not end monitoring.
 **Impact on reproduction:** none — the paper reports no numbers for this half of Phase 3 at all
 (FLAW-2). `RESULTS.md`'s M4b entry (balanced accuracy 0.8422, seed 20260912) is the first number
 this project has produced from it.
+
+### DEV-29 · FILL · Case selection and detection-to-system attribution in Phase 4 (M5)
+**Paper:** Alg. 4 presents Case-1/2/3 as three alternatives for remediating `InfSYS_i` (lines 5-7)
+and never says which one applies to a given detection, or on what basis a real deployment would
+choose. Separately, Alg. 3's detection runs over honeypot signatures and features (`Sig_RW`,
+`FT_RW`) — properties of a *sample* — while Alg. 4 remediates a *system*, `SYS_i`. Fig. 3's own
+sequence diagram draws the arrow straight from "detect" to "mitigate" with no step in between that
+names which system is affected.
+
+**Problem:** silently picking a rule for either question — e.g. "use Case-2 whenever a backup
+exists," or "the detecting honeypot's collector's most-recently-active system" — would be exactly
+the kind of invented behaviour CLAUDE.md §2's "never silently fix the paper" is about, except
+applied to a gap instead of a bug. Both are real operational questions a deployment would have to
+answer, and the paper gives no basis for answering either.
+
+**Ours:** `framework.phase4_mitigation.run()` takes both as explicit arguments from its caller:
+`case: MitigationCase` (which of Case-1/2/3 to run) and `system_id: str` (which system the
+detection concerns). Nothing in `framework/`, `mitigation/` or `detection/` infers either — a
+test harness, a script, or eventually an operator supplies them, the same way `framework
+.phase5_recovery.run()` already takes an explicit `system: System` rather than guessing one from
+the chain. `tests/integration/test_full_sequence.py` makes this explicit at its call site: the
+system a detection is attributed to is the same one Phase 1 backed up, by construction of the
+test, not by anything Phase 3 or Phase 4 derives.
+**Impact on reproduction:** none — Alg. 4 is not benchmarked (M6's Figs. 6a-d are Algs. 1/2/5 and
+consensus timing only).

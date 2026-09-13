@@ -292,9 +292,30 @@ output feeds Phase 3's input (`tests/integration/test_phase2_feeds_phase3.py`).
 ## `mitigation/` and `recovery/`
 
 `mitigation/state.py` is an explicit state machine:
-`DETECTED → ISOLATED → REMEDIATING → (RESTORED | CLEANED | POLICY_BLOCKED) → RESOLVED`.
+`DETECTED → ISOLATED → REMEDIATING → (RESTORED | CLEANED | POLICY_BLOCKED) → RESOLVED`. Each state
+is its own frozen dataclass nesting its predecessor (`Isolated.detected`, `Remediating.isolated`,
+...), and the only way to obtain one is to call the method its predecessor exposes — `Detected`
+has no `remediate()`, `Isolated` has no `restore()`/`clean()`/`block()`. Illegal transitions are
+unrepresentable rather than checked, the same discipline `blockchain.block.BlockDraft.seal()`
+applies to a block header (M2a): there is no code path from `Detected` to `Remediating` that skips
+`Isolated`, which is what makes Alg. 4's containment argument (isolate before remediate) structural.
+
+`mitigation/cases.py` holds the three branches (Alg. 4 lines 5-7), each a method call on
+`Remediating`: `case1_quarantine` (DEV-04 — no real erasure, a state transition only),
+`case2_restore` (takes an injected zero-argument `restore` callable, since `mitigation/` may not
+import `framework/`), and `case3_simulated_payment` — **SIMULATED ONLY** (DEV-09, CLAUDE.md §2):
+evaluates `mitigation/policy.py`'s `RW_amt < DT-SYS_i-amt` condition, writes one audit log record,
+and always returns `PolicyBlocked` regardless of the decision. `tests/unit/test_case3_is_inert.py`
+enforces this structurally (no network/subprocess/socket import anywhere in `mitigation/`, and the
+function's only observable effect is that one log record).
 
 `POLICY_BLOCKED` is where Case-3 terminates. It is a terminal simulated state.
+
+`framework/phase4_mitigation.py` wires Phase 3's `detection.detector.Phase4Handoff` to this state
+machine (Alg. 4 lines 1-10). It takes `case: MitigationCase` and `system_id` explicitly from its
+caller, because the paper specifies neither how a case is chosen nor how a honeypot detection maps
+to a protected system (DEV-29). Case-2 binds `case2_restore`'s `restore` callable to
+`framework.phase5_recovery.run`, which is what closes the loop back into Phase 5.
 
 `recovery/locator.py` finds a system's backup chunks. `scan()` is the paper's walk. `BackupIndex`
 (DEV-05) is the per-system pointer index that the key holder maintains on append. `identify()`
@@ -325,6 +346,7 @@ Participants and phase orchestration. Depends on everything below it; nothing de
 | `entities.py` | `System` (`SYS_i`), `CloudServer` (`CS_l`), `establish_session`: an identity, a keypair, and one `crypto.channel.Channel` per established session. Thin: each entity performs its own steps and never sequences them |
 | `_block_pipeline.py` | Alg. 1 lines 2–10 = Alg. 2 lines 3–10, parametrised on a payload builder and the target chain's `Cluster`. It submits transactions, never blocks (DEV-22), and waits until `f+1` replicas hold each block (the pBFT client rule) |
 | `phase1_backup.py` | Alg. 1: collect over `SK`, attest (DEV-23), chunk (DEV-24), encrypt, pipeline |
+| `phase4_mitigation.py` (M5) | Alg. 4: isolate, remediate, dispatch to `mitigation.cases`; binds Case-2's restore to `phase5_recovery.run` |
 | `phase5_recovery.py` | Alg. 5: request, identify, begin, decrypt at `CS'_l`, two hops, `SYS_i` verifies |
 
 **Where a boundary bit.** `recovery/` implements Alg. 5's hops between entities that live in
