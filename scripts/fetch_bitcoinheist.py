@@ -19,13 +19,17 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import shutil
 import sys
+import time
 import urllib.request
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
+from urllib.error import URLError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
@@ -42,6 +46,13 @@ from bsfr_sh.util import logging as log  # noqa: E402
 URL = "https://archive.ics.uci.edu/static/public/526/bitcoinheistransomwareaddressdataset.zip"
 RAW_DIR = REPO_ROOT / "data" / "raw"
 CSV_NAME = "BitcoinHeistData.csv"
+
+#: A single-shot download has no defence against a connection that dies mid-stream — observed
+#: live on a slow/unreliable link (M6b, Ada): a ~50 MB download dropped after ~55 KB. Retries
+#: resume from what is already on disk via a `Range` header, so a late drop costs seconds, not a
+#: full re-download.
+_DOWNLOAD_ATTEMPTS = 8
+_RETRY_BACKOFF_S = 5.0
 
 
 def _sha256(path: Path) -> str:
@@ -71,6 +82,46 @@ def _count(csv_path: Path) -> tuple[int, int, int, int]:
     return rows, benign, rows - benign, len(families)
 
 
+def _download_with_retry(url: str, dest: Path, *, logger: Any, attempts: int) -> None:
+    """Download `url` to `dest`, resuming a partial file across retries on a dropped connection.
+
+    Each attempt sends a `Range` header for whatever is already on disk. A server that honours it
+    replies `206 Partial Content` and the bytes are appended; one that does not (or a stale/
+    unrelated partial file) replies with something else and the download restarts from zero.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        existing = dest.stat().st_size if dest.exists() else 0
+        request = urllib.request.Request(url)
+        if existing:
+            request.add_header("Range", f"bytes={existing}-")
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                resumed = bool(existing) and response.status == 206
+                with dest.open("ab" if resumed else "wb") as out:
+                    shutil.copyfileobj(response, out)
+            log.event(
+                logger,
+                "dataset_download_finished",
+                attempt=attempt,
+                bytes=dest.stat().st_size,
+            )
+            return
+        except (URLError, http.client.HTTPException, TimeoutError, ConnectionError) as exc:
+            last_exc = exc
+            log.event(
+                logger,
+                "dataset_download_retry",
+                attempt=attempt,
+                attempts=attempts,
+                bytes_so_far=dest.stat().st_size if dest.exists() else 0,
+                error=str(exc),
+            )
+            if attempt < attempts:
+                time.sleep(_RETRY_BACKOFF_S * attempt)
+    raise DatasetError(f"download of {url} failed after {attempts} attempts: {last_exc}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default=URL)
@@ -85,8 +136,7 @@ def main() -> int:
 
     if not args.verify_only and not csv_path.exists():
         log.event(logger, "dataset_download_started", url=args.url)
-        with urllib.request.urlopen(args.url) as response, archive.open("wb") as out:  # noqa: S310
-            shutil.copyfileobj(response, out)
+        _download_with_retry(args.url, archive, logger=logger, attempts=_DOWNLOAD_ATTEMPTS)
         with zipfile.ZipFile(archive) as bundle:
             members = [n for n in bundle.namelist() if n.lower().endswith(".csv")]
             if len(members) != 1:

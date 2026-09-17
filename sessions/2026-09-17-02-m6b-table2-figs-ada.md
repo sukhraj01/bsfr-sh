@@ -145,7 +145,17 @@ Commit explaining why.
 - `scripts/ada_honest_mode.sbatch` — rewritten twice this session (see Findings/dead ends): first
   to the account's real QOS/partition limits with a `/share1` working directory, then corrected
   to a `/scratch`-based design once `/share1` turned out to be login-node-only. **AI-generated.**
-- Ada job submitted (job 2700027) from a small code-only checkout rsynced to `/home2/sukhraj.singh/bsfr-sh` — see Numbers/Handover for outcome.
+- Ada job submitted (job 2700027) from a small code-only checkout rsynced to
+  `/home2/sukhraj.singh/bsfr-sh`. Ran 1h25m (venv built successfully) then died on the dataset
+  download (`http.client.IncompleteRead`, ~55 KB into ~50 MB). **AI-generated.**
+- `scripts/fetch_bitcoinheist.py` — `_download_with_retry()` (new): `Range`-header retry/resume
+  loop (8 attempts) around the single-shot `urlopen` that had no defence against a dropped
+  connection. **AI-generated.**
+- `scripts/ada_honest_mode.sbatch` — persists the built venv to
+  `$HOME_CHECKOUT/.venv-ada-persist` (NFS-shared) so a retry after a later transient failure does
+  not repeat the ~1h `pip install`. Resubmitted as **job 2700090**; currently `PENDING`
+  (`QOSMaxCpuPerUserLimit` — a second, unrelated job already on this account is using part of the
+  shared 10-cpu QOS budget) — see Handover. **AI-generated.**
 - `docs/DEVIATIONS.md` DEV-31 (new) — the memory-ceiling parameterisation and the `/share1`
   correction. `docs/ROADMAP.md` — M6a/M6b/M6 ticked. `RESULTS.md` — `make repro`/`make honest`
   lines appended (M6b section). **AI-generated.**
@@ -172,14 +182,32 @@ Commit explaining why.
   *is* NFS-mounted on compute nodes and (b) compute nodes have large, unquota'd local `/scratch`.
   First rsync of the *full* checkout (including the 225 MB dataset) to `/share1` was abandoned
   mid-transfer once this was discovered — a code-only rsync to `/home2` (~2.2 MB) replaced it.
-- **The login node's internet egress is slow; a compute node's is not.** A `curl` to UCI's
-  archive from the login node managed ~14 KB/s and timed out at 15s partway through 209 KB. The
-  identical request from an allocated compute node (`envtest4`) completed in 0.1s. This reversed
-  the original plan (rsync the dataset in from the dev box) — fetching it *inside* the job, on
-  the compute node, is faster than transferring it from either the dev box or the login node.
-  This also matches why the very first `rsync` of this session's checkout to `/share1` (which
-  included `data/raw/`) was so slow: ~30-75 KB/s sustained, consistent with a throttled or
-  high-latency path between this sandbox and Ada specifically, not a cluster-wide limit.
+- **Dead end / corrected finding: "the compute node's internet is fast" was wrong.** `envtest4`'s
+  probe (`curl` to `pypi.org`, 0.1s from a compute node vs. a login-node request that timed out at
+  15s) was read as "compute nodes have fast egress, fetch the dataset there." It does not
+  generalise: `pip install`'s real package downloads from that same compute node, in job 2700027,
+  ran at the same ~60 KB/s the dev-box rsync and login-node curl both showed, and the dataset
+  download that killed the job was at that same rate when it dropped. The `envtest4` probe
+  measured latency to a small index page, not bulk-transfer bandwidth — a login-vs-compute
+  difference that was never actually a login-vs-compute difference. The real, load-bearing
+  characteristic is: **this account's bulk transfer is slow (~30-75 KB/s) everywhere, on every
+  path tried this session** — dev-box-to-Ada, Ada-login-to-UCI, and Ada-compute-to-PyPI alike.
+  Fetching the dataset inside the job is still the right design (no reason to pay the slow
+  transfer twice, once to the dev box and once from Ada), but not because compute nodes are
+  faster — because a resumable in-job fetch survives the slowness better than an external rsync
+  where a drop mid-transfer has no protocol-level way to resume cheaply.
+- **The dataset download itself needed the same lesson `envtest4` half-taught: don't trust a
+  single fast probe as proof of throughput.** `fetch_bitcoinheist.py`'s single-shot `urlopen`
+  had no retry; at ~30-75 KB/s sustained over a multi-minute transfer, a connection drop is not a
+  rare event, and job 2700027 hit one after 1h25m of successful setup — an expensive place to
+  fail with no resume. Fixed with a `Range`-header retry loop once, generically, in the fetch
+  script itself rather than only in the sbatch, so `make data` gets the same robustness locally.
+- **A second job on the same account, not started by this session, can silently gate a
+  resubmission.** Job 2700090's `PENDING`/`QOSMaxCpuPerUserLimit` was not a bug in the new sbatch
+  — `squeue -u $USER` showed a pre-existing, unrelated job (`2700069`, "a2-hist-...") already
+  consuming 4 of the account's shared 10-cpu QOS budget. Left queued rather than reduced to fit,
+  since SLURM starts a pending job automatically once resources free and a smaller request would
+  have meant a smaller, non-full-scale KNN run for no real gain.
 - **QOS/partition limits were discovered, not assumed, and they were stricter than the M4a
   placeholder in cpu/mem but looser than initially feared in what they'd allow.** `sacctmgr`/
   `scontrol` gave exact numbers (`cpu<=10, mem<=32000M`, partition `u22` only) before any real
@@ -192,13 +220,14 @@ Commit explaining why.
 - `make honest` (honest_mode, full, 8 GB local ceiling): same section, run
   `20260917T175754Z-f3b9e363`. `results/tables/table2_paper_mode.csv`,
   `results/tables/table2_honest_mode.csv`, Figs. 4-5 (+ baseline variants) all written locally.
-- Ada job 2700027: see Handover for final status as of session end.
+- Ada job 2700027 (failed, IncompleteRead) and its resubmission as job 2700090 (PENDING): see
+  Handover for final status as of session end.
 
 ## Deviations opened or changed
 
 - DEV-31 added — `honest_mode`'s memory ceiling is now a parameter with a principled subsampling
   fallback (not a hard-coded 8 GB constant), and records the `/share1`-is-login-node-only
-  correction to how the Ada job actually has to be structured.
+  correction and the dataset-download retry/resume fix to how the Ada job actually has to run.
 
 ---
 
@@ -207,25 +236,27 @@ Commit explaining why.
 **State after:** `make repro`/`make honest` are real entry points now, both producing tables,
 figures and sidecars without touching Ada. Table II (both modes) and Figs. 4-5 (+ baseline
 variants) exist in `results/`. `detection.models.fits_in_memory()`'s ceiling is a parameter with
-a principled subsampling fallback, not a hard-coded constant. The Ada `honest_mode` job is
-**submitted (job 2700027) and running**, not completed — it was still in its `pip install` step
-(slow bulk transfer, ~30-75 KB/s observed throughout this session, from the dev-box-to-Ada rsync
-through Ada's own PyPI downloads) when the session ended, well within its 5-hour SLURM budget.
-M6 (both halves) is closed regardless: every `docs/EXPERIMENTS.md` target carries a `measured` or
-`paper_reported` label already, since the local, full-scale `honest_mode` run (KNN subsampled)
-already covers Target 1/2 honestly — the Ada job upgrades KNN from a named subsample to the full
-2.9M rows, it does not unblock anything that was blocked.
+a principled subsampling fallback, not a hard-coded constant. `scripts/fetch_bitcoinheist.py`'s
+download is now retry/resume-capable. The Ada `honest_mode` job has been submitted twice: job
+2700027 ran 1h25m (venv built fine) then died on the dataset download (fixed, see Findings);
+**job 2700090 is the live resubmission, currently `PENDING`** (`QOSMaxCpuPerUserLimit` — a
+second, unrelated job on this account is using part of the shared 10-cpu QOS budget) and will
+start automatically once that frees up. M6 (both halves) is closed regardless: every
+`docs/EXPERIMENTS.md` target carries a `measured` or `paper_reported` label already, since the
+local, full-scale `honest_mode` run (KNN subsampled) already covers Target 1/2 honestly — the
+Ada job upgrades KNN from a named subsample to the full 2.9M rows, it does not unblock anything
+that was blocked.
 
 **Next task:** No implementation milestone is open. Whoever picks this up next should first check
-`ssh ada 'sacct -j 2700027'`: if `COMPLETED`, retrieve and fold in the full-scale KNN result (see
-`RESULTS.md`'s Ada paragraph for the exact commands); if the job is gone or failed, re-submit
-`scripts/ada_honest_mode.sbatch` from a fresh `/home2/<user>/bsfr-sh` checkout — the script is
-self-contained (copies itself into `/scratch`, builds its own venv, fetches its own data) and
-does not depend on anything from this session's checkout surviving. After that: M7 (stretch,
-`docs/ROADMAP.md`) or report writing.
+`ssh ada 'sacct -j 2700090'`: if `COMPLETED`, retrieve and fold in the full-scale KNN result (see
+`RESULTS.md`'s Ada paragraph for the exact commands); if still `PENDING` or `RUNNING`, no action
+needed — it will finish or can be checked again later; if it is gone or `FAILED` for a new
+reason, re-submit `scripts/ada_honest_mode.sbatch` from `/home2/sukhraj.singh/bsfr-sh` (already a
+working checkout with a persisted venv at `.venv-ada-persist` — a resubmit from there is fast, it
+skips the ~1h `pip install`). After that: M7 (stretch, `docs/ROADMAP.md`) or report writing.
 
-**New blockers:** None that block further implementation. The Ada job is in-flight, not blocking
-— M6b's exit condition explicitly allows "submitted, not completed."
+**New blockers:** None that block further implementation. The Ada job is queued, not blocking —
+M6b's exit condition explicitly allows "submitted, not completed."
 
 **Questions opened / closed:** No numbered `PROJECT_STATE.md` questions touched this session
 (Q4/Q8 remain open, both M7-scoped). The `/share1`-is-login-node-only finding and the pip/rsync

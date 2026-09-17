@@ -40,7 +40,7 @@ report writing — no more implementation milestones are open.
 | `detection/` dataset, models, metrics, profiles, detector | done | M4a, M4b |
 | `bench/harness.py`, `bench/emit.py`, Figs. 6a-e | done | M6a |
 | `make repro` / `make honest`, Table II, Figs. 4-5 | done | M6b |
-| Ada `honest_mode` (full-scale KNN) | submitted, job 2700027 | M6b — see Current numbers |
+| Ada `honest_mode` (full-scale KNN) | submitted, job 2700090 (PENDING, QOS-gated) | M6b — see Current numbers |
 
 ## Current numbers
 
@@ -56,7 +56,7 @@ prec=0.397 rec=0.424 · LR predicts nothing (mcc=0 — same model that hit the c
 baseline exactly under `paper_mode`, DEV-06's clearest illustration) · KNN (780,336-row
 stratified subsample, 8 GB local ceiling, DEV-31) mcc=0.300 prec=0.541 rec=0.172. Constant-
 negative baseline: 0.9858 accuracy, 0 recall. `results/tables/table2_honest_mode.csv`. Full-scale
-KNN (Ada, job 2700027): **submitted**; see `RESULTS.md` for whether it completed in-session.
+KNN (Ada, job 2700090): **submitted, PENDING**; see `RESULTS.md` for whether it completed in-session.
 
 **Honeypot detection, Alg. 3 end to end** (`scripts/run_phase3_detection.py --seed 20260912`,
 run `20260913T134602Z-ab45ac90`, train n=1467 eval n=731, real pBFT consensus both draws):
@@ -82,10 +82,12 @@ ciphertext overhead), not run.
 
 **No implementation milestone is open.** M0-M6 are all closed; every `docs/EXPERIMENTS.md` target
 carries a `measured` or `paper_reported` label except the Ada full-scale-KNN cell, which is
-submitted and running (job 2700027) — check `sacct -j 2700027` on Ada, or re-submit
-`scripts/ada_honest_mode.sbatch` if it did not survive. If it completed: copy
+submitted (job 2700090, PENDING on a shared CPU quota — will auto-start) — check `sacct -j 2700090`
+on Ada, or re-submit `scripts/ada_honest_mode.sbatch` from `/home2/sukhraj.singh/bsfr-sh` if it
+did not survive (a resubmit from there reuses the persisted venv at `.venv-ada-persist` and skips
+the ~1h `pip install`). If it completed: copy
 `~/bsfr-sh/results/tables/table2_honest_mode_ada.csv` and
-`~/bsfr-sh/ada_honest_stdout_2700027.log` back (`scp`), replace the local
+`~/bsfr-sh/ada_honest_stdout_2700090.log` back (`scp`), replace the local
 `results/tables/table2_honest_mode.csv` with the Ada one (all four models at full scale, not a
 KNN subsample), and paste its `RESULTS.md` lines in. Otherwise: M7 (stretch, `docs/ROADMAP.md`)
 or report writing are the only remaining work.

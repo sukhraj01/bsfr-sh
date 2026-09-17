@@ -815,11 +815,29 @@ GB quota, nearly empty, looked like the obvious choice next to a ~3.5 GB-free ho
 test jobs (`envtest`/`envtest2`, this session) showed `/share1` is **login-node-only** — a compute
 node's `df -h` never lists it, and a job that writes there fails at output-file-open time with no
 script output produced at all. `/home2` (home) *is* NFS-mounted on compute nodes; compute nodes
-also have node-local `/scratch` (1.8 TB, no per-user quota) and, unexpectedly, faster and more
-reliable internet egress than the login node (a UCI archive request that timed out at 15s from
-the login node completed in 0.1s from a compute node, `envtest4`). The working sbatch therefore
-keeps only a small, code-only checkout under `/home2`, and has the job itself copy that into
+also have node-local `/scratch` (1.8 TB, no per-user quota). The working sbatch therefore keeps
+only a small, code-only checkout under `/home2`, and has the job itself copy that into
 `/scratch/$SLURM_JOB_ID`, build the venv, and fetch the dataset there — never touching `/share1`.
+
+**Bulk transfer is slow everywhere on this account, not just the login node — a second correction
+to a first reading.** An early probe (`curl` to `pypi.org`'s index page, `envtest4`) completed in
+0.1s from a compute node against a login-node request that timed out at 15s, and was read as
+"compute nodes have fast internet, fetch the dataset there." That did not generalise: `pip
+install`'s real package downloads on the *same* compute node, in the first real submission (job
+2700027), ran at the same ~30-75 KB/s the dev-box-to-Ada rsync and the login-node `curl` both
+showed — a small-page latency probe is not a bulk-bandwidth measurement. That job died 1h25m in
+on the dataset download itself (`http.client.IncompleteRead`, ~55 KB into a ~50 MB archive) —
+`scripts/fetch_bitcoinheist.py`'s single-shot `urlopen` had no retry, and at this sustained
+transfer rate over a multi-minute download a drop is an expected event, not a rare one. Fixed
+generically in the fetch script (`_download_with_retry`: `Range`-header resume, 8 attempts, so a
+late drop costs seconds not the whole file) rather than only in the sbatch, so `make data` gets
+the same robustness locally. The sbatch additionally persists the built venv to
+`$HOME_CHECKOUT/.venv-ada-persist` (NFS-shared, survives the job) so a retry after any *later*
+transient failure does not also repeat the ~1 hour `pip install`. Resubmitted as job 2700090;
+fetching the dataset inside the job (rather than rsyncing it in) is still the right design, but
+because a resumable in-job fetch survives a slow, drop-prone connection better than an external
+transfer where a drop has no cheap resume — not because compute nodes have faster egress, which
+they do not.
 
 **Impact on reproduction:** none on Target 1/2's accuracy/F1 headline — this is entirely about
 `honest_mode`, which the paper does not report at all (DEV-06). It does mean the local, 8 GB-box

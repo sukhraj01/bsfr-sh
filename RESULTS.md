@@ -285,18 +285,35 @@ more data helps, unsurprisingly, and the paper's methodology never had the chanc
 because it never evaluated at the natural class balance at all. `results/tables/table2_honest_mode.csv`
 carries the confusion matrix and balanced accuracy per model alongside these.
 
-**Ada, full-scale KNN, `scripts/ada_honest_mode.sbatch` (DEV-31).** Adapted twice this session:
-first to the account's real SLURM limits (`u22` partition, `research` account, `low` QOS: 10
-cpus / 30000M max — discovered via `sacctmgr`/`scontrol`, not the M4a placeholder), then again
-once `/share1` (the first working-directory choice) turned out to be login-node-only storage —
-see DEV-31. **Submitted as job 2700027** (`ada.iiit.ac.in`, `sbatch scripts/ada_honest_mode.sbatch`
-run from a code-only checkout at `/home2/sukhraj.singh/bsfr-sh`). Bulk data transfer to/from/within
-Ada from this environment is consistently slow (~30-75 KB/s observed for the dev-box rsync and,
-surprisingly, also for `pip`'s own package downloads on the compute node) — the job was still in
-its `pip install` step, well within its 5-hour budget, when this session ended. **Not completed
-within the session; this is the honest status, per the session brief's explicit fallback** ("the
-SBATCH submitted... recorded regardless" if the job has not completed). To collect the result
-later: `ssh ada 'sacct -j 2700027'`; if `COMPLETED`, `scp` back
-`~/bsfr-sh/results/tables/table2_honest_mode_ada.csv` and `~/bsfr-sh/ada_honest_stdout_2700027.log`
+**Ada, full-scale KNN, `scripts/ada_honest_mode.sbatch` (DEV-31).** Adapted three times this
+session, each correction found by actually trying, not guessed in advance:
+
+1. Account's real SLURM limits (`u22` partition, `research` account, `low` QOS: 10 cpus /
+   30000M max — `sacctmgr`/`scontrol`, not the M4a placeholder's `--mem=64G --cpus-per-task=16`).
+2. `/share1` (the first working-directory choice — large, nearly-empty quota) turned out to be
+   **login-node-only**: invisible to compute nodes, so a job that wrote there failed at
+   output-file-open time with no script output at all. Corrected to a `/scratch`-per-job design,
+   caught by two 5-minute test jobs before a real run repeated the mistake.
+3. **Job 2700027** (first real submission) ran for 1h25m — venv built successfully — then died
+   on the *dataset* download: `http.client.IncompleteRead`, ~55 KB into a ~50 MB archive, no
+   retry logic in `scripts/fetch_bitcoinheist.py`'s single-shot `urlopen`. Fixed with a
+   `Range`-header retry/resume loop (`_download_with_retry`, 8 attempts) so a drop late in a slow
+   transfer costs seconds, not the whole file — and the sbatch now persists the built venv to
+   `$HOME_CHECKOUT/.venv-ada-persist` (NFS-shared, survives the job) so a retry after a
+   *later* transient failure does not repeat the ~1h pip install too.
+
+**Resubmitted as job 2700090.** Currently `PENDING` (`QOSMaxCpuPerUserLimit`) — a second, unrelated
+job already running on this account (`2700069`, not started by this session) is using 4 of the
+10-cpu QOS budget, so the 10-cpu request queues rather than failing; it will start automatically
+once that job finishes or frees enough of the shared quota. Bulk transfer to/from/within Ada was
+consistently slow all session (~30-75 KB/s, including `pip`'s own PyPI downloads from the compute
+node) — this is an account/institution-level characteristic, not something either job's script
+choices caused.
+
+**Not completed within the session; this is the honest status, per the session brief's explicit
+fallback** ("the SBATCH submitted... recorded regardless" if the job has not completed). To
+collect the result later: `ssh ada 'sacct -j 2700090'`; if `COMPLETED`, `scp` back
+`~/bsfr-sh/results/tables/table2_honest_mode_ada.csv` and `~/bsfr-sh/ada_honest_stdout_2700090.log`
 (has the `RESULTS.md` lines) and replace the local `table2_honest_mode.csv` with the Ada one — all
-four models at full scale, not a KNN subsample.
+four models at full scale, not a KNN subsample. If `PENDING` still, no action is needed; SLURM
+starts it on its own once resources free up.

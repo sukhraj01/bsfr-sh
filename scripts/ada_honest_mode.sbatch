@@ -60,20 +60,39 @@ set -euo pipefail
 
 HOME_CHECKOUT="${SLURM_SUBMIT_DIR:-$HOME/bsfr-sh}"
 WORK="/scratch/${SLURM_JOB_ID}/bsfr-sh"
+# `/scratch` is wiped when the job ends, so a venv built there is rebuilt — meaning
+# re-downloaded — on every attempt. At the ~30-75 KB/s bulk-transfer rate observed all session
+# (dev-box<->Ada, and Ada's own compute-node<->PyPI), that is over an hour paid again on every
+# retry. Persisting the built venv to `$HOME_CHECKOUT` (NFS-shared, survives the job) means only
+# the *first* successful attempt pays it; every retry after a transient failure elsewhere in the
+# script (the dataset fetch, say — see below) just copies it back into a fresh scratch dir.
+PERSIST_VENV="$HOME_CHECKOUT/.venv-ada-persist"
 
 echo "node: $(hostname)   home checkout: $HOME_CHECKOUT   scratch work dir: $WORK"
 
 mkdir -p "$(dirname "$WORK")"
-cp -r "$HOME_CHECKOUT" "$WORK"
+rsync -a --exclude='.venv' --exclude='.venv-ada-persist' --exclude='data/raw/*.csv' \
+    "$HOME_CHECKOUT/" "$WORK/"
 cd "$WORK"
 mkdir -p results/logs results/tables results/figures data/raw
 
 module load u22/python/3.12.4
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e ".[dev]"
 
-# Fast from the compute node (see header); slow/unreliable from the login node.
+if [ -x "$PERSIST_VENV/bin/python" ]; then
+    echo "reusing persisted venv from a previous attempt: $PERSIST_VENV"
+    cp -r "$PERSIST_VENV" .venv
+else
+    echo "building venv fresh (slow bulk transfer expected, ~30-75 KB/s observed this session)"
+    python3 -m venv .venv
+    .venv/bin/python -m pip install --upgrade pip
+    .venv/bin/python -m pip install -e ".[dev]"
+    cp -r .venv "$PERSIST_VENV"
+fi
+
+# Fast from the compute node (see header); slow/unreliable from the login node. Retry/resume-
+# capable (scripts/fetch_bitcoinheist.py) — the first submission of this job (2700027) died here
+# on an IncompleteRead after ~55 KB of a ~50 MB archive; a single-shot urlopen had no defence
+# against that, a Range-header retry does.
 .venv/bin/python scripts/fetch_bitcoinheist.py
 
 # --full disables the configured subsample: all 2,916,697 rows at their natural 1.42% positive
