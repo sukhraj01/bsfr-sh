@@ -50,6 +50,7 @@ from bsfr_sh.detection.dataset import (  # noqa: E402
     load_bitcoinheist,
     paper_mode_resample,
     stratified_folds,
+    subsample_index,
 )
 from bsfr_sh.detection.metrics import baselines, honest_metrics, paper_metrics  # noqa: E402
 from bsfr_sh.detection.models import (  # noqa: E402
@@ -57,6 +58,7 @@ from bsfr_sh.detection.models import (  # noqa: E402
     fit_and_score,
     fits_in_memory,
     knn_projection,
+    largest_feasible_n,
 )
 from bsfr_sh.util import logging as log  # noqa: E402
 from bsfr_sh.util.config import load_config  # noqa: E402
@@ -147,10 +149,50 @@ def _run_paper_mode(data: LoadedDataset, config: Any, seed: int, logger: Any) ->
     }
 
 
-def _run_honest_mode(
-    data: LoadedDataset, config: Any, seed: int, folds: int, logger: Any
+def _fit_folds(
+    config: Any, name: str, seed: int, x: np.ndarray, y: np.ndarray, splits: list[Any]
 ) -> dict[str, Any]:
-    """Natural class balance, stratified k-fold, out-of-fold predictions pooled once."""
+    """Run one model over pre-computed `(train_idx, test_idx)` folds; pool out-of-fold scores."""
+    predictions = np.zeros_like(y)
+    scores = np.zeros(len(y), dtype=np.float64)
+    fit_seconds = predict_seconds = 0.0
+    for train_idx, test_idx in splits:
+        fitted = fit_and_score(
+            build_models(config, seed=seed)[name],
+            name,
+            x[train_idx],
+            y[train_idx],
+            x[test_idx],
+            y[test_idx],
+        )
+        predictions[test_idx] = fitted.predictions
+        if fitted.scores is not None:
+            scores[test_idx] = fitted.scores
+        fit_seconds += fitted.fit_seconds
+        predict_seconds += fitted.predict_seconds
+    honest = honest_metrics(y, predictions, scores)
+    return {"fit_seconds": fit_seconds, "predict_seconds": predict_seconds, **honest.as_dict()}
+
+
+def _run_honest_mode(
+    data: LoadedDataset,
+    config: Any,
+    seed: int,
+    folds: int,
+    logger: Any,
+    *,
+    memory_ceiling_gb: float = 8.0,
+    memory_headroom: float = 0.6,
+) -> dict[str, Any]:
+    """Natural class balance, stratified k-fold, out-of-fold predictions pooled once.
+
+    `memory_ceiling_gb`/`memory_headroom` parameterise `fits_in_memory` (CLAUDE.md §6's "project
+    before you run") rather than hard-coding the 8 GB dev-box default — M6b's Ada run passes the
+    cluster's real allocation. If KNN still does not fit at the given ceiling,
+    `largest_feasible_n` finds the largest row count that does, and KNN runs on a stratified
+    subsample of exactly that size rather than being skipped outright — the run is named as
+    reduced-scale, not silently smaller (CLAUDE.md §2).
+    """
     x = data.features.to_numpy(dtype=np.float64)
     y = data.labels
     base = baselines(y, seed=seed)
@@ -171,56 +213,78 @@ def _run_honest_mode(
     for name in build_models(config, seed=seed):
         if name == "k_nearest_neighbours":
             projection = knn_projection(n_train, n_query, x.shape[1])
-            if not fits_in_memory(projection):
-                deferred[name] = {
-                    "reason": "projected peak exceeds the 8 GB local ceiling (CLAUDE.md §6)",
-                    "projection": projection,
-                    "where": "Ada HPC batch job",
+            if not fits_in_memory(
+                projection, ceiling_gb=memory_ceiling_gb, headroom=memory_headroom
+            ):
+                n_knn = largest_feasible_n(
+                    x.shape[1], folds, ceiling_gb=memory_ceiling_gb, headroom=memory_headroom
+                )
+                if n_knn < folds * 2:
+                    deferred[name] = {
+                        "reason": f"projected peak exceeds the {memory_ceiling_gb:.0f} GB "
+                        f"ceiling (headroom={memory_headroom}) even at the smallest workable "
+                        "sample; CLAUDE.md §6",
+                        "projection": projection,
+                        "where": "Ada HPC batch job",
+                    }
+                    log.event(
+                        logger,
+                        "model_deferred",
+                        mode="honest_mode",
+                        model=name,
+                        peak_gb=round(projection["peak_gb"], 2),
+                        distance_computations=projection["distance_computations"],
+                    )
+                    continue
+                sub_idx = subsample_index(y, n_knn, stratified=True, seed=seed)
+                x_knn, y_knn = x[sub_idx], y[sub_idx]
+                sub_splits = list(stratified_folds(y_knn, folds=folds, seed=seed))
+                sub_projection = knn_projection(
+                    len(sub_splits[0][0]), len(sub_splits[0][1]), x.shape[1]
+                )
+                log.event(
+                    logger,
+                    "model_subsampled_for_memory",
+                    mode="honest_mode",
+                    model=name,
+                    n_full=len(y),
+                    n_knn=n_knn,
+                    ceiling_gb=memory_ceiling_gb,
+                    headroom=memory_headroom,
+                    peak_gb=round(sub_projection["peak_gb"], 2),
+                )
+                results[name] = {
+                    "folds": folds,
+                    "n_rows": n_knn,
+                    "full_n_rows": len(y),
+                    "subsampled_for_memory": True,
+                    "ceiling_gb": memory_ceiling_gb,
+                    "headroom": memory_headroom,
+                    "projection_at_full_scale": projection,
+                    **_fit_folds(config, name, seed, x_knn, y_knn, sub_splits),
                 }
                 log.event(
                     logger,
-                    "model_deferred",
+                    "model_scored",
                     mode="honest_mode",
                     model=name,
-                    peak_gb=round(projection["peak_gb"], 2),
-                    distance_computations=projection["distance_computations"],
+                    n_rows=n_knn,
+                    recall=round(results[name]["recall"], 4),
+                    precision=round(results[name]["precision"], 4),
                 )
                 continue
 
-        predictions = np.zeros_like(y)
-        scores = np.zeros(len(y), dtype=np.float64)
-        fit_seconds = predict_seconds = 0.0
-        for train_idx, test_idx in splits:
-            fitted = fit_and_score(
-                build_models(config, seed=seed)[name],
-                name,
-                x[train_idx],
-                y[train_idx],
-                x[test_idx],
-                y[test_idx],
-            )
-            predictions[test_idx] = fitted.predictions
-            if fitted.scores is not None:
-                scores[test_idx] = fitted.scores
-            fit_seconds += fitted.fit_seconds
-            predict_seconds += fitted.predict_seconds
-
-        honest = honest_metrics(y, predictions, scores)
-        results[name] = {
-            "folds": folds,
-            "fit_seconds": fit_seconds,
-            "predict_seconds": predict_seconds,
-            **honest.as_dict(),
-        }
+        row = {"folds": folds, "n_rows": len(y), **_fit_folds(config, name, seed, x, y, splits)}
+        results[name] = row
         log.event(
             logger,
             "model_scored",
             mode="honest_mode",
             model=name,
-            recall=round(honest.recall, 4),
-            precision=round(honest.precision, 4),
-            pr_auc=round(honest.pr_auc, 4),
-            mcc=round(honest.mcc, 4),
+            recall=round(row["recall"], 4),
+            precision=round(row["precision"], 4),
+            pr_auc=round(row["pr_auc"], 4),
+            mcc=round(row["mcc"], 4),
         )
 
     return {
@@ -242,6 +306,19 @@ def main() -> int:
         "--full",
         action="store_true",
         help="use all 2.9M rows for honest_mode instead of the configured subsample",
+    )
+    parser.add_argument(
+        "--memory-ceiling-gb",
+        type=float,
+        default=8.0,
+        help="KNN memory ceiling for fits_in_memory (default: the 8 GB dev box, CLAUDE.md §6; "
+        "Ada's sbatch passes its real allocation)",
+    )
+    parser.add_argument(
+        "--memory-headroom",
+        type=float,
+        default=0.6,
+        help="fraction of --memory-ceiling-gb usable before interpreter/OS/pandas overhead",
     )
     args = parser.parse_args()
 
@@ -307,7 +384,15 @@ def main() -> int:
         sidecar["paper_mode"]["wall_seconds"] = time.perf_counter() - started
     if args.mode in ("honest", "both"):
         started = time.perf_counter()
-        sidecar["honest_mode"] = _run_honest_mode(data, config, args.seed, folds, logger)
+        sidecar["honest_mode"] = _run_honest_mode(
+            data,
+            config,
+            args.seed,
+            folds,
+            logger,
+            memory_ceiling_gb=args.memory_ceiling_gb,
+            memory_headroom=args.memory_headroom,
+        )
         sidecar["honest_mode"]["wall_seconds"] = time.perf_counter() - started
 
     out_dir = REPO_ROOT / "results" / "logs"
@@ -318,7 +403,44 @@ def main() -> int:
     log.event(logger, "sidecar_written", path=f"results/logs/{run_id}.json")
 
     _print_results_lines(sidecar, run_id)
+    _emit_reports(sidecar, run_id, logger)
     return 0
+
+
+def _emit_reports(sidecar: dict[str, Any], run_id: str, logger: Any) -> None:
+    """Table II (+ Figs. 4-5 for paper_mode) from whichever mode(s) this run produced.
+
+    Imported lazily — `matplotlib` is only needed here, not for a `--mode honest` run that never
+    touches `bench.emit`'s figure code (paper_mode's chart needs the technique comparison; there
+    is no honest_mode figure per the M6b brief).
+    """
+    from bsfr_sh.bench import emit
+
+    tables_dir = REPO_ROOT / "results" / "tables"
+    figures_dir = REPO_ROOT / "results" / "figures"
+    written: list[str] = []
+
+    if "paper_mode" in sidecar:
+        table_path = emit.emit_table2_paper_mode(sidecar["paper_mode"], tables_dir=tables_dir)
+        written.append(str(table_path.relative_to(REPO_ROOT)))
+        run_meta = {
+            "run_id": run_id,
+            "seed": sidecar["seed"],
+            "config_hash": sidecar["config_hash"],
+            "config_hash_scheme": sidecar["config_hash_scheme"],
+            "git_rev": sidecar["git_rev"],
+            "host": sidecar["host"],
+            "started_at": sidecar.get("started_at", 0.0),
+            "wall_seconds": sidecar["paper_mode"].get("wall_seconds", 0.0),
+        }
+        report = emit.emit_fig4_5(sidecar["paper_mode"], figures_dir=figures_dir, run_meta=run_meta)
+        written.extend(str(p.relative_to(REPO_ROOT)) for p in report.figures)
+
+    if "honest_mode" in sidecar:
+        table_path = emit.emit_table2_honest_mode(sidecar["honest_mode"], tables_dir=tables_dir)
+        written.append(str(table_path.relative_to(REPO_ROOT)))
+
+    log.event(logger, "reports_emitted", paths=written)
 
 
 def _print_results_lines(sidecar: dict[str, Any], run_id: str) -> None:
@@ -340,13 +462,19 @@ def _print_results_lines(sidecar: dict[str, Any], run_id: str) -> None:
             f"baseline, looks at nothing\n"
         )
     if "honest_mode" in sidecar:
-        rows = sidecar["honest_mode"]["n_rows"]
         for name, row in sidecar["honest_mode"]["models"].items():
+            rows = row["n_rows"]
+            note = (
+                f"DEV-06 honest mode, subsampled for memory (full n={row['full_n_rows']}, "
+                f"ceiling={row['ceiling_gb']}GB)"
+                if row.get("subsampled_for_memory")
+                else "DEV-06 honest mode"
+            )
             sys.stdout.write(
                 f"{date} | detection/bitcoinheist-honest | {name}, natural {rows} rows | "
                 f"prec={row['precision']:.4f} rec={row['recall']:.4f} pr_auc={row['pr_auc']:.4f} "
                 f"mcc={row['mcc']:.4f} f1min={row['f1_minority']:.4f} | measured | {run_id} | "
-                f"DEV-06 honest mode\n"
+                f"{note}\n"
             )
         for name, row in sidecar["honest_mode"]["deferred"].items():
             sys.stdout.write(

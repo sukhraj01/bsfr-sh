@@ -4,24 +4,25 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-17 · **Milestone:** M6b (Table II, Figs. 4-5, Ada job) · **Sessions completed:** 11
+**Last updated:** 2026-09-17 · **Milestone:** M7 (extensions, stretch) · **Sessions completed:** 12
 
 ---
 
 ## One-line status
 
-M6a is closed: `bench/harness.py` times cases 1-3 (5/10/15 blocks x 100 tx, both chains, 4
-nodes) by reusing `consensus.pbft.Cluster` and `framework._block_pipeline.commit` directly — no
-new consensus machinery. `bench/emit.py` produces Figs. 6(a)-(d) (ours vs. paper, each with a
-sidecar) plus Fig. 6(e), our own component-breakdown panel (compute/modelled-network/index/D3,
-never summed into a number comparable to the paper's). `scripts/run_bench.py` wires it end to
-end: a case-3 variance probe decides the repeat count instead of trusting the declared floor,
-DEV-21's `4d`/`3d` network formula is verified against a real non-zero-delay run before being
-trusted, D3's serialization omission is quantified (not just flagged) via
-`util.serialization` throughput, and Q2's payload sweep ran and closed with the memory ceiling
-projected rather than found by OOMing the dev box. `make test`: 1318 passed. `make lint` clean.
-`make figures` now runs (M6a's half; Table II/Figs. 4-5 still `make repro`/`make honest` stubs).
-Next is M6b: wire the ML entry points to M4a/M4b's already-built pipelines, plus the Ada job.
+M6 is closed (both halves). M6a: `bench/harness.py`/`bench/emit.py` produce Figs. 6(a)-(e) —
+covered in the M6a session, unchanged this session. M6b: `make repro` (`scripts/run_detection.py
+--mode paper --full`) reproduces D6's 0.9442/0.9697 exactly in ~7s; `make honest` (`--mode honest
+--full`) now runs the **full 2,916,697-row** `honest_mode` locally — RF/LR/DT complete in ~7m18s
+total, KNN's full-scale projection (17.94 GB) exceeds the 8 GB dev-box ceiling so it runs on a
+780,336-row stratified subsample instead of being deferred outright (DEV-31's new
+`largest_feasible_n` fallback). `bench/emit.py` gained `emit_table2_paper_mode`/
+`emit_table2_honest_mode`/`emit_fig4_5` — Table II (both modes) and Figs. 4-5, each also emitted
+with a baseline-annotated variant. Ada's `honest_mode` job (full-scale KNN) was adapted to the
+account's real, discovered SLURM limits (`u22` partition, `research`/`low`, 10 cpus / 30000M —
+not the M4a placeholder) and submitted; see Current numbers for whether it completed in-session.
+`make test`: 1321 passed, `make test-all`: 1333 passed, `make lint` clean. Next is M7 (stretch) or
+report writing — no more implementation milestones are open.
 
 ---
 
@@ -38,19 +39,24 @@ Next is M6b: wire the ML entry points to M4a/M4b's already-built pipelines, plus
 | `data/raw/` BitcoinHeist | **local only** | gitignored; `make data` refetches (~56 min here) |
 | `detection/` dataset, models, metrics, profiles, detector | done | M4a, M4b |
 | `bench/harness.py`, `bench/emit.py`, Figs. 6a-e | done | M6a |
-| `make repro` / `make honest` / Table II / Figs. 4-5 / Ada job | **not started** | **M6b — start here** |
+| `make repro` / `make honest`, Table II, Figs. 4-5 | done | M6b |
+| Ada `honest_mode` (full-scale KNN) | submitted, job 2700027 | M6b — see Current numbers |
 
 ## Current numbers
 
 **BitcoinHeist, `paper_mode`, honest baseline** (n=46,014, address dropped, **grouped** split,
-production entry point, run `20260913T131623Z-97f51129`, D6 retired): RF **0.9442/0.9697** ·
+`make repro`, run `20260917T175743Z-be5c55e0`, seed 20260912): RF **0.9442/0.9697** ·
 DT 0.9224/0.9569 · LR 0.9002/0.9475 · KNN 0.8892/0.9410 · constant-positive baseline
 0.9000/0.9474. Published row: 0.9898/0.990 — **not reproduced**, unexplained (Q10, closed).
+`results/tables/table2_paper_mode.csv`, Figs. 4-5 (+ baseline variants) emitted alongside.
 
-**BitcoinHeist, `honest_mode`** (200K subsample, 5-fold, run `20260912T172809Z-d89aa1b6`): best
-MCC is DT at 0.331, best PR-AUC is RF at 0.335, recall spans 0.00–0.36. A constant-negative
-classifier scores 0.9858 accuracy against the paper's 0.9898. Full-scale (2.9M) is **deferred to
-Ada, unrun**.
+**BitcoinHeist, `honest_mode`, full scale** (2,916,697 rows, `make honest`, run
+`20260917T175754Z-f3b9e363`, seed 20260912): RF mcc=0.458 prec=0.743 rec=0.287 · DT mcc=0.401
+prec=0.397 rec=0.424 · LR predicts nothing (mcc=0 — same model that hit the constant-positive
+baseline exactly under `paper_mode`, DEV-06's clearest illustration) · KNN (780,336-row
+stratified subsample, 8 GB local ceiling, DEV-31) mcc=0.300 prec=0.541 rec=0.172. Constant-
+negative baseline: 0.9858 accuracy, 0 recall. `results/tables/table2_honest_mode.csv`. Full-scale
+KNN (Ada, job 2700027): **submitted**; see `RESULTS.md` for whether it completed in-session.
 
 **Honeypot detection, Alg. 3 end to end** (`scripts/run_phase3_detection.py --seed 20260912`,
 run `20260913T134602Z-ab45ac90`, train n=1467 eval n=731, real pBFT consensus both draws):
@@ -74,15 +80,15 @@ ciphertext overhead), not run.
 
 ## Next task
 
-**M6b — Table II, Figs. 4-5, Ada `honest_mode`.** `scripts/run_detection.py` and
-`scripts/run_phase3_detection.py` (M4a/M4b) already produce every number Table II needs;
-`bench/emit.py` needs a `emit_table2()`/`emit_fig4_5()` pair reading from `RESULTS.md`'s existing
-detection lines rather than re-running the ML. Wire `make repro` (paper-faithful 90/10, cases 1-3
-— note cases 1-3 there means the ML split naming, not M6a's block-count cases) and `make honest`
-(natural balance, stratified CV) to those scripts. Submit `scripts/ada_honest_mode.sbatch` on Ada
-for the full 2.9M-row `honest_mode` run, **unrun** as of this session. Exit: every target in
-`docs/EXPERIMENTS.md` carries a `measured` or `paper_reported` label — Targets 1/2 (M4a/M4b,
-already measured) just need the figures; Target 5 (§V) is test-mapped only, no figure owed.
+**No implementation milestone is open.** M0-M6 are all closed; every `docs/EXPERIMENTS.md` target
+carries a `measured` or `paper_reported` label except the Ada full-scale-KNN cell, which is
+submitted and running (job 2700027) — check `sacct -j 2700027` on Ada, or re-submit
+`scripts/ada_honest_mode.sbatch` if it did not survive. If it completed: copy
+`~/bsfr-sh/results/tables/table2_honest_mode_ada.csv` and
+`~/bsfr-sh/ada_honest_stdout_2700027.log` back (`scp`), replace the local
+`results/tables/table2_honest_mode.csv` with the Ada one (all four models at full scale, not a
+KNN subsample), and paste its `RESULTS.md` lines in. Otherwise: M7 (stretch, `docs/ROADMAP.md`)
+or report writing are the only remaining work.
 
 ## Blockers
 
@@ -93,7 +99,7 @@ BitcoinHeist run. README states the wait and the sha256.
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q4 | Do we need real feature-space evasion for M7? | M7 | defer until M6b lands |
+| Q4 | Do we need real feature-space evasion for M7? | M7 | decide at M7 kickoff |
 | Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M7 | only if M7 benchmarks a lossy network |
 
 ## For the write-up
@@ -130,7 +136,7 @@ contradicting §II-C).
 
 | # | Item | Retire by |
 |---|---|---|
-| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. | M6b |
+| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/run_detection.py`/`run_bench.py` are still manually `ruff`-checked, not by `make lint`. | before the write-up cites lint as clean everywhere |
 | D3 | The bus never serialises; magnitude now quantified (DEV-30, M6a: ≈0.2-0.3% of measured compute) but the omission itself is unfixed. | M7, if async pBFT lands |
 | D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
 | D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10. | before sklearn 1.10 |

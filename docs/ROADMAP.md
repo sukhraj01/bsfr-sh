@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M6**
+**Current milestone: M7**
 
 ---
 
@@ -196,7 +196,7 @@ open here: which case applies, and how a detection is attributed to a system. `m
 
 ---
 
-## M6 — Benchmarks and figures
+## M6 — Benchmarks and figures `[x]`
 
 **Split into M6a and M6b on 2026-09-17.** M6a is the timing harness and Figs. 6(a)-(d) — a
 question about our own consensus/crypto stack, answerable entirely from code already built.
@@ -218,11 +218,17 @@ have meant debugging a matplotlib figure spec through an sklearn fit.
 line (`measured` for timings, `computed` for the modelled-network and D3 columns, matching the
 existing baseline convention). Variance is reported and the repeat count follows from it.
 
-### M6b — Table II, Figs. 4-5, Ada `honest_mode` `[ ]`
+### M6b — Table II, Figs. 4-5, Ada `honest_mode` `[x]`
 
-- [ ] Wire `make repro` / `make honest` to `detection/` (M4a/M4b already built the pipelines)
-- [ ] `bench/emit.py` — Table II + Figs. 4-5
-- [ ] Submit `scripts/ada_honest_mode.sbatch` on Ada, full 2.9M-row `honest_mode`
+- [x] Wire `make repro` / `make honest` to `detection/` (M4a/M4b already built the pipelines) —
+      `make repro` reproduces D6's 0.9442/0.9697 exactly; `make honest` now runs the full
+      2,916,697-row `honest_mode` locally (RF/LR/DT at full scale; KNN named-and-subsampled
+      rather than deferred, DEV-31), neither touches Ada
+- [x] `bench/emit.py` — Table II (`emit_table2_paper_mode`/`emit_table2_honest_mode`) + Figs. 4-5
+      (`emit_fig4_5`, paper-shape and baseline-annotated versions of each)
+- [x] Submitted `scripts/ada_honest_mode.sbatch` on Ada, full 2.9M-row `honest_mode` — adapted to
+      the account's real, discovered SLURM limits (DEV-31); see `RESULTS.md` for whether it
+      completed within the session or is still queued/running
 
 **Exit:** every target in `docs/EXPERIMENTS.md` has a `measured` or `paper_reported` label.
 

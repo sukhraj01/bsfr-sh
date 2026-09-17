@@ -251,3 +251,52 @@ three orders of magnitude below the paper's on every case/chain; TPS is flat acr
 of ours (~2930-3190 `BC_DTBU`, ~2170-2230 `BC_SigRW`) against the paper's rising six points. See
 `docs/EXPERIMENTS.md` Target 3/4 and `docs/DEVIATIONS.md` DEV-08/DEV-13/DEV-21/DEV-30 for what
 this does and does not mean.
+
+## Detection — Table II, Figs. 4-5, full-scale `honest_mode` (M6b)
+
+`make repro` (`scripts/run_detection.py --seed 20260912 --mode paper --full`) — reproduces the D6
+figure exactly, at the entry point CLAUDE.md §5 documents rather than a one-off script invocation:
+
+```
+2026-09-17 | detection/bitcoinheist-paper | random_forest, 90/10 n=46014, grouped split | acc=0.9442 f1=0.9697 | measured | 20260917T175743Z-be5c55e0 | Table II target, D6 retired (DEV-06), via make repro
+2026-09-17 | detection/bitcoinheist-paper | logistic_regression, 90/10 n=46014, grouped split | acc=0.9002 f1=0.9475 | measured | 20260917T175743Z-be5c55e0 | Table II target, D6 retired (DEV-06), via make repro
+2026-09-17 | detection/bitcoinheist-paper | decision_tree, 90/10 n=46014, grouped split | acc=0.9224 f1=0.9569 | measured | 20260917T175743Z-be5c55e0 | Table II target, D6 retired (DEV-06), via make repro
+2026-09-17 | detection/bitcoinheist-paper | k_nearest_neighbours, 90/10 n=46014, grouped split | acc=0.8892 f1=0.9410 | measured | 20260917T175743Z-be5c55e0 | Table II target, D6 retired (DEV-06), via make repro
+2026-09-17 | detection/bitcoinheist-paper | constant-positive, 90/10 n=46014, grouped split | acc=0.9000 f1=0.9474 | measured | 20260917T175743Z-be5c55e0 | baseline, via make repro
+```
+
+`results/tables/table2_paper_mode.csv` and Figs. 4-5 (+ baseline-annotated variants) emitted from
+this run — `results/figures/fig4_accuracy(_baseline).png`, `fig5_f1(_baseline).png`.
+
+`make honest` (`--mode honest --full`, 8 GB dev-box ceiling) — the **full 2,916,697-row**
+`honest_mode` run, not the 200K subsample M4a used. RF/LR/DT ran on every row; KNN's full-scale
+projection (17.94 GB) exceeds the 8 GB ceiling, so it ran on a 780,336-row stratified subsample
+instead of being deferred outright (DEV-31):
+
+```
+2026-09-17 | detection/bitcoinheist-honest | random_forest, natural 2916697 rows | prec=0.7434 rec=0.2874 pr_auc=0.4653 mcc=0.4579 f1min=0.4145 | measured | 20260917T175754Z-f3b9e363 | DEV-06 honest mode, full scale, via make honest
+2026-09-17 | detection/bitcoinheist-honest | logistic_regression, natural 2916697 rows | prec=0.0000 rec=0.0000 pr_auc=0.0177 mcc=0.0000 f1min=0.0000 | measured | 20260917T175754Z-f3b9e363 | DEV-06 honest mode, full scale, via make honest
+2026-09-17 | detection/bitcoinheist-honest | decision_tree, natural 2916697 rows | prec=0.3970 rec=0.4236 pr_auc=0.1797 mcc=0.4013 f1min=0.4099 | measured | 20260917T175754Z-f3b9e363 | DEV-06 honest mode, full scale, via make honest
+2026-09-17 | detection/bitcoinheist-honest | k_nearest_neighbours, natural 780336 rows | prec=0.5410 rec=0.1716 pr_auc=0.1701 mcc=0.2995 f1min=0.2605 | measured | 20260917T175754Z-f3b9e363 | DEV-06 honest mode, subsampled for memory (full n=2916697, ceiling=8.0GB, DEV-31), via make honest
+```
+
+At full scale, RF's MCC rises from 0.331 (M4a's 200K subsample, best-of-four there) to 0.458 —
+more data helps, unsurprisingly, and the paper's methodology never had the chance to show this
+because it never evaluated at the natural class balance at all. `results/tables/table2_honest_mode.csv`
+carries the confusion matrix and balanced accuracy per model alongside these.
+
+**Ada, full-scale KNN, `scripts/ada_honest_mode.sbatch` (DEV-31).** Adapted twice this session:
+first to the account's real SLURM limits (`u22` partition, `research` account, `low` QOS: 10
+cpus / 30000M max — discovered via `sacctmgr`/`scontrol`, not the M4a placeholder), then again
+once `/share1` (the first working-directory choice) turned out to be login-node-only storage —
+see DEV-31. **Submitted as job 2700027** (`ada.iiit.ac.in`, `sbatch scripts/ada_honest_mode.sbatch`
+run from a code-only checkout at `/home2/sukhraj.singh/bsfr-sh`). Bulk data transfer to/from/within
+Ada from this environment is consistently slow (~30-75 KB/s observed for the dev-box rsync and,
+surprisingly, also for `pip`'s own package downloads on the compute node) — the job was still in
+its `pip install` step, well within its 5-hour budget, when this session ended. **Not completed
+within the session; this is the honest status, per the session brief's explicit fallback** ("the
+SBATCH submitted... recorded regardless" if the job has not completed). To collect the result
+later: `ssh ada 'sacct -j 2700027'`; if `COMPLETED`, `scp` back
+`~/bsfr-sh/results/tables/table2_honest_mode_ada.csv` and `~/bsfr-sh/ada_honest_stdout_2700027.log`
+(has the `RESULTS.md` lines) and replace the local `table2_honest_mode.csv` with the Ada one — all
+four models at full scale, not a KNN subsample.

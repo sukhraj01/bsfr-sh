@@ -89,6 +89,7 @@ __all__ = [
     "paper_mode_resample",
     "stratified_folds",
     "stratified_holdout",
+    "subsample_index",
     "verify_counts",
 ]
 
@@ -276,7 +277,7 @@ def load_bitcoinheist(spec: DatasetSpec, *, verify: bool = True, seed: int = 0) 
     )
 
     if spec.subsample_rows is not None and spec.subsample_rows < n_rows:
-        index = _subsample_index(
+        index = subsample_index(
             labels, spec.subsample_rows, stratified=spec.subsample_stratified, seed=seed
         )
         features = features.iloc[index]
@@ -313,7 +314,11 @@ def encode_group_column(values: pd.Series) -> np.ndarray:
     return codes
 
 
-def _subsample_index(labels: np.ndarray, rows: int, *, stratified: bool, seed: int) -> np.ndarray:
+def subsample_index(labels: np.ndarray, rows: int, *, stratified: bool, seed: int) -> np.ndarray:
+    """`rows` indices into `labels`, stratified by class if asked. Public since M6b: `DatasetSpec`
+    uses it to build the configured dev-box subsample, and `scripts/run_detection.py` reuses it
+    to size a KNN-only subsample when the full honest_mode data does not fit the memory ceiling.
+    """
     rng = np.random.default_rng(seed)
     if not stratified:
         return np.sort(rng.choice(len(labels), size=rows, replace=False))

@@ -40,6 +40,7 @@ __all__ = [
     "fit_and_score",
     "fits_in_memory",
     "knn_projection",
+    "largest_feasible_n",
     "train_all",
 ]
 
@@ -185,3 +186,50 @@ def fits_in_memory(
 ) -> bool:
     """Whether a projected peak leaves room for the interpreter, the data and the OS."""
     return projection["peak_gb"] <= ceiling_gb * headroom
+
+
+def largest_feasible_n(
+    n_features: int,
+    folds: int,
+    *,
+    ceiling_gb: float,
+    headroom: float = 0.6,
+    n_jobs: int = 1,
+    dtype_bytes: int = 8,
+) -> int:
+    """The largest row count whose `knn_projection` fits under `ceiling_gb` (M6b).
+
+    CLAUDE.md §6's "project before you run" for the one case `fits_in_memory` says no to: rather
+    than deferring the model outright, find how much of the honest_mode data KNN *can* cover at
+    this ceiling. Binary search on `knn_projection`'s monotonically increasing peak (both the
+    stored training matrix and the distance block grow with `n`), stratified k-fold sized the
+    same way `stratified_folds` would split it — `n_train = n * (folds-1) / folds`.
+    """
+    if folds < 2:
+        raise ModelError(f"folds must be at least 2, got {folds}")
+    budget = ceiling_gb * headroom
+    lo, hi = 0, 1
+    # Grow hi until it overshoots the budget (or we've covered any plausible dataset size).
+    while hi < 2**32:
+        n_train = int(hi * (folds - 1) / folds)
+        n_query = hi - n_train
+        if (
+            knn_projection(n_train, n_query, n_features, n_jobs=n_jobs, dtype_bytes=dtype_bytes)[
+                "peak_gb"
+            ]
+            > budget
+        ):
+            break
+        lo, hi = hi, hi * 2
+    while lo < hi - 1:
+        mid = (lo + hi) // 2
+        n_train = int(mid * (folds - 1) / folds)
+        n_query = mid - n_train
+        peak = knn_projection(n_train, n_query, n_features, n_jobs=n_jobs, dtype_bytes=dtype_bytes)[
+            "peak_gb"
+        ]
+        if peak <= budget:
+            lo = mid
+        else:
+            hi = mid
+    return lo

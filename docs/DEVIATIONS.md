@@ -779,3 +779,50 @@ non-trivial fraction of the modelled network column (DEV-21).
 **Impact on reproduction:** none on the trend/ratio target (DEV-13) — the magnitude is small
 enough not to change the shape conclusion. Recorded so "the bus doesn't serialise" stops being an
 asterisk with no number attached to it.
+
+### DEV-31 · ADD · `honest_mode`'s memory ceiling is a parameter, not a constant, and KNN degrades instead of vanishing (M6b)
+**Problem:** `detection.models.fits_in_memory()` (M4a) hard-coded an 8 GB ceiling — the dev box.
+Called unparameterised, the same code run on a machine with more memory would still defer KNN,
+because the check never knew it was somewhere else. `make honest`'s own local, full-scale run
+(2,916,697 rows) confirmed this is not hypothetical: KNN's projected peak (17.94 GB) exceeds the
+dev box's ceiling by design, so a caller that cannot say "this machine has more" is stuck
+re-deferring on every machine, including ones the deferral does not need to apply to.
+
+**Ours:** `--memory-ceiling-gb`/`--memory-headroom` on `scripts/run_detection.py`, threaded into
+`fits_in_memory()`, default unchanged (8.0 GB / 0.6 — `make honest`'s behaviour is identical to
+before). When the ceiling does not clear the projection, `detection.models.largest_feasible_n()`
+(new) binary-searches `knn_projection`'s own monotone peak for the largest row count that fits,
+and KNN runs on a stratified subsample of exactly that size — named as `subsampled_for_memory`
+with the ceiling and the full-scale row count recorded, rather than the model disappearing from
+the table. `make honest`'s own run demonstrates the fallback for real: at the 8 GB dev-box
+ceiling, KNN ran on a 780,336-row stratified subsample (26.8% of the full data) instead of being
+skipped — `RESULTS.md`, `results/tables/table2_honest_mode.csv`.
+
+**Ada's real limits, discovered rather than assumed.** `scripts/ada_honest_mode.sbatch` (M4a)
+carried a placeholder `--mem=64G --cpus-per-task=16` and a comment saying Ada access did not
+exist from this environment. Both were wrong by the time M6b ran: `ssh ada` connects, and the
+account's actual limits are `sacctmgr show qos low`'s `MaxTRESPU: cpu=10, mem=32000M` and the
+`u22` partition's (the only one `AllowAccounts` permits for this account) `MaxMemPerCPU=3000` —
+together capping any one job at 10 cpus / 30000M (≈29.3 GiB) regardless of what is asked for.
+`--mem-per-cpu=3000 --cpus-per-task=10` requests exactly that ceiling; passed through as
+`--memory-ceiling-gb 29.3 --memory-headroom 0.65`,
+`largest_feasible_n(8, 5, ceiling_gb=29.3, headroom=0.65)` returns a feasible n **larger than the
+full dataset** — verified in `tests/unit/test_detection_models.py` — so the Ada run is projected
+to cover every row, not a further subsample. See `RESULTS.md` for whether it did.
+
+**The working directory took a second correction.** The first attempt used `/share1/<user>` (25
+GB quota, nearly empty, looked like the obvious choice next to a ~3.5 GB-free home). Two small
+test jobs (`envtest`/`envtest2`, this session) showed `/share1` is **login-node-only** — a compute
+node's `df -h` never lists it, and a job that writes there fails at output-file-open time with no
+script output produced at all. `/home2` (home) *is* NFS-mounted on compute nodes; compute nodes
+also have node-local `/scratch` (1.8 TB, no per-user quota) and, unexpectedly, faster and more
+reliable internet egress than the login node (a UCI archive request that timed out at 15s from
+the login node completed in 0.1s from a compute node, `envtest4`). The working sbatch therefore
+keeps only a small, code-only checkout under `/home2`, and has the job itself copy that into
+`/scratch/$SLURM_JOB_ID`, build the venv, and fetch the dataset there — never touching `/share1`.
+
+**Impact on reproduction:** none on Target 1/2's accuracy/F1 headline — this is entirely about
+`honest_mode`, which the paper does not report at all (DEV-06). It does mean the local, 8 GB-box
+`honest_mode` number in `RESULTS.md`/`table2_honest_mode.csv` is honestly labelled as a KNN
+subsample even at full row count for the other three models, rather than silently smaller than
+its own header claims.

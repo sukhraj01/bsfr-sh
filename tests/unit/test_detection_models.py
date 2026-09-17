@@ -14,6 +14,7 @@ from bsfr_sh.detection.models import (
     fit_and_score,
     fits_in_memory,
     knn_projection,
+    largest_feasible_n,
 )
 from bsfr_sh.util.config import load_config
 
@@ -89,3 +90,30 @@ def test_paper_mode_sized_knn_fits_and_full_scale_knn_does_not() -> None:
     assert fits_in_memory(paper_mode)
     assert full_scale["distance_computations"] > 1e12
     assert not fits_in_memory(full_scale, ceiling_gb=8.0)
+
+
+# -- the fallback when the full scale does not fit (M6b) -----------------------------------------
+def test_largest_feasible_n_fits_at_its_own_ceiling() -> None:
+    """The n it returns is itself a `fits_in_memory` yes — the boundary, not an overshoot."""
+    n = largest_feasible_n(8, 5, ceiling_gb=8.0, headroom=0.6)
+    n_train, n_query = int(n * 4 / 5), n - int(n * 4 / 5)
+    assert fits_in_memory(knn_projection(n_train, n_query, 8), ceiling_gb=8.0, headroom=0.6)
+    # One row more should not fit — this is the *largest* feasible n, not just *a* feasible one.
+    n_train_plus, n_query_plus = int((n + 1) * 4 / 5), (n + 1) - int((n + 1) * 4 / 5)
+    assert not fits_in_memory(
+        knn_projection(n_train_plus, n_query_plus, 8), ceiling_gb=8.0, headroom=0.6
+    )
+
+
+def test_largest_feasible_n_grows_with_the_ceiling() -> None:
+    small = largest_feasible_n(8, 5, ceiling_gb=8.0)
+    large = largest_feasible_n(8, 5, ceiling_gb=29.3, headroom=0.65)
+    assert large > small
+    # Ada's real allocation (29.3 GB, 0.65 headroom) comfortably covers the full 2.9M rows —
+    # the number this session's sbatch depends on to run KNN at full scale, not a subsample.
+    assert large >= 2_916_697
+
+
+def test_largest_feasible_n_rejects_too_few_folds() -> None:
+    with pytest.raises(ModelError, match="folds"):
+        largest_feasible_n(8, 1, ceiling_gb=8.0)
