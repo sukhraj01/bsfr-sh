@@ -65,8 +65,10 @@ honest:
 	@echo "  See docs/DEVIATIONS.md DEV-06 and docs/ROADMAP.md M6."
 	@exit 1
 
+# --- M6a ----------------------------------------------------------------------------------
+# Figs. 6(a)-(d) plus the component-breakdown panel (Fig. 6(e)) and results/tables/
+# target3_target4.csv. Table II and Figs. 4-5 are M6b, not wired here yet — see
+# docs/ROADMAP.md's M6a/M6b split and docs/EXPERIMENTS.md's Output contract.
 figures:
-	@echo "make figures: not implemented until M6 (benchmarks and figures)."
-	@echo "  It will emit Table II and Figs. 4, 5, 6a-6d into results/ with sidecar JSON."
-	@echo "  See docs/EXPERIMENTS.md 'Output contract' and docs/ROADMAP.md M6."
-	@exit 1
+	$(REQUIRE_VENV)
+	$(VENV_PY) scripts/run_bench.py --seed $(SEED)

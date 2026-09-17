@@ -109,7 +109,28 @@ subsample; `--full` runs go to Ada as a batch job.
 - Both curves are concave, indicating fixed setup cost amortised across blocks.
 
 Protocol: median of N ≥ 5 repeats, warm-up run discarded, seeds fixed, per-block marginal cost
-recorded separately from totals.
+recorded separately from totals. **N is decided from a measured case-3 variance probe
+(`bench.harness.decide_repeat_count`), never assumed** — one M6a run measured a quiet-machine
+CV of ~1%, a second measured ~45% on the same code and config (ordinary background load on a
+shared dev laptop, not algorithmic nondeterminism — see the session log), and the repeat count
+rose from 5 to 25 accordingly. The case-1-to-case-3 trend stayed resolvable
+(`bench.harness.trend_resolvable`) at both readings.
+
+**Measured, M6a (`RESULTS.md` `bench/target3-time`, run `20260917T144843Z-fb4c2410`).** Absolute
+seconds are two to three orders of magnitude below the paper's (our case-3 `BC_DTBU`: ~0.48s
+against 5.71s) — expected, not a bug (DEV-13: different language, runtime, hardware). The
+properties above are **not** reproduced as stated:
+
+* Monotone increasing — **yes**, on both chains.
+* Sublinear / concave — **no**. Marginal per-block cost is flat (`bench.harness.run_case`'s
+  per-block timer starts *after* cluster construction, so no fixed setup cost can amortise into
+  it): tripling blocks (case-1 to case-3) costs ~2.85x time on both chains, not ~1.8x/~1.55x.
+  This sharpens DEV-08 rather than contradicting it — see that entry's amendment.
+* `BC_SigRW` slower than `BC_DTBU` — **yes**, consistently, by ~35-45% depending on the run
+  (paper: 18-41%). Attributed structurally to one extra ECDSA sign per transaction (DEV-03's
+  attestation) plus `SignatureRecordPayload`'s many-small-floats encoding costing more per byte
+  than `BackupPayload`'s single bytes blob — not tuned to match, and the percentage does not
+  match the paper's exactly, which is expected of a structural rather than fitted cause.
 
 ---
 
@@ -131,6 +152,14 @@ recorded separately from totals.
 So we instrument wall-clock time only and compute `tps = total_tx / total_seconds`. The paper's
 claim that TPS rises as the chain grows is amortisation, not throughput — we additionally report
 marginal per-block cost, which should be roughly flat (DEV-08).
+
+**Measured, M6a.** Our own TPS is flat across cases (`BC_DTBU`: ~2930-3190 tx/s; `BC_SigRW`:
+~2170-2230 tx/s, case-1 through case-3), not rising like the paper's six points. This is the
+direct consequence of the flat marginal cost above: with no fixed setup cost inside the timed
+span, `tps = tx / (blocks * marginal_cost)` has no `blocks` term left to rise against. DEV-08's
+hypothesis — the paper's rising TPS is amortisation, not a throughput property — is now backed by
+a measurement showing what TPS looks like *without* that amortisation, rather than by the
+arithmetic identity alone. See DEV-08's amendment.
 
 ---
 
@@ -156,19 +185,32 @@ Optional extension (DEV-14): Scyther model of the session protocol.
 ```
 results/
 ├── tables/
-│   ├── table2_paper_mode.csv
-│   ├── table2_honest_mode.csv
-│   └── baselines.csv
+│   ├── table2_paper_mode.csv       # M6b
+│   ├── table2_honest_mode.csv      # M6b
+│   ├── baselines.csv               # M6b
+│   └── target3_target4.csv         # M6a — measured vs. paper_reported, cases 1-3, both chains
 ├── figures/
-│   ├── fig4_accuracy.png
-│   ├── fig5_f1.png
-│   ├── fig6a_time_backup.png
-│   ├── fig6b_time_ransomware.png
-│   ├── fig6c_tps_backup.png
-│   └── fig6d_tps_ransomware.png
+│   ├── fig4_accuracy.png                    # M6b
+│   ├── fig5_f1.png                          # M6b
+│   ├── fig6a_time_backup.png                # M6a
+│   ├── fig6b_time_ransomware.png            # M6a
+│   ├── fig6c_tps_backup.png                 # M6a
+│   ├── fig6d_tps_ransomware.png             # M6a
+│   └── fig6e_component_breakdown.png        # M6a — our addition, not in the paper (see below)
 └── logs/
     └── <run_id>.json     # config hash, seed, host, CPU, wall times, git rev
 ```
 
 Every figure has a sidecar JSON. Every number is either `measured` (with a run_id) or
-`paper_reported` (with a citation). No third category.
+`paper_reported` (with a citation), with one narrow exception: a handful of `bench/`'s M6a
+numbers (the modelled-network column and the D3 serialization estimate) are `computed` — pure
+arithmetic or a microbenchmark, not a stopwatch around the thing itself, and precedent for a
+third label already exists (`detection/constant-positive`'s baseline row in `RESULTS.md`).
+`bench/harness.py`'s module docstring says which of its outputs are `measured` and which are
+`computed`.
+
+**Fig. 6(e), added in M6a, is not in the paper.** It is a component-breakdown panel — compute,
+modelled network, index construction (DEV-05) and D3's serialization estimate for case-3, each
+its own bar — kept structurally separate from Figs. 6(a)-(d) so that a `computed` number never
+gets summed into something that looks `measured` and comparable to the paper's six data points.
+See `bench/emit.py`.

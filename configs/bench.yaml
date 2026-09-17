@@ -49,6 +49,18 @@ timing:
 # columns. The modelled column is not `measured` (CLAUDE.md §2) and is never summed into a
 # measured number without a label saying so.
 
+# M6a. A representative, illustrative delay for the "modelled network seconds" column
+# (docs/EXPERIMENTS.md Target 3, DEV-21's 4d-per-block / 3d-inside-consensus formula). DECLARED,
+# not measured and not the value the timed runs above use (those stay at chain.yaml's
+# consensus.message_delay_s, default 0.0 — see the long comment above). Picking a delay here does
+# not change any measured number; it only says which delay the modelled column illustrates.
+# 10ms is one same-datacenter LAN hop, a plausible floor for a real deployment; swept alongside
+# 1ms (near-instant, same-rack) and 50ms (WAN / a telehealth link) so the reader sees the column
+# scale rather than trusting one arbitrary pick.
+network:
+  modelled_delay_s: 0.01
+  modelled_delay_sweep_s: [0.001, 0.01, 0.05]
+
 derived:
   # DEV-08. TPS is arithmetic on the timing above, never a separately measured quantity:
   #   tps = total_transactions / total_seconds

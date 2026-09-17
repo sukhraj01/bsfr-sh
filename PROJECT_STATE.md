@@ -4,26 +4,24 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-13 · **Milestone:** M6 (benchmarks and figures) · **Sessions completed:** 10
+**Last updated:** 2026-09-17 · **Milestone:** M6b (Table II, Figs. 4-5, Ada job) · **Sessions completed:** 11
 
 ---
 
 ## One-line status
 
-M5 is closed: all five phases are wired. `mitigation/state.py` is six frozen dataclasses —
-`DETECTED → ISOLATED → REMEDIATING → (RESTORED | CLEANED | POLICY_BLOCKED) → RESOLVED` — where
-each state nests its predecessor, so illegal transitions (remediating before isolating) are
-unrepresentable rather than checked, mirroring `blockchain.block.BlockDraft.seal()`.
-`mitigation/cases.py` implements Case-1 (quarantine, DEV-04), Case-2 (restore, calling
-`framework.phase5_recovery.run` through an injected callable), and Case-3 (SIMULATED ONLY, DEV-09:
-evaluates `RW_amt < DT-SYS_i-amt`, writes one audit log record, always terminates
-`POLICY_BLOCKED`) — inertness enforced structurally by `test_case3_is_inert.py`, not by comment.
-`framework/phase4_mitigation.py` wires `detection.detector.Phase4Handoff` to the state machine.
-`tests/integration/test_full_sequence.py` walks backup → collection → detection → mitigation →
-recovery through real pBFT on both `BC_DTBU` and `BC_SigRW`, ending byte-identical. DEV-29 records
-the two gaps the paper leaves open (which case applies; how a detection names a system) as explicit
-caller-supplied arguments rather than invented rules. `make test-all`: 1293 passed. `make lint`
-clean. Next is M6, benchmarks and figures — the last implementation milestone.
+M6a is closed: `bench/harness.py` times cases 1-3 (5/10/15 blocks x 100 tx, both chains, 4
+nodes) by reusing `consensus.pbft.Cluster` and `framework._block_pipeline.commit` directly — no
+new consensus machinery. `bench/emit.py` produces Figs. 6(a)-(d) (ours vs. paper, each with a
+sidecar) plus Fig. 6(e), our own component-breakdown panel (compute/modelled-network/index/D3,
+never summed into a number comparable to the paper's). `scripts/run_bench.py` wires it end to
+end: a case-3 variance probe decides the repeat count instead of trusting the declared floor,
+DEV-21's `4d`/`3d` network formula is verified against a real non-zero-delay run before being
+trusted, D3's serialization omission is quantified (not just flagged) via
+`util.serialization` throughput, and Q2's payload sweep ran and closed with the memory ceiling
+projected rather than found by OOMing the dev box. `make test`: 1318 passed. `make lint` clean.
+`make figures` now runs (M6a's half; Table II/Figs. 4-5 still `make repro`/`make honest` stubs).
+Next is M6b: wire the ML entry points to M4a/M4b's already-built pipelines, plus the Ada job.
 
 ---
 
@@ -39,7 +37,8 @@ clean. Next is M6, benchmarks and figures — the last implementation milestone.
 | `data/honeypot/` corpus | done | fixed dataset (Q9): 1467 train + 731 eval, two seeds |
 | `data/raw/` BitcoinHeist | **local only** | gitignored; `make data` refetches (~56 min here) |
 | `detection/` dataset, models, metrics, profiles, detector | done | M4a, M4b |
-| `bench/`, figures | **not started** | **M6 — start here** |
+| `bench/harness.py`, `bench/emit.py`, Figs. 6a-e | done | M6a |
+| `make repro` / `make honest` / Table II / Figs. 4-5 / Ada job | **not started** | **M6b — start here** |
 
 ## Current numbers
 
@@ -61,35 +60,29 @@ run `20260913T134602Z-ab45ac90`, train n=1467 eval n=731, real pBFT consensus bo
 M5 produced no numbers — mitigation has no bench target (`docs/DEVIATIONS.md` DEV-29's note that
 Alg. 4 is not benchmarked).
 
-## What M6 must not re-derive
-
-- **TPS is derived, never separately measured**: `tps = total_tx / total_seconds` (DEV-08). Report
-  marginal per-block cost alongside the average, not instead of it.
-- **Index maintenance (DEV-05) and message-delay modelling (DEV-21) are separate columns**, never
-  inside the Target 3 span (block construction + consensus + append). `configs/bench.yaml`
-  already declares this; a harness that folds either in silently changes what Target 3 means.
-- **Payload size is declared, not measured** (DEV-15): `configs/chain.yaml`
-  `transaction.payload_bytes: 4096`. `payload_bytes_sensitivity: [1024, 4096, 16384]` is the sweep
-  M6 owes; absolute seconds move with it, the trend/ratio targets (DEV-13) do not.
-- **Absolute timings are not the reproduction target** (DEV-13): Python vs. the paper's Java on
-  different hardware. Report trend and ratio; record our own hardware in every sidecar.
-- **`framework/`, `mitigation/`, `recovery/` are all closed as of M5.** `bench/` calls into them;
-  nothing below `framework/` may import `bench/` (`test_nothing_below_framework_imports_it`).
-- **Every run writes a sidecar and a `measured` RESULTS.md line with its run_id, seed and config
-  hash** (`crypto.hashing.CONFIG_HASH_SCHEME`, currently 2 — DEV-18).
-- **Project compute before running it** (CLAUDE.md §6): KNN on the full 2.9M-row BitcoinHeist is
-  the memory hazard on the 8 GB dev box. `--full` runs are opt-in and belong on Ada.
-- **Test harnesses:** `pbft_harness.py`, `m3a_harness.py`, `m3b_harness.py`. `bench/harness.py`
-  (new, M6) times cases 1/2/3 — reuse the cluster builders, do not rebuild them.
+**Bench, M6a** (`scripts/run_bench.py --seed 20260917`, run `20260917T144843Z-fb4c2410`, n=25
+repeats — case-3 variance probe read CV up to 45% on a noisy invocation, see `RESULTS.md`):
+case-3 `BC_DTBU` 0.479s / `BC_SigRW` 0.691s, two-to-three orders of magnitude below the paper's
+5.71s/6.76s (expected, DEV-13). Marginal per-block cost is **flat**, not sublinear like the
+paper's — our own TPS is correspondingly flat (~2930-3190 `BC_DTBU`, ~2170-2230 `BC_SigRW`) where
+the paper's six points rise. DEV-08 amended with this as a second, measured line of evidence for
+the same "rising TPS is amortisation" conclusion. `BC_SigRW` is consistently ~35-45% slower than
+`BC_DTBU` (paper: 18-41%), attributed to DEV-03's extra ECDSA sign per transaction. D3's
+serialization omission: ≈0.2-0.3% of measured compute (DEV-30, new). Q2 closed: sweep ran at
+1024/4096/16384 B, 4096 B default kept; a 10 MB payload would need ~67 GiB (4 replicas x
+ciphertext overhead), not run.
 
 ## Next task
 
-**M6 — Benchmarks and figures.** `bench/harness.py` (cases 1/2/3 = 5/10/15 blocks × 100 tx on both
-chains, median of N repeats, warm-up discard, marginal per-block cost alongside the total —
-DEV-08), `bench/emit.py` (Table II + Figs. 4, 5, 6a–6d + sidecar JSON), wire `make repro` / `make
-honest` / `make figures` (currently stubs that `exit 1`, per `Makefile`'s M5-era comment). Exit:
-every target in `docs/EXPERIMENTS.md` carries a `measured` or `paper_reported` label, and Figs.
-6(a)–(d)'s trend and marginal-cost-gap claims are verified against our own runs, not assumed.
+**M6b — Table II, Figs. 4-5, Ada `honest_mode`.** `scripts/run_detection.py` and
+`scripts/run_phase3_detection.py` (M4a/M4b) already produce every number Table II needs;
+`bench/emit.py` needs a `emit_table2()`/`emit_fig4_5()` pair reading from `RESULTS.md`'s existing
+detection lines rather than re-running the ML. Wire `make repro` (paper-faithful 90/10, cases 1-3
+— note cases 1-3 there means the ML split naming, not M6a's block-count cases) and `make honest`
+(natural balance, stratified CV) to those scripts. Submit `scripts/ada_honest_mode.sbatch` on Ada
+for the full 2.9M-row `honest_mode` run, **unrun** as of this session. Exit: every target in
+`docs/EXPERIMENTS.md` carries a `measured` or `paper_reported` label — Targets 1/2 (M4a/M4b,
+already measured) just need the figures; Target 5 (§V) is test-mapped only, no figure owed.
 
 ## Blockers
 
@@ -100,10 +93,8 @@ BitcoinHeist run. README states the wait and the sha256.
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q2 | Transaction payload size — 4096 B *declared* (DEV-15), not justified | M6 result validity | M6's sweep; DEV-24 pins the meaning and the measured framing overhead |
-| Q4 | Do we need real feature-space evasion for M7? | M7 | defer until M6 lands |
-| Q5 | One merged config object or three files at the entry points? | M6 | decide when `bench/` becomes the first multi-config consumer |
-| Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M6 | only if M6 benchmarks a lossy network |
+| Q4 | Do we need real feature-space evasion for M7? | M7 | defer until M6b lands |
+| Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M7 | only if M7 benchmarks a lossy network |
 
 ## For the write-up
 
@@ -139,8 +130,8 @@ contradicting §II-C).
 
 | # | Item | Retire by |
 |---|---|---|
-| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. | M6 |
-| D3 | The bus never serialises, so wire-encoding cost is absent from the consensus span. | M6 |
+| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. | M6b |
+| D3 | The bus never serialises; magnitude now quantified (DEV-30, M6a: ≈0.2-0.3% of measured compute) but the omission itself is unfixed. | M7, if async pBFT lands |
 | D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
 | D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10. | before sklearn 1.10 |
 

@@ -1,0 +1,7 @@
+case,chain,blocks,transactions,seconds_measured,seconds_paper,tps_measured,tps_paper
+case_1,BC_DTBU,5,500,0.16822,3.10,2972.21,161.29
+case_1,BC_SigRW,5,500,0.22774,4.36,2195.49,114.68
+case_2,BC_DTBU,10,1000,0.34124,4.17,2930.52,239.81
+case_2,BC_SigRW,10,1000,0.45902,5.54,2178.58,180.51
+case_3,BC_DTBU,15,1500,0.47895,5.71,3131.86,262.70
+case_3,BC_SigRW,15,1500,0.69141,6.76,2169.48,221.89

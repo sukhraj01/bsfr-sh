@@ -211,6 +211,19 @@ throughput improvement.
 **Ours:** reproduce the averaged TPS as published, and additionally report marginal per-block
 cost, which is approximately flat.
 
+**Amendment (M6a, 2026-09-17): measured, not just predicted.** `bench.harness.run_case()` starts
+each block's timer *after* the cluster is built, so no fixed setup cost is inside the measured
+span by construction — `docs/EXPERIMENTS.md` Target 3's protocol note. The result: our own
+marginal per-block cost is flat (`BC_DTBU` ~0.031-0.034s/block, `BC_SigRW` ~0.044-0.046s/block,
+case-1 through case-3, run `20260917T144843Z-fb4c2410`), and our own TPS is correspondingly flat
+(~2930-3190 tx/s and ~2170-2230 tx/s respectively) rather than rising like the paper's six
+points. This is a sharper claim than the original entry made: not just "the paper's TPS is
+`tx/time`, which is arithmetic" but "when the same arithmetic is applied to a curve with the
+fixed-cost term actually removed, the rise disappears" — a second, independent line of evidence
+for the same conclusion, this time a measurement rather than an identity. See
+`docs/EXPERIMENTS.md` Target 3/4 for the full numbers and `bench/harness.py`'s module docstring
+for what is `measured` here versus `computed`.
+
 ### DEV-09 · POLICY · Case-3 ransom payment is simulated only
 **Paper:** Alg. 4 line 7 automates paying the adversary and retrieving `K_d` when
 `RW_amt < DT-SYS_i-amt`.
@@ -304,6 +317,34 @@ box. `payload_bytes_sensitivity: [1024, 4096, 16384]` is swept in M6 so the repo
 much of the paper's curve is really a statement about payload size.
 **Impact on reproduction:** absolute seconds shift with this value; the trend and ratio targets
 (DEV-13) do not. Recorded in every bench sidecar via the config hash.
+
+**Amendment (M6a, 2026-09-17): Q2 closed — the sweep ran, the default is kept, the ceiling is
+projected rather than found by OOMing a box.** `scripts/run_bench.py` ran case-3 at all three
+declared sizes (1024/4096/16384 B) on both chains before touching anything larger
+(`bench.harness.projected_chain_bytes`, `estimate_overhead_factor`) — `RESULTS.md`
+`bench/q2-payload-sweep`, run `20260917T144843Z-fb4c2410`:
+
+```
+BC_DTBU  case-3: 1024B=0.440s  4096B=0.498s  16384B=0.680s
+BC_SigRW case-3: 1024B=0.605s  4096B=0.723s  16384B=1.329s
+```
+
+Payload size visibly matters more for `BC_SigRW` than `BC_DTBU` (16x payload costs ~1.55x time on
+`BC_DTBU`, ~2.20x on `BC_SigRW`) — consistent with `SignatureRecordPayload` representing its
+payload as many individual small floats rather than one raw bytes blob, so a bigger payload means
+more canonical-encoder call overhead, not just more bytes.
+
+**The memory ceiling is worse than a naive `payload x 100 x 15` projection suggests.** A `Cluster`
+holds `consensus.miner_nodes` (4) independent `Chain` instances, each storing every block in full
+(CLAUDE.md §4's per-replica independence, extended: the same "no shared state" design that keeps
+`BC_DTBU` and `BC_SigRW` apart also means one cluster never shares block storage across its own
+replicas). Measured ciphertext/AEAD-tag/wrapped-key overhead is ~10-15% over the raw plaintext
+budget (`estimate_overhead_factor`, both chains). Projected footprint for a hypothetical 10 MB
+payload at case-3 scale: `10 MiB * 100 tx * 15 blocks * 4 replicas * ~1.14 overhead ≈ 67 GiB` —
+over 8x the naive single-chain estimate of ~15 GB, and decisively over an 8 GB dev box. **Not
+run.** The declared default (`transaction.payload_bytes: 4096`) is kept: it sits well inside the
+safe, measured range and the sweep shows the trend it produces is not an artifact of that
+specific value.
 
 ### DEV-16 · FILL · Declared ML hyperparameters and split ratio
 **Paper:** §VII reports Random Forest, Logistic Regression, Decision Tree and KNN with accuracy
@@ -460,6 +501,21 @@ hybrid encryption. A non-zero delay does **not** change wall-clock; it adds `≈
 simulated time per committed block (pre-prepare → prepare → commit, one height in flight per
 DEV-20). M6 reports the measured compute and the modelled network time as separate columns and
 labels the second as modelled — it is not `measured` in the CLAUDE.md §2 sense.
+
+**Amendment (M6a, 2026-09-17): the exact formula, and it is verified, not assumed.** One
+committed block costs **4** message hops on the bus's simulated clock, not the ~3 the original
+entry approximated: 1 for the client's `ClientRequest` broadcast reaching the replicas, plus 3
+inside pBFT itself (pre-prepare, prepare, commit). `bench.harness.modelled_network_seconds()`
+computes `blocks * 4 * delay_s` total, `blocks * 3 * delay_s` "inside consensus" in
+`configs/bench.yaml`'s sense. `bench.harness.verify_modelled_network_formula()` runs a real small
+cluster at several non-zero delays and reads `Cluster.network.now` after the last commit — the
+formula matched to floating-point exactness at every delay and block count tried (1ms/10ms/50ms
+x 5/15 blocks, and again at run `20260917T144843Z-fb4c2410`: predicted 0.200s, actual 0.200s at
+delay=10ms, blocks=5). `bench/emit.py`'s Fig. 6(e) applies this at a declared illustrative delay
+(`configs/bench.yaml` `network.modelled_delay_s`, 10ms — one same-datacenter LAN hop) and finds
+the modelled network column **larger than the entire measured compute column** for case-3 on
+both chains at that delay — a concrete reason the delay=0 default (chosen for test speed, not
+realism) is not a free simplification for anyone reading Figs. 6(a)-(d) as a deployment estimate.
 
 ### DEV-22 · FILL · The pBFT primary assembles the block; the collecting `CS_l` submits transactions
 **Paper:** Alg. 1 line 3 (and Alg. 2 line 8) has the collecting cloud server `CS_l` assemble
@@ -687,3 +743,39 @@ system a detection is attributed to is the same one Phase 1 backed up, by constr
 test, not by anything Phase 3 or Phase 4 derives.
 **Impact on reproduction:** none — Alg. 4 is not benchmarked (M6's Figs. 6a-d are Algs. 1/2/5 and
 consensus timing only).
+
+### DEV-30 · ADD · D3's magnitude — the wire-serialization cost the bus never pays, quantified (M6a)
+**Paper:** §VII benchmarks a pBFT-based system without discussing message encoding at all —
+absent from the paper the way the bus's own encoding is absent from this project (D3, carried
+debt since M2b).
+
+**Problem:** `consensus.network.P2PCSNetwork` passes Python objects between replicas and never
+serialises them (that module's own docstring: "the bus also does not serialise"). A real
+networked deployment would encode every `Proposal`/`Prepare`/`Commit` message before sending it
+and decode it on arrival. That cost is entirely absent from Figs. 6(a)-(d)'s numbers. Carrying
+this only as an unquantified caveat ("our numbers omit wire encoding") invites exactly the wrong
+reading — that it is negligible, or that it is unknown in size. Neither was true and neither
+should be assumed without measuring it.
+
+**Ours:** `bench.harness.estimate_block_encode_seconds()` times `util.serialization.encode_block()`
+on a real, already-committed block — the one place in this codebase CLAUDE.md §7 permits
+canonical encoding to happen — and `estimate_d3_seconds()` multiplies by the block count,
+modelling one encode per committed block (the primary's `Proposal` broadcast to `2f` backups,
+encoded once and reused for every recipient; `Prepare`/`Commit` carry a 32-byte digest each and
+are negligible against a multi-KB block). This is a **lower bound**, stated as such in the
+function's own docstring: it excludes decode cost on the receiving side and the small vote
+messages entirely.
+
+**Measured magnitude (`RESULTS.md` `bench/d3-serialization`, run `20260917T144843Z-fb4c2410`,
+case-3, 15 blocks x 100 tx x 4096 B payload):** `BC_DTBU` ≈1.6ms total (~0.33% of that case's
+measured compute total), `BC_SigRW` ≈1.1ms (~0.16%). **Small relative to compute at delay=0, and
+this is itself informative** — it says the omission is not what is making Figs. 6(a)-(d) diverge
+from the paper by two-to-three orders of magnitude; DEV-13's language/runtime/hardware gap
+dwarfs it. It stays a real, permanent omission from every number this project reports, now with a
+stated size rather than an open-ended caveat, and it would matter far more at a non-zero
+`message_delay_s` where decode cost on 3 recipients rather than 1 encode would start to be a
+non-trivial fraction of the modelled network column (DEV-21).
+
+**Impact on reproduction:** none on the trend/ratio target (DEV-13) — the magnitude is small
+enough not to change the shape conclusion. Recorded so "the bus doesn't serialise" stops being an
+asterisk with no number attached to it.

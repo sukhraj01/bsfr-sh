@@ -73,6 +73,7 @@ _REQUIRED: Final[dict[str, tuple[tuple[str, type | tuple[type, ...]], ...]]] = {
         ("cases", dict),
         ("chains", dict),
         ("transaction.payload_bytes", int),
+        ("transaction.payload_bytes_sensitivity", list),
         ("crypto.hash", str),
         ("crypto.signature.algorithm", str),
         ("crypto.signature.curve", str),
@@ -98,6 +99,8 @@ _REQUIRED: Final[dict[str, tuple[tuple[str, type | tuple[type, ...]], ...]]] = {
         ("output.figures_dir", str),
         ("output.logs_dir", str),
         ("output.sidecar_fields", list),
+        ("network.modelled_delay_s", (int, float)),
+        ("network.modelled_delay_sweep_s", list),
     ),
 }
 

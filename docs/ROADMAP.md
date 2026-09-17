@@ -196,13 +196,33 @@ open here: which case applies, and how a detection is attributed to a system. `m
 
 ---
 
-## M6 — Benchmarks and figures `[ ]`
+## M6 — Benchmarks and figures
 
-- [ ] `bench/harness.py` — cases 1/2/3, median of N, warm-up discard, marginal cost
-- [ ] `bench/emit.py` — tables + six figures + sidecar JSON
-- [ ] `make repro`, `make honest`, `make figures`
-- [ ] Reproduce Figs. 6(a)–(d) trends; verify concavity and chain-cost gap
-- [ ] Ada job script for full-scale ML runs
+**Split into M6a and M6b on 2026-09-17.** M6a is the timing harness and Figs. 6(a)-(d) — a
+question about our own consensus/crypto stack, answerable entirely from code already built.
+M6b is Table II, Figs. 4-5, and the Ada `honest_mode` job — ML runs, a different kind of work
+with a different failure mode (leakage, class balance) than the timing side. Bundling them would
+have meant debugging a matplotlib figure spec through an sklearn fit.
+
+### M6a — timing harness and Figs. 6(a)-(d) `[x]`
+
+- [x] `bench/harness.py` — cases 1/2/3, median of N (N justified by a measured case-3 variance
+      probe, not guessed), warm-up discard, marginal per-block cost
+- [x] Compute, modelled network (DEV-21's `4d`/`3d` formula), index construction (DEV-05) and
+      D3's serialization estimate reported as four separate columns, never summed
+- [x] Q2 payload sweep (1024/4096/16384 B) at case-3, memory-footprint projected before running
+- [x] `bench/emit.py` — Figs. 6(a)-(d) + a component-breakdown panel, each with sidecar JSON
+- [x] `make figures` wired for the bench half (Table II / Figs. 4-5 remain M6b)
+
+**Exit:** `make figures` produces Figs. 6(a)-(d) with sidecars; every number has a `RESULTS.md`
+line (`measured` for timings, `computed` for the modelled-network and D3 columns, matching the
+existing baseline convention). Variance is reported and the repeat count follows from it.
+
+### M6b — Table II, Figs. 4-5, Ada `honest_mode` `[ ]`
+
+- [ ] Wire `make repro` / `make honest` to `detection/` (M4a/M4b already built the pipelines)
+- [ ] `bench/emit.py` — Table II + Figs. 4-5
+- [ ] Submit `scripts/ada_honest_mode.sbatch` on Ada, full 2.9M-row `honest_mode`
 
 **Exit:** every target in `docs/EXPERIMENTS.md` has a `measured` or `paper_reported` label.
 

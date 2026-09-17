@@ -210,3 +210,44 @@ checks this automatically (`leak_margin=0.05`) and refuses to print a `RESULTS.m
 report a number that would mean the generator leaked, not that detection worked; it did not fire
 here. This is the first number in this project produced by Phase 2's output feeding Phase 3's
 input (FLAW-2's framework half, closed for M4b — see `docs/PAPER_NOTES.md` and `docs/DEVIATIONS.md`).
+
+## Bench (M6a — Target 3/4 timing, Figs. 6a-e)
+
+`scripts/run_bench.py --seed 20260917`. Two independent invocations measured case-3 variance
+before deciding the repeat count: the first read a quiet-machine CV of ~1% (`BC_DTBU` 0.76%,
+`BC_SigRW` 1.29%, run `20260917T144151Z-3d88337d`) and kept the declared floor of 5 repeats; the
+second, run minutes later on the same code and config, read CV up to 45% on `BC_DTBU`
+(`BC_SigRW` 8.85%, run `20260917T144843Z-fb4c2410`) — ordinary background load on a shared dev
+laptop, not algorithmic nondeterminism, given the fixed seeds — and `decide_repeat_count` raised
+the repeat count to 25 accordingly. The case-1-to-case-3 trend stayed resolvable at both
+readings. **The second (noisier, more repeats) run is the one below and the one Figs. 6(a)-(e)
+are built from** — the more conservative choice, and it is the one the adaptive repeat count was
+built to produce.
+
+```
+2026-09-17 | bench/target3-time | BC_DTBU case_1 5blk x 100tx, n=25 | seconds=0.16822 stdev=0.02370 tps=2972.2 | measured | 20260917T144843Z-fb4c2410 | Target 3/4; marginal[:3]=0.0342, 0.0326, 0.0337
+2026-09-17 | bench/target3-time | BC_SigRW case_1 5blk x 100tx, n=25 | seconds=0.22774 stdev=0.01073 tps=2195.5 | measured | 20260917T144843Z-fb4c2410 | Target 3/4; marginal[:3]=0.0454, 0.0456, 0.0454
+2026-09-17 | bench/target3-time | BC_DTBU case_2 10blk x 100tx, n=25 | seconds=0.34124 stdev=0.07290 tps=2930.5 | measured | 20260917T144843Z-fb4c2410 | Target 3/4; marginal[:3]=0.0328, 0.0335, 0.0338
+2026-09-17 | bench/target3-time | BC_SigRW case_2 10blk x 100tx, n=25 | seconds=0.45902 stdev=0.02022 tps=2178.6 | measured | 20260917T144843Z-fb4c2410 | Target 3/4; marginal[:3]=0.0446, 0.0451, 0.0452
+2026-09-17 | bench/target3-time | BC_DTBU case_3 15blk x 100tx, n=25 | seconds=0.47895 stdev=0.03627 tps=3131.9 | measured | 20260917T144843Z-fb4c2410 | Target 3/4; marginal[:3]=0.0316, 0.0316, 0.0315
+2026-09-17 | bench/target3-time | BC_SigRW case_3 15blk x 100tx, n=25 | seconds=0.69141 stdev=0.03235 tps=2169.5 | measured | 20260917T144843Z-fb4c2410 | Target 3/4; marginal[:3]=0.0450, 0.0444, 0.0455
+2026-09-17 | bench/index-construction | BC_DTBU case_1 | seconds=0.06771 | measured | 20260917T144843Z-fb4c2410 | DEV-05, outside the timed append span
+2026-09-17 | bench/index-construction | BC_DTBU case_2 | seconds=0.13190 | measured | 20260917T144843Z-fb4c2410 | DEV-05, outside the timed append span
+2026-09-17 | bench/index-construction | BC_DTBU case_3 | seconds=0.18989 | measured | 20260917T144843Z-fb4c2410 | DEV-05, outside the timed append span
+2026-09-17 | bench/variance-case3 | BC_DTBU n=12 | mean=0.74250 stdev=0.33663 cv=0.4534 | measured | 20260917T144843Z-fb4c2410 | drives the repeat count, not a Fig. 6 datapoint
+2026-09-17 | bench/variance-case3 | BC_SigRW n=12 | mean=0.85818 stdev=0.07597 cv=0.0885 | measured | 20260917T144843Z-fb4c2410 | drives the repeat count, not a Fig. 6 datapoint
+2026-09-17 | bench/variance-case3 | BC_DTBU n=12 (quiet-machine reading) | mean=0.46760 stdev=0.00356 cv=0.0076 | measured | 20260917T144151Z-3d88337d | superseded by the noisier reading above; kept for provenance of the CV-fluctuates finding
+2026-09-17 | bench/variance-case3 | BC_SigRW n=12 (quiet-machine reading) | mean=0.67857 stdev=0.00875 cv=0.0129 | measured | 20260917T144151Z-3d88337d | superseded by the noisier reading above; kept for provenance of the CV-fluctuates finding
+2026-09-17 | bench/d3-serialization | BC_DTBU case_3 15blk | encode_per_block=0.000106 case3_total=0.001591 fraction_of_compute=0.00332 | computed | 20260917T144843Z-fb4c2410 | D3, lower bound, encode only (DEV-30)
+2026-09-17 | bench/d3-serialization | BC_SigRW case_3 15blk | encode_per_block=0.000073 case3_total=0.001100 fraction_of_compute=0.00159 | computed | 20260917T144843Z-fb4c2410 | D3, lower bound, encode only (DEV-30)
+2026-09-17 | bench/network-modelled | both chains case_3 15blk, delay=10ms/hop | total_seconds=0.6000 consensus_seconds=0.4500 | computed | 20260917T144843Z-fb4c2410 | DEV-21, formula verified against a real run (predicted=actual=0.2000s at 5blk/10ms)
+2026-09-17 | bench/q2-payload-sweep | BC_DTBU case_3 | 1024B=0.4396s 4096B=0.4983s 16384B=0.6796s | measured | 20260917T144843Z-fb4c2410 | Q2 closed, default stays 4096B (DEV-15)
+2026-09-17 | bench/q2-payload-sweep | BC_SigRW case_3 | 1024B=0.6050s 4096B=0.7235s 16384B=1.3288s | measured | 20260917T144843Z-fb4c2410 | Q2 closed, default stays 4096B (DEV-15)
+2026-09-17 | bench/q2-projection | 10MB payload, case_3, x4 replicas, x1.14 overhead | projected_cluster_gib=67.4 | computed | 20260917T144843Z-fb4c2410 | not run — DEV-15, would OOM the 8GB dev box
+```
+
+Paper comparison (`results/tables/target3_target4.csv`, Figs. 6(a)-(d)): our seconds are two to
+three orders of magnitude below the paper's on every case/chain; TPS is flat across cases on both
+of ours (~2930-3190 `BC_DTBU`, ~2170-2230 `BC_SigRW`) against the paper's rising six points. See
+`docs/EXPERIMENTS.md` Target 3/4 and `docs/DEVIATIONS.md` DEV-08/DEV-13/DEV-21/DEV-30 for what
+this does and does not mean.

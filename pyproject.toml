@@ -115,9 +115,14 @@ pretty = true
 # Added in M4a, when the import actually appeared. scikit-learn ships no `py.typed` marker, so
 # `mypy --strict` cannot see its types at all. The scope is deliberately one library: estimators
 # are reached through `detection/models.py`, which annotates every value that crosses back into
-# our code, so the untyped region stops at that wrapper. matplotlib will need the same treatment
-# at M6 — added then, not now, because `warn_unused_configs` reports a stanza for a module
-# nothing imports and a config that warns on a clean run trains you to ignore its output.
+# our code, so the untyped region stops at that wrapper.
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "pandas.*"]
+ignore_missing_imports = true
+
+# Added in M6a, when bench/emit.py started plotting. Same shape as the scikit-learn override
+# above: matplotlib ships no py.typed marker, and the untyped region stops at emit.py, which
+# annotates every value that crosses back into our code.
+[[tool.mypy.overrides]]
+module = ["matplotlib.*"]
 ignore_missing_imports = true
