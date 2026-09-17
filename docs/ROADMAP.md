@@ -226,11 +226,12 @@ existing baseline convention). Variance is reported and the repeat count follows
       rather than deferred, DEV-31), neither touches Ada
 - [x] `bench/emit.py` — Table II (`emit_table2_paper_mode`/`emit_table2_honest_mode`) + Figs. 4-5
       (`emit_fig4_5`, paper-shape and baseline-annotated versions of each)
-- [x] Submitted `scripts/ada_honest_mode.sbatch` on Ada, full 2.9M-row `honest_mode` — adapted to
-      the account's real, discovered SLURM limits (DEV-31); see `RESULTS.md` for whether it
-      completed within the session or is still queued/running
+- [x] `scripts/ada_honest_mode.sbatch` on Ada, full 2.9M-row `honest_mode` — adapted to the
+      account's real, discovered SLURM limits (DEV-31), one failed attempt (dropped dataset
+      download, fixed with retry/resume) and one resubmission, **completed within the session**
+      (job 2700090, 36m26s, all four models at 2,916,697 rows, `deferred: {}`)
 
-**Exit:** every target in `docs/EXPERIMENTS.md` has a `measured` or `paper_reported` label.
+**Exit:** every target in `docs/EXPERIMENTS.md` has a `measured` or `paper_reported` label. Met.
 
 ---
 

@@ -302,18 +302,30 @@ session, each correction found by actually trying, not guessed in advance:
    `$HOME_CHECKOUT/.venv-ada-persist` (NFS-shared, survives the job) so a retry after a
    *later* transient failure does not repeat the ~1h pip install too.
 
-**Resubmitted as job 2700090.** Currently `PENDING` (`QOSMaxCpuPerUserLimit`) — a second, unrelated
-job already running on this account (`2700069`, not started by this session) is using 4 of the
-10-cpu QOS budget, so the 10-cpu request queues rather than failing; it will start automatically
-once that job finishes or frees enough of the shared quota. Bulk transfer to/from/within Ada was
-consistently slow all session (~30-75 KB/s, including `pip`'s own PyPI downloads from the compute
-node) — this is an account/institution-level characteristic, not something either job's script
-choices caused.
+**Resubmitted as job 2700090.** Queued `PENDING` (`QOSMaxCpuPerUserLimit`) behind a second,
+unrelated job already running on this account (`2700069`, not started by this session) that was
+using 4 of the 10-cpu QOS budget; started automatically once that job's quota usage dropped, ran
+36m26s, and **completed cleanly** (exit 0) — all within the same session. Host: Linux x86_64,
+Python 3.12.4, seed 20260912, `full_scale: true`, `deferred: {}` — nothing deferred, KNN ran on
+every one of the 2,916,697 rows this time, not a subsample:
 
-**Not completed within the session; this is the honest status, per the session brief's explicit
-fallback** ("the SBATCH submitted... recorded regardless" if the job has not completed). To
-collect the result later: `ssh ada 'sacct -j 2700090'`; if `COMPLETED`, `scp` back
-`~/bsfr-sh/results/tables/table2_honest_mode_ada.csv` and `~/bsfr-sh/ada_honest_stdout_2700090.log`
-(has the `RESULTS.md` lines) and replace the local `table2_honest_mode.csv` with the Ada one — all
-four models at full scale, not a KNN subsample. If `PENDING` still, no action is needed; SLURM
-starts it on its own once resources free up.
+```
+2026-09-18 | detection/bitcoinheist-honest | random_forest, natural 2916697 rows | prec=0.7442 rec=0.2864 pr_auc=0.4646 mcc=0.4573 f1min=0.4136 | measured | 20260917T201959Z-6e05408c | DEV-06 honest mode, full scale, Ada job 2700090
+2026-09-18 | detection/bitcoinheist-honest | logistic_regression, natural 2916697 rows | prec=0.0000 rec=0.0000 pr_auc=0.0177 mcc=0.0000 f1min=0.0000 | measured | 20260917T201959Z-6e05408c | DEV-06 honest mode, full scale, Ada job 2700090
+2026-09-18 | detection/bitcoinheist-honest | decision_tree, natural 2916697 rows | prec=0.3972 rec=0.4231 pr_auc=0.1797 mcc=0.4012 f1min=0.4097 | measured | 20260917T201959Z-6e05408c | DEV-06 honest mode, full scale, Ada job 2700090
+2026-09-18 | detection/bitcoinheist-honest | k_nearest_neighbours, natural 2916697 rows | prec=0.6008 rec=0.2286 pr_auc=0.2242 mcc=0.3654 f1min=0.3312 | measured | 20260917T201959Z-6e05408c | DEV-06 honest mode, full scale, Ada job 2700090
+```
+
+**KNN at full scale (2.9M rows) is meaningfully better than the local 780,336-row subsample**:
+MCC 0.365 vs. 0.300, precision 0.601 vs. 0.541, recall 0.229 vs. 0.172 — more data helps KNN too,
+not just RF/DT. `results/tables/table2_honest_mode.csv` now holds this full-scale run (all four
+models, none subsampled) in place of the local, KNN-subsampled one; the local run's KNN row stays
+above for provenance (`DEV-31`'s fallback demonstrated for real, not hypothetically) but is no
+longer "the" honest_mode figure. RF and DT's full-scale numbers barely moved from the local run
+(RF mcc 0.4579→0.4573, DT 0.4013→0.4012) — expected, since both already saw the same full
+2,916,697 rows locally; only KNN's row changed, because only KNN was subsampled locally.
+
+This closes the item `docs/DEVIATIONS.md` DEV-31 and `scripts/ada_honest_mode.sbatch` existed to
+produce, and does so **within the same session it was diagnosed as not-yet-complete in** — the
+"submitted, not completed" fallback this paragraph used to describe turned out to be a snapshot
+partway through a job that finished 36 minutes later, not the session's final word on it.

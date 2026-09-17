@@ -807,8 +807,9 @@ together capping any one job at 10 cpus / 30000M (≈29.3 GiB) regardless of wha
 `--mem-per-cpu=3000 --cpus-per-task=10` requests exactly that ceiling; passed through as
 `--memory-ceiling-gb 29.3 --memory-headroom 0.65`,
 `largest_feasible_n(8, 5, ceiling_gb=29.3, headroom=0.65)` returns a feasible n **larger than the
-full dataset** — verified in `tests/unit/test_detection_models.py` — so the Ada run is projected
-to cover every row, not a further subsample. See `RESULTS.md` for whether it did.
+full dataset** — verified in `tests/unit/test_detection_models.py` — so the Ada run was projected
+to cover every row, not a further subsample, and it did: job 2700090 completed with
+`deferred: {}` and all four models at 2,916,697 rows (`RESULTS.md`).
 
 **The working directory took a second correction.** The first attempt used `/share1/<user>` (25
 GB quota, nearly empty, looked like the obvious choice next to a ~3.5 GB-free home). Two small
@@ -840,7 +841,10 @@ transfer where a drop has no cheap resume — not because compute nodes have fas
 they do not.
 
 **Impact on reproduction:** none on Target 1/2's accuracy/F1 headline — this is entirely about
-`honest_mode`, which the paper does not report at all (DEV-06). It does mean the local, 8 GB-box
-`honest_mode` number in `RESULTS.md`/`table2_honest_mode.csv` is honestly labelled as a KNN
-subsample even at full row count for the other three models, rather than silently smaller than
-its own header claims.
+`honest_mode`, which the paper does not report at all (DEV-06). It does mean two honest_mode
+results exist in `RESULTS.md`, both correctly labelled: the local, 8 GB-box run (KNN on a
+780,336-row subsample, other three models at full scale, DEV-31's fallback demonstrated for
+real) kept for provenance, and the Ada run (all four models at the true 2,916,697 rows, job
+2700090) that `results/tables/table2_honest_mode.csv` now carries. KNN's full-scale MCC (0.365)
+is meaningfully higher than its subsampled MCC (0.300) — more data helps KNN too, which the
+paper's own evaluation methodology never had the chance to show either way.

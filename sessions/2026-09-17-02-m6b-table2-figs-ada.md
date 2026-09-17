@@ -220,8 +220,11 @@ Commit explaining why.
 - `make honest` (honest_mode, full, 8 GB local ceiling): same section, run
   `20260917T175754Z-f3b9e363`. `results/tables/table2_paper_mode.csv`,
   `results/tables/table2_honest_mode.csv`, Figs. 4-5 (+ baseline variants) all written locally.
-- Ada job 2700027 (failed, IncompleteRead) and its resubmission as job 2700090 (PENDING): see
-  Handover for final status as of session end.
+- Ada job 2700027: failed, `IncompleteRead` on the dataset download, 1h25m in.
+- Ada job 2700090 (resubmission, `honest_mode --full`, all four models): **completed**, run
+  `20260917T201959Z-6e05408c`, 36m26s, `deferred: {}`. RF mcc=0.457 · DT mcc=0.401 · LR mcc=0.000
+  · KNN mcc=0.365 (vs. 0.300 subsampled locally). `results/tables/table2_honest_mode.csv`
+  replaced with this run.
 
 ## Deviations opened or changed
 
@@ -237,26 +240,22 @@ Commit explaining why.
 figures and sidecars without touching Ada. Table II (both modes) and Figs. 4-5 (+ baseline
 variants) exist in `results/`. `detection.models.fits_in_memory()`'s ceiling is a parameter with
 a principled subsampling fallback, not a hard-coded constant. `scripts/fetch_bitcoinheist.py`'s
-download is now retry/resume-capable. The Ada `honest_mode` job has been submitted twice: job
-2700027 ran 1h25m (venv built fine) then died on the dataset download (fixed, see Findings);
-**job 2700090 is the live resubmission, currently `PENDING`** (`QOSMaxCpuPerUserLimit` — a
-second, unrelated job on this account is using part of the shared 10-cpu QOS budget) and will
-start automatically once that frees up. M6 (both halves) is closed regardless: every
-`docs/EXPERIMENTS.md` target carries a `measured` or `paper_reported` label already, since the
-local, full-scale `honest_mode` run (KNN subsampled) already covers Target 1/2 honestly — the
-Ada job upgrades KNN from a named subsample to the full 2.9M rows, it does not unblock anything
-that was blocked.
+download is now retry/resume-capable. The Ada `honest_mode` job was submitted twice: job 2700027
+ran 1h25m (venv built fine) then died on the dataset download (fixed, see Findings); **job
+2700090, the resubmission, completed within this session** — queued `PENDING` behind an unrelated
+job on the account, started automatically once that job's quota usage dropped, ran 36m26s, exit
+0, `deferred: {}`. All four models now have a genuine 2,916,697-row result;
+`results/tables/table2_honest_mode.csv` holds it, and the local KNN-subsampled run stays in
+`RESULTS.md` for provenance. M6 (both halves) is closed, Ada included — every
+`docs/EXPERIMENTS.md` target carries a `measured` or `paper_reported` label, for real now rather
+than via the local-run fallback this file expected to still be describing at handover time.
 
-**Next task:** No implementation milestone is open. Whoever picks this up next should first check
-`ssh ada 'sacct -j 2700090'`: if `COMPLETED`, retrieve and fold in the full-scale KNN result (see
-`RESULTS.md`'s Ada paragraph for the exact commands); if still `PENDING` or `RUNNING`, no action
-needed — it will finish or can be checked again later; if it is gone or `FAILED` for a new
-reason, re-submit `scripts/ada_honest_mode.sbatch` from `/home2/sukhraj.singh/bsfr-sh` (already a
-working checkout with a persisted venv at `.venv-ada-persist` — a resubmit from there is fast, it
-skips the ~1h `pip install`). After that: M7 (stretch, `docs/ROADMAP.md`) or report writing.
+**Next task:** No implementation milestone is open. M7 (stretch, `docs/ROADMAP.md`: Scyther model
+of the session protocol, feature-space evasion, storage-cost analysis, async pBFT, hybrid
+blockchain) or report writing are the only remaining work — pick one, or ask which the write-up
+needs first.
 
-**New blockers:** None that block further implementation. The Ada job is queued, not blocking —
-M6b's exit condition explicitly allows "submitted, not completed."
+**New blockers:** None.
 
 **Questions opened / closed:** No numbered `PROJECT_STATE.md` questions touched this session
 (Q4/Q8 remain open, both M7-scoped). The `/share1`-is-login-node-only finding and the pip/rsync
@@ -269,4 +268,4 @@ are now-known facts about the Ada environment, not open decisions.
 - [x] `RESULTS.md` appended, one line per run
 - [x] `docs/ROADMAP.md` boxes ticked
 - [x] `docs/DEVIATIONS.md` updated if the paper was departed from
-- [ ] Committed, message explains *why*
+- [x] Committed, message explains *why*
