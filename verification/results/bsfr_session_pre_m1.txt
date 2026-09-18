@@ -1,0 +1,9 @@
+=== bsfr_session_pre_m1.spdl (pre-M1 sketch, negative control), max-runs=5 ===
+claim	bsfrsessionprem1,A	Secret_A1	kdf(dhkey(Gb,a),tagsk,A,B,Na,Nb,g(a),Gb)	Ok	[no attack within bounds]
+claim	bsfrsessionprem1,A	Nisynch_A2	-	Fail	[at least 1 attack]
+claim	bsfrsessionprem1,A	Niagree_A3	-	Fail	[at least 1 attack]
+claim	bsfrsessionprem1,B	Secret_B1	kdf(dhkey(Ga,b),tagsk,A,B,Na,Nb,Ga,g(b))	Ok	[no attack within bounds]
+claim	bsfrsessionprem1,B	Nisynch_B2	-	Fail	[at least 1 attack]
+claim	bsfrsessionprem1,B	Niagree_B3	-	Fail	[at least 1 attack]
+
+See bsfr_session_pre_m1_attack.dot for the two attack traces (Nisynch_A2, Niagree_A3).

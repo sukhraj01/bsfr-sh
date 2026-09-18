@@ -72,6 +72,12 @@ With those, the protocol gives what §V-1 claims: freshness from nonces and time
 distinct keys, mutual authentication from the signed transcript, and replay / MITM / impersonation
 resistance. Timestamp window is configurable, default 30 s.
 
+**Formally verified (M7-1, DEV-14).** Scyther confirms secrecy of `SK`, mutual non-injective
+agreement, per-session freshness and impersonation/reflection resistance for this protocol as
+built, and — pointed at the pre-M1 sketch instead — finds a real attack exactly where the fix
+above was needed. `verification/README.md` has the full model, claims, results and stated
+limitations (no nonce-cache modelling, no timestamp semantics, symbolic not computational).
+
 ---
 
 ## `blockchain/`

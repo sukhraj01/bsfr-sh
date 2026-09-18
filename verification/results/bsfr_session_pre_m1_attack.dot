@@ -1,0 +1,96 @@
+claim	bsfrsessionprem1,A	Secret_A1	kdf(dhkey(Gb,a),tagsk,A,B,Na,Nb,g(a),Gb)	Ok	[no attack within bounds]
+claim	bsfrsessionprem1,A	Nisynch_A2	-	Fail	[at least 1 attack]
+digraph semiState1 {
+	label = "[Id 1] Protocol bsfrsessionprem1, role A, claim type Nisynch";
+		r0i0 [shape=box,style=filled,fillcolor="#dba270",label="send_1 to Bob\n(Alice,Na#1,TSa#1,g(a#1),\{ tag1,Alice,Na#1,TSa#1,g(a#1) \}sk(Alice))"];
+		s0 [label="{ Run #1\lAlice in role A\l|A -\> Alice\lB -\> Bob\l|Fresh a#1, Na#1, TSa#1\l|Var Gb -\> g(b#2)\lVar TSb -\> TSb#2\lVar Nb -\> Nb#2\l}", shape=record,style=filled,fillcolor="#dba270"];
+		s0 -> r0i0 [style=bold, weight="10.0"];
+		r0i1 [shape=box,style=filled,fillcolor="#dba270",label="recv_2 from Bob\n(Bob,Nb#2,TSb#2,g(b#2),\{ tag2,Bob,Nb#2,TSb#2,g(b#2),Na#1 \}sk(Bob))"];
+		r0i0 -> r0i1 [style="bold", weight="10.0"];
+		r0i3 [style=filled,fontcolor="#ffffff",fillcolor="#000000",shape=box,label="claim_A2\nNisynch"];
+		r0i1 -> r0i3 [style="bold", weight="10.0"];
+		r2i0 [shape=box,style=filled,fillcolor="#efdedb",label="recv_1 from Eve\n(Eve,Na#1,NonceIntruder1,TicketIntruder1,\{ tag1,Eve,Na#1,NonceIntruder1,TicketIntruder1 \}sk(Eve))"];
+		s2 [label="{ Run #2\lBob in role B\l|A -\> Eve\lB -\> Bob\l|Fresh b#2, Nb#2, TSb#2\l|Var Ga -\> TicketIntruder1\lVar TSa -\> NonceIntruder1\lVar Na -\> Na#1\l}", shape=record,style=filled,fillcolor="#efdedb"];
+		s2 -> r2i0 [style=bold, weight="10.0"];
+		r2i1 [shape=box,style=filled,fillcolor="#efdedb",label="send_2 to Eve\n(Bob,Nb#2,TSb#2,g(b#2),\{ tag2,Bob,Nb#2,TSb#2,g(b#2),Na#1 \}sk(Bob))"];
+		r2i0 -> r2i1 [style="bold", weight="10.0"];
+		ri3 [style=filled,fillcolor="#f68555",label="encrypt"];
+		intruder -> ri3 [label="sk(Eve)",weight="10.0"];
+	r0i0 -> ri3;
+		intruder -> ri3 [label="Eve",weight="10.0"];
+	ri3 -> r2i0;
+	r0i0 -> redir_r0i0r2i0 -> r2i0;
+	redir_r0i0r2i0 [style=filled,fillcolor="#f68555",label="select Na#1\nfake sender Eve\n"];
+	r2i1 -> redir_r2i1r0i1 -> r0i1;
+	redir_r2i1r0i1 [style=filled,fillcolor="#f68555",label="select \{ tag2,Bob,Nb#2,TSb#2,g(b#2),Na#1 \}sk(Bob)\nredirect to Alice\n"];
+	intruder [
+		label="Initial intruder knowledge\nThe intruder generates: NonceIntruder1, TicketIntruder1",
+		style=filled,fillcolor="#f68555"
+	];
+}
+
+digraph semiState2 {
+	label = "[Id 2] Protocol bsfrsessionprem1, role A, claim type Niagree";
+		r0i0 [shape=box,style=filled,fillcolor="#dba270",label="send_1 to Bob\n(Alice,Na#1,TSa#1,g(a#1),\{ tag1,Alice,Na#1,TSa#1,g(a#1) \}sk(Alice))"];
+		s0 [label="{ Run #1\lAlice in role A\l|A -\> Alice\lB -\> Bob\l|Fresh a#1, Na#1, TSa#1\l|Var Gb -\> g(b#2)\lVar TSb -\> TSb#2\lVar Nb -\> Nb#2\l}", shape=record,style=filled,fillcolor="#dba270"];
+		s0 -> r0i0 [style=bold, weight="10.0"];
+		r0i1 [shape=box,style=filled,fillcolor="#dba270",label="recv_2 from Bob\n(Bob,Nb#2,TSb#2,g(b#2),\{ tag2,Bob,Nb#2,TSb#2,g(b#2),Na#1 \}sk(Bob))"];
+		r0i0 -> r0i1 [style="bold", weight="10.0"];
+		r0i4 [style=filled,fontcolor="#ffffff",fillcolor="#000000",shape=box,label="claim_A3\nNiagree"];
+		r0i1 -> r0i4 [style="bold", weight="10.0"];
+		r2i0 [shape=box,style=filled,fillcolor="#efdedb",label="recv_1 from Eve\n(Eve,Na#1,NonceIntruder1,TicketIntruder1,\{ tag1,Eve,Na#1,NonceIntruder1,TicketIntruder1 \}sk(Eve))"];
+		s2 [label="{ Run #2\lBob in role B\l|A -\> Eve\lB -\> Bob\l|Fresh b#2, Nb#2, TSb#2\l|Var Ga -\> TicketIntruder1\lVar TSa -\> NonceIntruder1\lVar Na -\> Na#1\l}", shape=record,style=filled,fillcolor="#efdedb"];
+		s2 -> r2i0 [style=bold, weight="10.0"];
+		r2i1 [shape=box,style=filled,fillcolor="#efdedb",label="send_2 to Eve\n(Bob,Nb#2,TSb#2,g(b#2),\{ tag2,Bob,Nb#2,TSb#2,g(b#2),Na#1 \}sk(Bob))"];
+		r2i0 -> r2i1 [style="bold", weight="10.0"];
+		ri3 [style=filled,fillcolor="#f68555",label="encrypt"];
+		intruder -> ri3 [label="sk(Eve)",weight="10.0"];
+	r0i0 -> ri3;
+		intruder -> ri3 [label="Eve",weight="10.0"];
+	ri3 -> r2i0;
+	r0i0 -> redir_r0i0r2i0 -> r2i0;
+	redir_r0i0r2i0 [style=filled,fillcolor="#f68555",label="select Na#1\nfake sender Eve\n"];
+	r2i1 -> redir_r2i1r0i1 -> r0i1;
+	redir_r2i1r0i1 [style=filled,fillcolor="#f68555",label="select \{ tag2,Bob,Nb#2,TSb#2,g(b#2),Na#1 \}sk(Bob)\nredirect to Alice\n"];
+	intruder [
+		label="Initial intruder knowledge\nThe intruder generates: NonceIntruder1, TicketIntruder1",
+		style=ficlaim	bsfrsessionprem1,A	Niagree_A3	-	Fail	[at least 1 attack]
+claim	bsfrsessionprem1,B	Secret_B1	kdf(dhkey(Ga,b),tagsk,A,B,Na,Nb,Ga,g(b))	Ok	[no attack within bounds]
+claim	bsfrsessionprem1,B	Nisynch_B2	-	Fail	[at least 1 attack]
+claim	bsfrsessionprem1,B	Niagree_B3	-	Fail	[at least 1 attack]
+lled,fillcolor="#f68555"
+	];
+}
+
+digraph semiState3 {
+	label = "[Id 3] Protocol bsfrsessionprem1, role B, claim type Nisynch";
+		r0i0 [shape=box,style=filled,fillcolor="#f9d6d1",label="recv_1 from Alice\n(Alice,Na#2,TSa#2,g(a#2),\{ tag1,Alice,Na#2,TSa#2,g(a#2) \}sk(Alice))"];
+		s0 [label="{ Run #1\lBob in role B\l|A -\> Alice\lB -\> Bob\l|Fresh b#1, Nb#1, TSb#1\l|Var Ga -\> g(a#2)\lVar TSa -\> TSa#2\lVar Na -\> Na#2\l}", shape=record,style=filled,fillcolor="#f9d6d1"];
+		s0 -> r0i0 [style=bold, weight="10.0"];
+		r0i1 [shape=box,style=filled,fillcolor="#f9d6d1",label="send_2 to Alice\n(Bob,Nb#1,TSb#1,g(b#1),\{ tag2,Bob,Nb#1,TSb#1,g(b#1),Na#2 \}sk(Bob))"];
+		r0i0 -> r0i1 [style="bold", weight="10.0"];
+		r0i3 [style=filled,fontcolor="#ffffff",fillcolor="#000000",shape=box,label="claim_B2\nNisynch"];
+		r0i1 -> r0i3 [style="bold", weight="10.0"];
+		r2i0 [shape=box,style=filled,fillcolor="#dba270",label="send_1 to Charlie\n(Alice,Na#2,TSa#2,g(a#2),\{ tag1,Alice,Na#2,TSa#2,g(a#2) \}sk(Alice))"];
+		s2 [label="{ Run #2\lAlice in role A\l|A -\> Alice\lB -\> Charlie\l|Fresh a#2, Na#2, TSa#2\l|}", shape=record,style=filled,fillcolor="#dba270"];
+		s2 -> r2i0 [style=bold, weight="10.0"];
+	r2i0 -> redir_r2i0r0i0 -> r0i0;
+	redir_r2i0r0i0 [style=filled,fillcolor="#f68555",label="select \{ tag1,Alice,Na#2,TSa#2,g(a#2) \}sk(Alice)\nredirect to Bob\n"];
+}
+
+digraph semiState4 {
+	label = "[Id 4] Protocol bsfrsessionprem1, role B, claim type Niagree";
+		r0i0 [shape=box,style=filled,fillcolor="#f9d6d1",label="recv_1 from Alice\n(Alice,Na#2,TSa#2,g(a#2),\{ tag1,Alice,Na#2,TSa#2,g(a#2) \}sk(Alice))"];
+		s0 [label="{ Run #1\lBob in role B\l|A -\> Alice\lB -\> Bob\l|Fresh b#1, Nb#1, TSb#1\l|Var Ga -\> g(a#2)\lVar TSa -\> TSa#2\lVar Na -\> Na#2\l}", shape=record,style=filled,fillcolor="#f9d6d1"];
+		s0 -> r0i0 [style=bold, weight="10.0"];
+		r0i1 [shape=box,style=filled,fillcolor="#f9d6d1",label="send_2 to Alice\n(Bob,Nb#1,TSb#1,g(b#1),\{ tag2,Bob,Nb#1,TSb#1,g(b#1),Na#2 \}sk(Bob))"];
+		r0i0 -> r0i1 [style="bold", weight="10.0"];
+		r0i4 [style=filled,fontcolor="#ffffff",fillcolor="#000000",shape=box,label="claim_B3\nNiagree"];
+		r0i1 -> r0i4 [style="bold", weight="10.0"];
+		r2i0 [shape=box,style=filled,fillcolor="#dba270",label="send_1 to Charlie\n(Alice,Na#2,TSa#2,g(a#2),\{ tag1,Alice,Na#2,TSa#2,g(a#2) \}sk(Alice))"];
+		s2 [label="{ Run #2\lAlice in role A\l|A -\> Alice\lB -\> Charlie\l|Fresh a#2, Na#2, TSa#2\l|}", shape=record,style=filled,fillcolor="#dba270"];
+		s2 -> r2i0 [style=bold, weight="10.0"];
+	r2i0 -> redir_r2i0r0i0 -> r0i0;
+	redir_r2i0r0i0 [style=filled,fillcolor="#f68555",label="select \{ tag1,Alice,Na#2,TSa#2,g(a#2) \}sk(Alice)\nredirect to Bob\n"];
+}
+

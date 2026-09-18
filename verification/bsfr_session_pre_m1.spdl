@@ -1,0 +1,73 @@
+/*
+ * BSFR-SH session establishment, ORIGINAL pre-M1 sketch — negative control, not the shipped
+ * protocol. Kept to demonstrate that DEV-02's M1 fix (a) was necessary: this variant's A -> B
+ * message omits ID_B from A's signed transcript, exactly as the first sketch in
+ * docs/ARCHITECTURE.md's history did:
+ *
+ *   A -> B : ID_A, N_A, TS_A, g^a, Sig_A(ID_A || N_A || TS_A || g^a)
+ *   B -> A : ID_B, N_B, TS_B, g^b, Sig_B(ID_B || N_B || TS_B || g^b || N_A)
+ *
+ * Scyther finds a real attack on Niagree/Nisynch for both roles at max-runs=5 (see
+ * verification/results/bsfr_session_pre_m1.txt and .dot): the intruder captures A's opening,
+ * addressed (in A's own belief) to one B, and, because nothing in the signed message names the
+ * intended recipient, splices it into a session with a second identity, ending in a completed
+ * run where A and B disagree about who they just talked to. That is exactly the cross-identity
+ * impersonation DEV-02's M1 amendment (a) describes prose-only, now confirmed by the tool.
+ *
+ * Otherwise identical to bsfr_session.spdl — same DH oracle, same abstractions, same claims,
+ * minus ID_B in the transcript.
+ */
+
+hashfunction g;
+hashfunction dhkey;
+hashfunction kdf;
+
+usertype Tag;
+const tag1, tag2, tagsk: Tag;
+
+protocol @oracle(DHO)
+{
+	role DHO
+	{
+		var x, y: Nonce;
+		recv_!DH1(DHO, DHO, dhkey(g(y), x));
+		send_!DH2(DHO, DHO, dhkey(g(x), y));
+	}
+}
+
+protocol bsfrsessionprem1(A, B)
+{
+	role A
+	{
+		fresh a: Nonce;
+		fresh Na: Nonce;
+		fresh TSa: Nonce;
+		var Nb: Nonce;
+		var TSb: Nonce;
+		var Gb: Ticket;
+
+		send_1(A,B, A,Na,TSa,g(a), {tag1,A,Na,TSa,g(a)}sk(A) );
+		recv_2(B,A, B,Nb,TSb,Gb, {tag2,B,Nb,TSb,Gb,Na}sk(B) );
+
+		claim_A1(A, Secret, kdf(dhkey(Gb,a), tagsk,A,B,Na,Nb,g(a),Gb) );
+		claim_A2(A, Nisynch);
+		claim_A3(A, Niagree);
+	}
+
+	role B
+	{
+		fresh b: Nonce;
+		fresh Nb: Nonce;
+		fresh TSb: Nonce;
+		var Na: Nonce;
+		var TSa: Nonce;
+		var Ga: Ticket;
+
+		recv_1(A,B, A,Na,TSa,Ga, {tag1,A,Na,TSa,Ga}sk(A) );
+		send_2(B,A, B,Nb,TSb,g(b), {tag2,B,Nb,TSb,g(b),Na}sk(B) );
+
+		claim_B1(B, Secret, kdf(dhkey(Ga,b), tagsk,A,B,Na,Nb,Ga,g(b)) );
+		claim_B2(B, Nisynch);
+		claim_B3(B, Niagree);
+	}
+}

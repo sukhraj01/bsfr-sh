@@ -1,0 +1,23 @@
+=== bsfr_session.spdl (fixed protocol), max-runs=5 ===
+claim	bsfrsession,A	Secret_A1	kdf(dhkey(Gb,a),tagsk,A,B,Na,Nb,g(a),Gb)	Ok	[no attack within bounds]
+claim	bsfrsession,A	Nisynch_A2	-	Ok	[no attack within bounds]
+claim	bsfrsession,A	Niagree_A3	-	Ok	[no attack within bounds]
+claim	bsfrsession,A	Alive_A4	-	Ok	[no attack within bounds]
+claim	bsfrsession,A	Weakagree_A5	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Secret_B1	kdf(dhkey(Ga,b),tagsk,A,B,Na,Nb,Ga,g(b))	Ok	[no attack within bounds]
+claim	bsfrsession,B	Nisynch_B2	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Niagree_B3	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Alive_B4	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Weakagree_B5	-	Ok	[no attack within bounds]
+
+=== bsfr_session.spdl (fixed protocol), --unbounded ===
+claim	bsfrsession,A	Secret_A1	kdf(dhkey(Gb,a),tagsk,A,B,Na,Nb,g(a),Gb)	Ok	[no attack within bounds]
+claim	bsfrsession,A	Nisynch_A2	-	Ok	[no attack within bounds]
+claim	bsfrsession,A	Niagree_A3	-	Ok	[no attack within bounds]
+claim	bsfrsession,A	Alive_A4	-	Ok	[no attack within bounds]
+claim	bsfrsession,A	Weakagree_A5	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Secret_B1	kdf(dhkey(Ga,b),tagsk,A,B,Na,Nb,Ga,g(b))	Ok	[no attack within bounds]
+claim	bsfrsession,B	Nisynch_B2	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Niagree_B3	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Alive_B4	-	Ok	[no attack within bounds]
+claim	bsfrsession,B	Weakagree_B5	-	Ok	[no attack within bounds]

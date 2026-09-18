@@ -1,0 +1,95 @@
+/*
+ * BSFR-SH session establishment protocol (DEV-02, post-M1 fixes) — Scyther model.
+ *
+ * Protocol under test, as built in src/bsfr_sh/crypto/session.py and documented in
+ * docs/ARCHITECTURE.md §crypto:
+ *
+ *   A -> B : ID_A, ID_B, N_A, TS_A, g^a,
+ *            Sig_A(tag1 || ID_A || ID_B || N_A || TS_A || g^a)
+ *   B -> A : ID_B, ID_A, N_B, TS_B, g^b,
+ *            Sig_B(tag2 || ID_B || ID_A || N_B || TS_B || g^b || N_A || g^a)
+ *   both   : SK = HKDF(g^ab, info = tag_sk || ID_A || ID_B || N_A || N_B || g^a || g^b)
+ *
+ * Modelling notes
+ * ---------------
+ * ECDSA is abstracted as Scyther's built-in asymmetric signature ({m}sk(A), opened with pk(A)).
+ *
+ * Diffie-Hellman shares (g^a, g^b) use the standard Scyther idiom for DH, since Scyther's free
+ * term algebra has no equational theory for g^(ab) = g^(ba) (unlike Tamarin/ProVerif, which
+ * support user-defined equational theories). g(x) stands for g^x; the @oracle(DHO) role below
+ * registers dhkey(g(y), x) <-> dhkey(g(x), y) as a derivation rule, so an agent holding either
+ * exponent can compute the same raw shared secret the other party computes. This is not an ad hoc
+ * shortcut: it is the identical technique Scyther's own author uses to model authenticated-DH
+ * protocols (see this Scyther release's Protocols/IKE/sts-main.spdl for the Station-to-Station
+ * protocol, which uses the same oracle construction almost verbatim). Verified against that file
+ * first, on this binary, before reuse here — see verification/README.md.
+ *
+ * Timestamps (TS_A, TS_B) are modelled as opaque fresh values. Scyther has no wall-clock model,
+ * so this checks the protocol's structural use of the timestamp field (it enters the signed
+ * transcript) but not its real freshness semantics — see the stated limitation in
+ * verification/README.md.
+ *
+ * The nonce cache (crypto.session.NonceCache) is explicitly NOT modelled. Scyther's symbolic
+ * model has no persistent per-peer state across sessions to represent a stateful replay cache;
+ * modelling it would require faking a capability the tool does not have. Scyther verifies the
+ * protocol's cryptographic structure; the replay cache is an implementation-level defense that
+ * operates below the symbolic abstraction.
+ */
+
+hashfunction g;      // g(x) stands for g^x
+hashfunction dhkey;  // dhkey(g(y), x) == dhkey(g(x), y) via the oracle below
+hashfunction kdf;    // session-key derivation (models HKDF)
+
+usertype Tag;
+const tag1, tag2, tagsk: Tag;
+
+protocol @oracle(DHO)
+{
+	role DHO
+	{
+		var x, y: Nonce;
+		recv_!DH1(DHO, DHO, dhkey(g(y), x));
+		send_!DH2(DHO, DHO, dhkey(g(x), y));
+	}
+}
+
+protocol bsfrsession(A, B)
+{
+	role A
+	{
+		fresh a: Nonce;    // A's ephemeral private exponent
+		fresh Na: Nonce;
+		fresh TSa: Nonce;  // opaque stand-in for a timestamp; see module docstring
+		var Nb: Nonce;
+		var TSb: Nonce;
+		var Gb: Ticket;    // received g^b
+
+		send_1(A,B, A,B,Na,TSa,g(a), {tag1,A,B,Na,TSa,g(a)}sk(A) );
+		recv_2(B,A, B,A,Nb,TSb,Gb, {tag2,B,A,Nb,TSb,Gb,Na,g(a)}sk(B) );
+
+		claim_A1(A, Secret, kdf(dhkey(Gb,a), tagsk,A,B,Na,Nb,g(a),Gb) );
+		claim_A2(A, Nisynch);
+		claim_A3(A, Niagree);
+		claim_A4(A, Alive);
+		claim_A5(A, Weakagree);
+	}
+
+	role B
+	{
+		fresh b: Nonce;    // B's ephemeral private exponent
+		fresh Nb: Nonce;
+		fresh TSb: Nonce;
+		var Na: Nonce;
+		var TSa: Nonce;
+		var Ga: Ticket;    // received g^a
+
+		recv_1(A,B, A,B,Na,TSa,Ga, {tag1,A,B,Na,TSa,Ga}sk(A) );
+		send_2(B,A, B,A,Nb,TSb,g(b), {tag2,B,A,Nb,TSb,g(b),Na,Ga}sk(B) );
+
+		claim_B1(B, Secret, kdf(dhkey(Ga,b), tagsk,A,B,Na,Nb,Ga,g(b)) );
+		claim_B2(B, Nisynch);
+		claim_B3(B, Niagree);
+		claim_B4(B, Alive);
+		claim_B5(B, Weakagree);
+	}
+}

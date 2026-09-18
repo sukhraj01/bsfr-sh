@@ -4,23 +4,30 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-18 · **Milestone:** Write-up (post-M6) · **Sessions completed:** 13
+**Last updated:** 2026-09-18 · **Milestone:** M7-1 done (stretch, optional) · **Sessions completed:** 14
 
 ---
 
 ## One-line status
 
-The course report is written and compiles: `docs/report/report.tex` -> `docs/report/report.pdf`
-(IEEEtran, two-column, via `tectonic`; 9 pages, ~5.8K words of prose plus 7 tables and 5
-reproduced figures). Every number in it traces to `RESULTS.md` or `docs/DEVIATIONS.md`; nothing
-was regenerated. Structure follows the assigned brief exactly: abstract, intro, paper summary,
-implementation (organized by six design gaps: hybrid encryption DEV-01, session protocol DEV-02,
-honeypot pipeline DEV-03/26/27 with its own subsection, backup index DEV-05, Case-3 DEV-09),
-reproduction results (paper-mode / honest-mode / blockchain timing, always side by side), critique
-(FLAW-2, FLAW-4, FLAW-5, DEV-26, DEV-08, plus an acknowledgment paragraph), honeypot detection
-evaluation, conclusion, references. `make test` (1321 passed) and `make lint` (ruff + mypy clean)
-reconfirmed green this session — the report touches no source. M0–M6 remain fully closed from the
-prior session; nothing about the implementation changed.
+The core deliverable (report, M0–M6) has been done since the prior session and is unchanged.
+This session closed one M7 stretch item: **DEV-14's Scyther verification of the DEV-02 session
+protocol.** `verification/` now holds two `.spdl` models (the shipped protocol and a pre-M1
+negative control), raw Scyther output, and a README with the §V-1 → formal-claim → result mapping
+table. All five task claims (secrecy of `SK`, mutual non-injective agreement both directions,
+per-session key freshness, impersonation/reflection resistance) verify clean on the shipped
+protocol at bounded and unbounded search; the identical tool finds a real attack on the pre-M1
+sketch, confirming that fix was necessary. **No source code changed** — the shipped protocol
+needed no repair. The report (`docs/report/report.tex`) gained a short paragraph + mapping table
+in §Implementation's session-establishment subsection and a new bibliography entry; it recompiles
+clean via `tectonic` with no new overfull/underfull warnings beyond the pre-existing cosmetic ones.
+`make test` (1321 passed) and `make lint` (ruff + mypy clean) reconfirmed green.
+
+**Worth knowing for next time:** the real Scyther tool has no PyPI or Homebrew-core package. A
+PyPI package literally named `scyther` exists but is an unrelated repo/file-management CLI that
+squats the name — do not `pip install` it. The real tool is a native per-platform binary from
+`cascremers/scyther`'s GitHub releases (v1.3.0 used here; full provenance in
+`verification/README.md`).
 
 ---
 
@@ -29,34 +36,27 @@ prior session; nothing about the implementation changed.
 | Layer | State | Notes |
 |---|---|---|
 | Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | M0–M6, unchanged this session |
-| `docs/report/report.tex` + `.pdf` | done | this session; IEEEtran two-column via `tectonic`, 9 pages |
-| `docs/report/figs/` | done | 6 PNGs copied from `results/figures/` (fig4/5 baseline variants, fig6a-d) |
+| `docs/report/report.tex` + `.pdf` | done | M6 session + this session's Scyther subsection/table |
+| `verification/` | done (M7-1) | Scyther models, raw output, README — see one-line status |
 
 ## Current numbers
 
-No new runs this session — the report cites existing `RESULTS.md`/`results/tables/*.csv` numbers
-only, per the task's explicit "pull from results/, do not regenerate." See `RESULTS.md` for every
-figure the report uses; nothing here has changed since the M6b session.
+No new benchmark runs this session (formal verification, not a benchmark — nothing appended to
+`RESULTS.md`, correctly). See `RESULTS.md` for every benchmark figure; unchanged since M6b.
 
 ## Next task
 
-**Review and polish the report, not new implementation or experiments.** Candidates, roughly in
-order of value:
+**M7 has four remaining stretch items, none required for the deliverable** (`docs/ROADMAP.md`
+M7). Pick one if continuing, or stop here — the core deliverable was already complete before this
+session:
 
-1. Visual proof-read of `docs/report/report.pdf` page-by-page (table/figure placement, no text
-   overflow) — this session confirmed clean LaTeX compilation and reviewed the source, but did
-   not get a rendered visual check; `pdftoppm` (poppler) was mid-install in the background when
-   the session ended and may now be available (`which pdftoppm`) for `Read` on the PDF.
-2. Fill in the author/course placeholder in `docs/report/report.tex`'s `\author{}` block — left
-   generic ("Course Project Report") deliberately, since this project's own files carry no
-   student name or course number to draw from.
-3. A second read for tone against the "analytical, not adversarial" instruction, and for any
-   remaining reference to internal process (file paths, `docs/*.md` names) that should not be in
-   a document meant for an examiner — this session removed the ones found (a `CLAUDE.md`
-   citation and a `RESULTS.md` citation in the draft), but a fresh read is cheaper than certainty.
-4. Optional: tighten toward the 10-12-page target if the reviewer judges 9 pages under-filled;
-   the brief treats 10-12 pages / 6000-8000 words as roughly equivalent and this report sits at
-   the lower edge of both (9 pages, ~5.8K words) without any section reading as thin.
+1. Adversarial evaluation: does the honeypot detector survive feature-space evasion? (Q4, open)
+2. Storage-cost analysis for on-chain backups (GAP-2) — M7-2, the practicality question the paper
+   never asks.
+3. Async pBFT with realistic network latency (relates to DEV-20 item 2, DEV-21).
+4. Hybrid blockchain, which the paper lists as its own future work.
+
+None of these follows naturally from M7-1; each is an independent unit of work.
 
 ## Blockers
 
@@ -67,33 +67,26 @@ BitcoinHeist run — unchanged, not touched this session.
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q11 | Is 9 pages / ~5.8K words sufficient, or does the report need expansion toward 10-12 pages? | report sign-off | reviewer judgement, next session |
-| Q4 | Do we need real feature-space evasion for M7? | M7 | decide at M7 kickoff, if M7 is picked up after the report |
-| Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M7 | only if M7 benchmarks a lossy network |
-
-## For the write-up
-
-Resolved — this section's prior contents (the pBFT threshold note, the FLAW-2 framing, the
-FLAW-4/Q10 numbers, Alg. 4's two silent gaps) are now written into `docs/report/report.tex`
-directly (\S6.1–6.5, \S4) rather than staged here. Nothing queued for a future write-up remains;
-the write-up happened.
+| Q11 | Is 9-page report (now +1 short subsection) sufficient, or expand toward 10-12 pages? | report sign-off | reviewer judgement |
+| Q4 | Do we need real feature-space evasion for M7? | M7 item 1 | decide if that item is picked up |
+| Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M7 item 3 | only if that item is picked up |
 
 ## Carried debt
 
 | # | Item | Retire by |
 |---|---|---|
 | D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. | low priority; not cited as a report claim |
-| D3 | The bus never serialises; magnitude quantified (DEV-30) but the omission itself is unfixed. | M7, if async pBFT lands |
+| D3 | The bus never serialises; magnitude quantified (DEV-30) but the omission itself is unfixed. | M7 item 3, if async pBFT lands |
 | D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
-| D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10 (seen again in this session's `make test` warnings). | before sklearn 1.10 |
+| D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10. | before sklearn 1.10 |
 
 ## Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Report visual layout unverified (no rendered check this session) | a table/figure could overflow a page margin despite clean LaTeX compilation | `tectonic` reported zero errors and only cosmetic hbox warnings; next session should still eyeball the PDF once poppler is available |
-| The non-reproduction is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number in the report; Q10 tested and ruled out address/split leakage; report states the gap as measured-but-unexplained, not apologized for |
+| The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 tested and ruled out address/split leakage; report states the gap as measured-but-unexplained |
 | `data/raw/` is gitignored and slow to fetch | a fresh machine cannot rerun M4a quickly | `make data` verifies counts; README + `provenance.json` state the wait and the sha256 |
+| Scyther binary not committed (third-party, single-platform) | a fresh clone can't re-run the verification without a manual download | exact release URL + sha256 in `verification/README.md`; the raw output is committed, so the claims don't depend on re-running it |
 
 ---
 

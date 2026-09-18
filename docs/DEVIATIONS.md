@@ -306,6 +306,35 @@ hardware is recorded in every bench sidecar.
 **Ours:** stretch goal — model the session-establishment protocol in Scyther and report results.
 Not required for the core deliverable. Tracked in `docs/ROADMAP.md` M7.
 
+**Amendment (M7-1, 2026-09-18): done. Verified our own protocol (DEV-02), not the paper's — the
+paper has none to check.** Scyther v1.3.0 (native macOS arm64 binary from the tool author's own
+GitHub release; full provenance and sha256 in `verification/README.md`) models both roles of
+`crypto.session` under a Dolev-Yao adversary. Five claims mapped from §V-1: secrecy of `SK`,
+mutual non-injective agreement (both directions), per-session key freshness, impersonation
+resistance, and no reflection. **All verify clean, at both bounded (`--max-runs=5`) and unbounded
+search** — `verification/results/bsfr_session.txt`. No new attack was found in the shipped
+protocol; that is itself the result, not a null outcome.
+
+The verification is discriminating, not vacuous: pointed instead at the original pre-M1 sketch
+(`ID_B` missing from `A`'s signature — the flaw M1's amendment (a) describes), the identical tool
+and claims find a real attack — `Niagree`/`Nisynch` fail on both roles
+(`verification/results/bsfr_session_pre_m1.txt`, trace in `bsfr_session_pre_m1_attack.dot`). The
+mechanism the tool found is a splice/redirect via an unbound recipient, not the literal
+"replay-to-a-different-server" scenario the M1 prose describes — a related but distinct route to
+the same class of failure, which is a stronger confirmation that the fix was needed than
+reproducing the exact originally-imagined attack would have been.
+
+**What this does not cover, stated rather than assumed away:** the M1 fix (b) — the nonce
+cache — is a stateful, per-peer replay defense with no representation in Scyther's symbolic,
+per-session model; it is exercised by `tests/unit/test_session_replay.py` instead, not by this
+verification. Timestamps are modelled as opaque values (no wall-clock semantics). DH shares use
+Scyther's standard `@oracle` idiom for Diffie-Hellman (Scyther has no native equational theory for
+`g^(ab) = g^(ba)`, unlike Tamarin/ProVerif) — reused from, and validated against, the construction
+Scyther's own author ships for the Station-to-Station protocol in this same release, not invented
+here. Full methodology, the §V-1 mapping table, and all raw tool output: `verification/README.md`.
+**No code change was needed** — `crypto/session.py` and `docs/ARCHITECTURE.md`'s protocol
+description are unchanged by this session.
+
 ### DEV-15 · FILL · Declared transaction payload size
 **Paper:** §VII benchmarks 100 transactions per block over 5/10/15 blocks and never states how
 large a transaction is. GAP-2 / open question Q2.

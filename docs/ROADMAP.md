@@ -237,7 +237,8 @@ existing baseline convention). Variance is reported and the repeat count follows
 
 ## M7 — Extensions (stretch) `[ ]`
 
-- [ ] Scyther model of the session protocol (DEV-14)
+- [x] Scyther model of the session protocol (DEV-14) — `verification/`, all claims verified,
+      no code change needed (2026-09-18)
 - [ ] Adversarial evaluation: does the detector survive feature-space evasion?
 - [ ] Storage-cost analysis for on-chain backups (GAP-2) — the practicality question the paper
       never asks

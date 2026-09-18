@@ -180,6 +180,45 @@ into the initiator's message, and the second with a seen-nonce cache keyed by (p
 for twice the timestamp window. Both properties are now pinned by dedicated replay and
 man-in-the-middle tests.
 
+\S V is entirely informal prose -- five paragraphs of argument, no ROR model, no BAN logic, no
+tool-checked proof -- for a paper whose author's other work almost always includes one. We
+verified this protocol, which is our own design and not the paper's, with
+Scyther~\cite{cremers2008scyther} under its default Dolev-Yao adversary. Table~\ref{tab:scyther}
+maps \S V-1's informal claims onto the formal claims Scyther checks. Every claim verifies, at both
+bounded (5 runs) and unbounded search, on the protocol as built above. Run against the
+\emph{pre-fix} sketch instead -- the version missing the responder's identity from the
+initiator's signature -- the identical tool and claims find a real attack: a non-injective
+agreement violation in which the two parties finish believing they talked to different
+counterparts. That the tool is silent on the fixed protocol and vocal on the broken one is a
+stronger confirmation than a clean run alone would be. Two limitations are stated rather than
+elided: the seen-nonce cache is stateful and has no representation in Scyther's per-session
+symbolic model, so replay resistance rests on the unit tests, not this proof; and Scyther has no
+equational theory for $g^{ab} = g^{ba}$, so the Diffie-Hellman exchange is modelled with the
+standard oracle idiom Scyther's own author uses for the same purpose, rather than checked
+natively. Full model, tool provenance, and raw output: \texttt{verification/}.
+
+\begin{table}[t]
+\centering
+\caption{\S V-1's informal claims, the formal claim Scyther checks for each, and the result.}
+\label{tab:scyther}
+\footnotesize
+\begin{tabular}{@{}p{2.3cm}@{\hspace{3pt}}p{2.1cm}@{\hspace{3pt}}p{1.5cm}@{}}
+\hline
+\textbf{\S V-1 claim} & \textbf{Formal claim} & \textbf{Result} \\
+\hline
+Adversary cannot estimate $SK$ & \texttt{Secret} & Verified \\
+Mutual auth., A $\to$ B & \texttt{Niagree}/ \texttt{Nisynch} & Verified \\
+Mutual auth., B $\to$ A & \texttt{Niagree}/ \texttt{Nisynch} & Verified \\
+Distinct keys per session & fresh-nonce argument & Holds by constr. \\
+Impersonation resistance & \texttt{Weakagree}/ \texttt{Alive} & Verified \\
+No reflection & default self-play search & No attack found \\
+Cross-id.\ replay (fixed) & \texttt{Niagree}, fixed model & Verified \\
+Cross-id.\ replay (pre-fix) & \texttt{Niagree}, pre-fix model & Attack found \\
+Within-window replay & -- (stateful cache) & Out of scope \\
+\hline
+\end{tabular}
+\end{table}
+
 \subsection{The honeypot feature pipeline: defining $Sig_{RW}$ and $FT_{RW}$}
 \label{sec:honeypot}
 
@@ -766,6 +805,11 @@ as ref.~[14].
 \bibitem{rfc6979}
 T.~Pornin, ``Deterministic Usage of the Digital Signature Algorithm (DSA) and Elliptic Curve
 Digital Signature Algorithm (ECDSA),'' RFC~6979, IETF, Aug.\ 2013.
+
+\bibitem{cremers2008scyther}
+C.~Cremers, ``The Scyther Tool: Verification, Falsification, and Analysis of Security
+Protocols,'' in \emph{Computer Aided Verification (CAV)}, LNCS vol.~5123, Springer, 2008,
+pp.~414--418.
 
 \end{thebibliography}
 
