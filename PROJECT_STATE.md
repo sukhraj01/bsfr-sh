@@ -4,24 +4,23 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-18 · **Milestone:** M7 (extensions, stretch) · **Sessions completed:** 12
+**Last updated:** 2026-09-18 · **Milestone:** Write-up (post-M6) · **Sessions completed:** 13
 
 ---
 
 ## One-line status
 
-M6 is closed (both halves), Ada included. M6a: `bench/harness.py`/`bench/emit.py` produce Figs.
-6(a)-(e) — unchanged this session. M6b: `make repro` reproduces D6's 0.9442/0.9697 exactly in
-~7s; `make honest` runs the full 2,916,697-row `honest_mode` locally (RF/LR/DT at full scale,
-KNN named-and-subsampled to 780,336 rows at the 8 GB local ceiling — DEV-31's
-`largest_feasible_n` fallback, demonstrated for real). `bench/emit.py` gained
-`emit_table2_paper_mode`/`emit_table2_honest_mode`/`emit_fig4_5`. **Ada job 2700090 (full-scale
-KNN) completed within this session**, 36m26s, after one failed attempt (job 2700027 died on a
-dropped dataset download — fixed with retry/resume in `scripts/fetch_bitcoinheist.py`) and one
-resubmission queued behind another unrelated job on the account. All four models now have a true
-2,916,697-row result; KNN's full-scale numbers (mcc=0.365) beat the local subsample's (mcc=0.300)
-— `results/tables/table2_honest_mode.csv` holds the Ada run. `make test`: 1321 passed,
-`make test-all`: 1333 passed, `make lint` clean. No implementation milestone remains open.
+The course report is written and compiles: `docs/report/report.tex` -> `docs/report/report.pdf`
+(IEEEtran, two-column, via `tectonic`; 9 pages, ~5.8K words of prose plus 7 tables and 5
+reproduced figures). Every number in it traces to `RESULTS.md` or `docs/DEVIATIONS.md`; nothing
+was regenerated. Structure follows the assigned brief exactly: abstract, intro, paper summary,
+implementation (organized by six design gaps: hybrid encryption DEV-01, session protocol DEV-02,
+honeypot pipeline DEV-03/26/27 with its own subsection, backup index DEV-05, Case-3 DEV-09),
+reproduction results (paper-mode / honest-mode / blockchain timing, always side by side), critique
+(FLAW-2, FLAW-4, FLAW-5, DEV-26, DEV-08, plus an acknowledgment paragraph), honeypot detection
+evaluation, conclusion, references. `make test` (1321 passed) and `make lint` (ruff + mypy clean)
+reconfirmed green this session — the report touches no source. M0–M6 remain fully closed from the
+prior session; nothing about the implementation changed.
 
 ---
 
@@ -29,123 +28,72 @@ resubmission queued behind another unrelated job on the account. All four models
 
 | Layer | State | Notes |
 |---|---|---|
-| Docs (`CLAUDE.md`, `docs/*`) | done | DEV-29 added (M5) |
-| `configs/`, `Makefile` | done | |
-| `util/`, `crypto/`, `blockchain/`, `consensus/` | done | |
-| `framework/` phases 1–5 | done | M3a, M3b, M4b, M5 |
-| `recovery/`, `honeypot/`, `mitigation/` | done | M3a, M3b, M5 |
-| `data/honeypot/` corpus | done | fixed dataset (Q9): 1467 train + 731 eval, two seeds |
-| `data/raw/` BitcoinHeist | **local only** | gitignored; `make data` refetches (~56 min here) |
-| `detection/` dataset, models, metrics, profiles, detector | done | M4a, M4b |
-| `bench/harness.py`, `bench/emit.py`, Figs. 6a-e | done | M6a |
-| `make repro` / `make honest`, Table II, Figs. 4-5 | done | M6b |
-| Ada `honest_mode` (full-scale KNN) | done | M6b — job 2700090, completed |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | M0–M6, unchanged this session |
+| `docs/report/report.tex` + `.pdf` | done | this session; IEEEtran two-column via `tectonic`, 9 pages |
+| `docs/report/figs/` | done | 6 PNGs copied from `results/figures/` (fig4/5 baseline variants, fig6a-d) |
 
 ## Current numbers
 
-**BitcoinHeist, `paper_mode`, honest baseline** (n=46,014, address dropped, **grouped** split,
-`make repro`, run `20260917T175743Z-be5c55e0`, seed 20260912): RF **0.9442/0.9697** ·
-DT 0.9224/0.9569 · LR 0.9002/0.9475 · KNN 0.8892/0.9410 · constant-positive baseline
-0.9000/0.9474. Published row: 0.9898/0.990 — **not reproduced**, unexplained (Q10, closed).
-`results/tables/table2_paper_mode.csv`, Figs. 4-5 (+ baseline variants) emitted alongside.
-
-**BitcoinHeist, `honest_mode`, full scale, all four models at 2,916,697 rows** (Ada job 2700090,
-run `20260917T201959Z-6e05408c`, seed 20260912, `deferred: {}`): RF mcc=0.457 prec=0.744
-rec=0.286 · DT mcc=0.401 prec=0.397 rec=0.423 · LR predicts nothing (mcc=0 — same model that hit
-the constant-positive baseline exactly under `paper_mode`, DEV-06's clearest illustration) · KNN
-mcc=0.365 prec=0.601 rec=0.229 — meaningfully better than the local 780,336-row subsample's
-mcc=0.300 (DEV-31; the local, subsampled run stays in `RESULTS.md` for provenance). Constant-
-negative baseline: 0.9858 accuracy, 0 recall. `results/tables/table2_honest_mode.csv` holds this
-full-scale run.
-
-**Honeypot detection, Alg. 3 end to end** (`scripts/run_phase3_detection.py --seed 20260912`,
-run `20260913T134602Z-ab45ac90`, train n=1467 eval n=731, real pBFT consensus both draws):
-**balanced accuracy 0.8422** — between the measured 0.830 baseline and the corpus's intended
-~0.85 ceiling. Constant-positive baseline: 0.5000.
-
-M5 produced no numbers — mitigation has no bench target (`docs/DEVIATIONS.md` DEV-29's note that
-Alg. 4 is not benchmarked).
-
-**Bench, M6a** (`scripts/run_bench.py --seed 20260917`, run `20260917T144843Z-fb4c2410`, n=25
-repeats — case-3 variance probe read CV up to 45% on a noisy invocation, see `RESULTS.md`):
-case-3 `BC_DTBU` 0.479s / `BC_SigRW` 0.691s, two-to-three orders of magnitude below the paper's
-5.71s/6.76s (expected, DEV-13). Marginal per-block cost is **flat**, not sublinear like the
-paper's — our own TPS is correspondingly flat (~2930-3190 `BC_DTBU`, ~2170-2230 `BC_SigRW`) where
-the paper's six points rise. DEV-08 amended with this as a second, measured line of evidence for
-the same "rising TPS is amortisation" conclusion. `BC_SigRW` is consistently ~35-45% slower than
-`BC_DTBU` (paper: 18-41%), attributed to DEV-03's extra ECDSA sign per transaction. D3's
-serialization omission: ≈0.2-0.3% of measured compute (DEV-30, new). Q2 closed: sweep ran at
-1024/4096/16384 B, 4096 B default kept; a 10 MB payload would need ~67 GiB (4 replicas x
-ciphertext overhead), not run.
+No new runs this session — the report cites existing `RESULTS.md`/`results/tables/*.csv` numbers
+only, per the task's explicit "pull from results/, do not regenerate." See `RESULTS.md` for every
+figure the report uses; nothing here has changed since the M6b session.
 
 ## Next task
 
-**No implementation milestone is open.** M0-M6 are fully closed, Ada included; every
-`docs/EXPERIMENTS.md` target carries a `measured` or `paper_reported` label. Next is M7 (stretch,
-`docs/ROADMAP.md`) or report writing — pick one, or ask which the write-up needs first.
+**Review and polish the report, not new implementation or experiments.** Candidates, roughly in
+order of value:
+
+1. Visual proof-read of `docs/report/report.pdf` page-by-page (table/figure placement, no text
+   overflow) — this session confirmed clean LaTeX compilation and reviewed the source, but did
+   not get a rendered visual check; `pdftoppm` (poppler) was mid-install in the background when
+   the session ended and may now be available (`which pdftoppm`) for `Read` on the PDF.
+2. Fill in the author/course placeholder in `docs/report/report.tex`'s `\author{}` block — left
+   generic ("Course Project Report") deliberately, since this project's own files carry no
+   student name or course number to draw from.
+3. A second read for tone against the "analytical, not adversarial" instruction, and for any
+   remaining reference to internal process (file paths, `docs/*.md` names) that should not be in
+   a document meant for an examiner — this session removed the ones found (a `CLAUDE.md`
+   citation and a `RESULTS.md` citation in the draft), but a fresh read is cheaper than certainty.
+4. Optional: tighten toward the 10-12-page target if the reviewer judges 9 pages under-filled;
+   the brief treats 10-12 pages / 6000-8000 words as roughly equivalent and this report sits at
+   the lower edge of both (9 pages, ~5.8K words) without any section reading as thin.
 
 ## Blockers
 
 None. `data/raw/` is gitignored; a fresh clone needs `make data` (~56 minutes here) before any
-BitcoinHeist run. README states the wait and the sha256.
+BitcoinHeist run — unchanged, not touched this session.
 
 ## Open questions
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q4 | Do we need real feature-space evasion for M7? | M7 | decide at M7 kickoff |
+| Q11 | Is 9 pages / ~5.8K words sufficient, or does the report need expansion toward 10-12 pages? | report sign-off | reviewer judgement, next session |
+| Q4 | Do we need real feature-space evasion for M7? | M7 | decide at M7 kickoff, if M7 is picked up after the report |
 | Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M7 | only if M7 benchmarks a lossy network |
 
 ## For the write-up
 
-**§V-3.** pBFT's threshold is one *third*, not one half, so "PoW is 51%-vulnerable, therefore pBFT"
-lowers the bar; at four nodes two colluders fork it, and a test asserts the fork. [FLAW-5].
-
-**§V-1 / §V-5 (M3a).** §V-1 holds wherever Phases 1, 2 and 5 use session keys, but session keys
-protect bytes in transit, not at the servers — hence DEV-23's attested digest (GAP-8). §V-5 is
-substantiated only structurally.
-
-**FLAW-2, closed for the framework's own path (M3b, M4b, M5).** The paper defines neither the
-honeypot's output nor its features (GAP-3), then evaluates on an unrelated Bitcoin dataset. M3b
-supplied the missing feature layer; M4b proved it reachable through the paper's own sequence; M5
-closed the loop — `tests/integration/test_full_sequence.py` runs backup, collection, detection,
-mitigation and recovery in one test, the sequence Fig. 3 draws and the paper itself never runs.
-FLAW-2 is therefore sharper than "wrong dataset": the paper's own framework produces a real,
-boundable, end-to-end result when actually run, and the paper substitutes an unrelated dataset for
-half of it and never demonstrates the other half at all.
-
-**FLAW-4, extended, and the non-reproduction (M4a, Q10).** The 90/10 resample is degenerate *and*
-bounded at 46,014 rows — 1.58% of the cited 2.9M. Our honest reproduction (address dropped,
-grouped split) reaches 0.9442/0.9697 against a published 0.9898/0.990; Q10 tested and ruled out
-`address`-as-feature and split-grouping as the explanation, so the gap is reported as
-**unexplained**.
-
-**Alg. 4's two silent gaps (M5).** The paper never says which of Case-1/2/3 applies to a detection,
-or how a honeypot detection names the `SYS_i` it concerns — Fig. 3 draws "detect" straight into
-"mitigate" with nothing in between. DEV-29 makes both explicit caller inputs rather than guessing;
-worth a paragraph in the critique alongside GAP-4 (erasure semantics) and DEV-09 (Case-3's premise
-contradicting §II-C).
+Resolved — this section's prior contents (the pBFT threshold note, the FLAW-2 framing, the
+FLAW-4/Q10 numbers, Alg. 4's two silent gaps) are now written into `docs/report/report.tex`
+directly (\S6.1–6.5, \S4) rather than staged here. Nothing queued for a future write-up remains;
+the write-up happened.
 
 ## Carried debt
 
 | # | Item | Retire by |
 |---|---|---|
-| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. `scripts/run_detection.py`/`run_bench.py` are still manually `ruff`-checked, not by `make lint`. | before the write-up cites lint as clean everywhere |
-| D3 | The bus never serialises; magnitude now quantified (DEV-30, M6a: ≈0.2-0.3% of measured compute) but the omission itself is unfixed. | M7, if async pBFT lands |
+| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. | low priority; not cited as a report claim |
+| D3 | The bus never serialises; magnitude quantified (DEV-30) but the omission itself is unfixed. | M7, if async pBFT lands |
 | D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
-| D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10. | before sklearn 1.10 |
+| D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10 (seen again in this session's `make test` warnings). | before sklearn 1.10 |
 
 ## Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| We wrote both the honeypot generator and its classifier | M4b's number could measure the generator | difficulty stated up front (0.85), enforced by M3b's leakage tests |
-| Python timings diverge from the paper's Java | Targets 3 and 4 unverifiable | report ratios and shape (DEV-13) |
-| Zero-delay consensus measures encryption, not consensus | Target 3 claims something different | DEV-21: delay 0 and delay > 0 in separate columns |
-| The non-reproduction is read as our bug rather than a finding | the write-up's central claim collapses | baselines published beside every number; Q10 tested and ruled out address/split leakage |
+| Report visual layout unverified (no rendered check this session) | a table/figure could overflow a page margin despite clean LaTeX compilation | `tectonic` reported zero errors and only cosmetic hbox warnings; next session should still eyeball the PDF once poppler is available |
+| The non-reproduction is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number in the report; Q10 tested and ruled out address/split leakage; report states the gap as measured-but-unexplained, not apologized for |
 | `data/raw/` is gitignored and slow to fetch | a fresh machine cannot rerun M4a quickly | `make data` verifies counts; README + `provenance.json` state the wait and the sha256 |
-| The canonical encoding changes after hashes exist | stored hashes silently unreproducible | `ENCODING_VERSION` plus pinned golden vectors |
-| Validation migrates out of `Chain` | two definitions of a valid block | `check_append` / `verify_block` are the only validators |
 
 ---
 

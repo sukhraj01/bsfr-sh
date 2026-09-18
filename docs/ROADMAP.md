@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: M7**
+**Current milestone: write-up done; M7 (stretch) not started, not required for the deliverable**
 
 ---
 
@@ -246,8 +246,11 @@ existing baseline convention). Variance is reported and the repeat count follows
 
 ---
 
-## Write-up
+## Write-up `[x]`
 
-- [ ] Report: paper summary, our implementation, reproduction results, critique, extensions
-- [ ] Reproduced-vs-honest results presented side by side throughout
-- [ ] Every deviation in `docs/DEVIATIONS.md` justified in the report
+- [x] Report: paper summary, our implementation, reproduction results, critique, honeypot
+      detection evaluation (`docs/report/report.tex` / `.pdf`, 2026-09-18)
+- [x] Reproduced-vs-honest results presented side by side throughout
+- [x] The five defects that matter argued in full (FLAW-2, FLAW-4, FLAW-5, DEV-26, DEV-08);
+      `docs/DEVIATIONS.md` referenced for the complete list rather than reproduced entry-by-entry,
+      per the report brief
