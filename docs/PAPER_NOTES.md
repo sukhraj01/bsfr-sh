@@ -62,7 +62,9 @@ the data key. We do hybrid encryption and document it.
 
 **[GAP-2]** Storing full healthcare backups on-chain is impractical at any real volume. The paper
 never says how much data per transaction. We parameterise transaction payload size in config and
-report the storage cost honestly.
+report the storage cost honestly. **Answered, M7-2:** `docs/STORAGE_ANALYSIS.md` — three
+deployment scales, the backup-frequency lever, and an on-chain-hash/off-chain-data alternative
+with its trade-off stated.
 
 ### §IV-B / Alg. 2 — Data collection, signature + feature generation
 Deploy honeypot `HP_RW`, collect `DT_RW`, pre-process → `DT_RWC`, derive signatures `Sig_RW`

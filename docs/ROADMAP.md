@@ -240,8 +240,8 @@ existing baseline convention). Variance is reported and the repeat count follows
 - [x] Scyther model of the session protocol (DEV-14) — `verification/`, all claims verified,
       no code change needed (2026-09-18)
 - [ ] Adversarial evaluation: does the detector survive feature-space evasion?
-- [ ] Storage-cost analysis for on-chain backups (GAP-2) — the practicality question the paper
-      never asks
+- [x] Storage-cost analysis for on-chain backups (GAP-2) — `docs/STORAGE_ANALYSIS.md`, three
+      scenarios, frequency lever, on-chain-hash alternative + ratio (2026-09-19)
 - [ ] Async pBFT with realistic network latency
 - [ ] Hybrid blockchain, which the paper lists as its own future work
 

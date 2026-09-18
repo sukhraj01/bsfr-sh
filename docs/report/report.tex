@@ -664,6 +664,58 @@ rising (\S\ref{sec:5c}). Removing the fixed cost from the timed span removes the
 what ``the rise is amortisation'' predicts, and what our own implementation lets us test
 directly rather than infer.
 
+\subsection{GAP-2 -- storage-cost analysis}
+\label{sec:storage}
+
+Section VII benchmarks consensus timing but never asks how much storage its own design consumes,
+or at what scale that stops being feasible. We compute this from values already measured
+elsewhere in this project -- the declared 4096B transaction payload (DEV-15), the measured 215B
+framing and 161B hybrid-encryption overhead per chunk (DEV-24), and the measured 1.14$\times$
+full-block overhead factor (header, Merkle root and canonical encoding, amortised over a 100-tx
+block, \S\ref{sec:5c}) -- rather than from new estimates; full arithmetic in
+\texttt{docs/STORAGE\_ANALYSIS.md}.
+
+\begin{table}[t]
+\centering
+\caption{On-chain storage growth, daily 1~MiB backups, 4 replicas. Every figure is arithmetic
+over \S\ref{sec:5c}'s measured overhead factor, not a new measurement.}
+\label{tab:storage}
+\footnotesize
+\begin{tabular}{lccc}
+\hline
+\textbf{Scenario} & \textbf{Per-node/yr} & \textbf{Cluster/yr ($\times$4)} & \textbf{Time to 1~TiB/node} \\
+\hline
+Small clinic (50 pts) & 20.3~GiB & 81.3~GiB & $\approx$50.4~yr \\
+Medium hospital (5{,}000 pts) & 1.98~TiB & 7.94~TiB & $\approx$6.05~mo \\
+Large network (50{,}000 pts) & 19.8~TiB & 79.4~TiB & $\approx$18.4~days \\
+\hline
+\end{tabular}
+\end{table}
+
+At hospital scale, the paper's own on-chain design fills 1~TiB per replica in about six months
+under daily backups; at network scale, in under three weeks. Backup frequency is the larger lever
+of the two the paper leaves open: at the medium scenario, daily backups cost $\approx$7$\times$
+weekly and $\approx$30$\times$ monthly in chain growth for identical clinical content, a bigger
+effect than DEV-15's payload-size sweep found from a 16$\times$ range of payload sizes alone.
+
+Against this, an on-chain-hash / off-chain-data design -- store only a content digest and a
+storage pointer on-chain, keep the encrypted payload in external storage -- preserves the same
+tamper-evidence the paper's Merkle-root-and-signature chain already provides (recomputing and
+comparing the digest catches off-chain tampering exactly as the paper's own immutability argument
+requires), at $\approx$504~bytes per backup regardless of payload size, against
+$\approx$1.14~MiB for a 1~MiB backup under the paper's design -- a $\approx$2{,}371$\times$
+reduction that widens further as backups get larger, since the hash-only cost is flat and the
+paper's is not. What it does not preserve is on-chain \emph{availability}: lose the off-chain
+store and the digest alone cannot reconstruct the backup, where the paper's design always can.
+We state this trade-off rather than resolving it, per this project's rule against silently
+revising the paper's design.
+
+Compute is not the bottleneck this analysis surfaces: the large-network scenario's daily block
+count, at \S\ref{sec:5c}'s measured marginal per-block cost, comes to $\approx$4{,}045
+CPU-seconds/day ($\approx$4.7\% of a day) on the same 8~GB dev laptop -- comfortably inside its
+measured throughput ceiling, though nothing here measures a production cluster's network or disk
+behaviour, only this one machine's compute.
+
 \subsection{What the paper gets right}
 
 Two of the paper's choices are execution defects, not premise defects, and the distinction
