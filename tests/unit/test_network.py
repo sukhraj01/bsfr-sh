@@ -184,6 +184,25 @@ def test_double_registration_is_rejected() -> None:
         net.register("A", lambda _s, _p: None)
 
 
+def test_serialize_hook_transforms_every_payload_before_delivery() -> None:
+    """D3: the bus stays ignorant of what a message *is* — the hook is opaque `object -> object`,
+    supplied by the caller (`consensus.pbft.Cluster`, in production; a stub here)."""
+    net = P2PCSNetwork(seed=1, serialize=lambda payload: f"wrapped({payload})")
+    log: list[object] = []
+    net.register("B", lambda _s, p: log.append(p))
+    net.send("A", "B", "x")
+    net.run()
+    assert log == ["wrapped(x)"]
+
+
+def test_no_serialize_hook_delivers_the_original_object_unchanged() -> None:
+    net, log = _bus()
+    sentinel = object()
+    net.send("A", "B", sentinel)
+    net.run()
+    assert log[0][3] is sentinel
+
+
 def test_two_buses_share_no_state() -> None:
     a, log_a = _bus()
     b, log_b = _bus()

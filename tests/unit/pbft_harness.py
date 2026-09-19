@@ -30,6 +30,7 @@ from bsfr_sh.blockchain.chain import BC_DTBU, build_genesis
 from bsfr_sh.blockchain.transaction import BackupPayload, Transaction, encrypt_backup
 from bsfr_sh.consensus.pbft import Cluster, PBFTPolicy, Replica
 from bsfr_sh.consensus.protocol import (
+    ClientRequest,
     Commit,
     Message,
     NewView,
@@ -38,7 +39,7 @@ from bsfr_sh.consensus.protocol import (
     ViewChange,
     resign,
 )
-from bsfr_sh.crypto.ecdsa import KeyPair, PrivateKey, keypair_from_secret
+from bsfr_sh.crypto.ecdsa import KeyPair, PrivateKey, PublicKey, keypair_from_secret
 from bsfr_sh.crypto.hashing import h
 from bsfr_sh.util.config import load_config
 
@@ -57,6 +58,10 @@ HORIZON_S = 15 * POLICY.view_change_timeout_s
 OUTSIDER: KeyPair = keypair_from_secret(0xBAD0BAD0)
 #: `CS_l` whose public key the test transactions are encrypted to. Not a replica.
 RECIPIENT: KeyPair = keypair_from_secret(0x5EED5EED)
+#: The default authorized `ClientRequest` submitter every `make_cluster()` cluster trusts, unless
+#: a test names its own (DEV-20 item 5 / debt D4). Not a replica, same reasoning as `RECIPIENT`.
+SUBMITTER_ID: str = "SUBMITTER"
+SUBMITTER: KeyPair = keypair_from_secret(0x5AB4171E)
 
 
 def replica_keys(ids: Iterable[str]) -> dict[str, PrivateKey]:
@@ -69,10 +74,31 @@ def make_cluster(
     *,
     seed: int = 7,
     policy: PBFTPolicy = POLICY,
+    submitters: Mapping[str, PublicKey] | None = None,
 ) -> Cluster:
     keys = replica_keys(ids)
     genesis = build_genesis(owner_id=ids[0], private_key=keys[ids[0]], timestamp=GENESIS_TIME)
-    return Cluster(chain_name=chain_name, keys=keys, genesis=genesis, policy=policy, seed=seed)
+    if submitters is None:
+        submitters = {SUBMITTER_ID: SUBMITTER.public}
+    return Cluster(
+        chain_name=chain_name,
+        keys=keys,
+        genesis=genesis,
+        policy=policy,
+        seed=seed,
+        submitters=submitters,
+    )
+
+
+def make_request(cluster: Cluster, tag: str, count: int = 2, *, timestamp: float) -> ClientRequest:
+    """A signed `ClientRequest` under the harness's default submitter, for `.receive()` tests."""
+    return ClientRequest.create(
+        chain=cluster.chain_name,
+        transactions=make_transactions(tag, count),
+        timestamp=timestamp,
+        submitter_id=SUBMITTER_ID,
+        key=SUBMITTER.private,
+    )
 
 
 def make_transactions(tag: str, count: int = 2, payload_bytes: int = 64) -> tuple[Transaction, ...]:
@@ -93,6 +119,8 @@ def submit_block(cluster: Cluster, index: int, *, count: int = 2) -> bytes:
     return cluster.submit(
         make_transactions(f"{cluster.chain_name}-b{index}", count),
         timestamp=GENESIS_TIME + 1 + index,
+        submitter_id=SUBMITTER_ID,
+        key=SUBMITTER.private,
     )
 
 

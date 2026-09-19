@@ -60,6 +60,11 @@ timing:
 network:
   modelled_delay_s: 0.01
   modelled_delay_sweep_s: [0.001, 0.01, 0.05]
+  # DECLARED — D3 (closed). `chain.yaml`'s `consensus.serialize_messages` defaults OFF so
+  # `make test` stays on the fast, unserialised bus; bench runs override it ON here, so Figs.
+  # 6(a)-(d) pay the real encode/decode cost through `util.serialization` instead of carrying
+  # DEV-30's estimate as an unpriced caveat. `bench.harness.BenchPolicy.from_config` applies this.
+  serialize_messages: true
 
 derived:
   # DEV-08. TPS is arithmetic on the timing above, never a separately measured quantity:

@@ -27,10 +27,10 @@ SIZES = {1: 500, 2: 10 * 1024, 3: CHUNK, 4: CHUNK * PER_BLOCK * 2 + 1234}
 
 
 def _deploy(sizes=SIZES, *, silent=None):
-    cluster = make_cluster()
+    key_holder, front = make_server(10), make_server(11)
+    cluster = make_cluster(submitters={key_holder.identity: key_holder.public_key})
     if silent is not None:
         cluster.replicas[silent].behaviour = Silent()
-    key_holder, front = make_server(10), make_server(11)
     systems = {i: make_system(i, size) for i, size in sizes.items()}
     index = BackupIndex(key_holder.decrypt)
     report = phase1.run(
@@ -79,14 +79,21 @@ def test_every_replica_holds_a_chain_the_system_can_be_restored_from() -> None:
 
 
 def test_restore_when_consensus_commits_the_chunks_out_of_order() -> None:
-    cluster = make_cluster()
     key_holder, front = make_server(10), make_server(11)
+    cluster = make_cluster(submitters={key_holder.identity: key_holder.public_key})
     system = make_system(5, CHUNK * PER_BLOCK * 2 + 7)  # 201 chunks, three batches
     ((manifest, data),) = phase1.collect([system], key_holder, captured_at=100)
     txs = phase1.backup_transactions(
         manifest, data, recipient=key_holder.public_key, chunk_bytes=CHUNK, created_at=100
     )
-    commit(cluster, batch(txs, PER_BLOCK)[::-1], timestamp=1001.0, wait_s=POLICY.pipeline.wait_s)
+    commit(
+        cluster,
+        batch(txs, PER_BLOCK)[::-1],
+        timestamp=1001.0,
+        wait_s=POLICY.pipeline.wait_s,
+        submitter_id=key_holder.identity,
+        key=key_holder.keypair.private,
+    )
     chain = read_chain(cluster)
     height_of = {
         loc.chunk_index: loc.height for loc in identify(chain, "SYS_5", decrypt=key_holder.decrypt)

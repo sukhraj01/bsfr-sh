@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 import pytest
-from pbft_harness import CONFIG, POLICY, SIGRW_IDS, Silent, make_cluster, make_transactions
+from pbft_harness import (
+    CONFIG,
+    POLICY,
+    SIGRW_IDS,
+    SUBMITTER,
+    SUBMITTER_ID,
+    Silent,
+    make_cluster,
+    make_transactions,
+)
 
 from bsfr_sh.blockchain.chain import BC_DTBU, BC_SigRW
 from bsfr_sh.framework._block_pipeline import (
@@ -45,7 +54,16 @@ def test_items_become_blocks_through_consensus_in_order() -> None:
         seen.append(item)
         return make_transactions(f"item{item}", 3)
 
-    result = run(cluster, range(5), build, chain=BC_DTBU, policy=SMALL, timestamp=1001.0)
+    result = run(
+        cluster,
+        range(5),
+        build,
+        chain=BC_DTBU,
+        policy=SMALL,
+        timestamp=1001.0,
+        submitter_id=SUBMITTER_ID,
+        key=SUBMITTER.private,
+    )
     assert seen == [0, 1, 2, 3, 4]
     assert result.transaction_count == 15
     assert [c.transaction_count for c in result.committed] == [4, 4, 4, 3]
@@ -59,21 +77,48 @@ def test_items_become_blocks_through_consensus_in_order() -> None:
 def test_a_zero_delay_run_leaves_no_phantom_simulated_time() -> None:
     """DEV-21: M6 reads `network.now` as modelled latency. Waiting must not add to it."""
     cluster = make_cluster()
-    run(cluster, [0], _two("t"), chain=BC_DTBU, policy=SMALL, timestamp=1001.0)
+    run(
+        cluster,
+        [0],
+        _two("t"),
+        chain=BC_DTBU,
+        policy=SMALL,
+        timestamp=1001.0,
+        submitter_id=SUBMITTER_ID,
+        key=SUBMITTER.private,
+    )
     assert cluster.network.now == 0.0
 
 
 def test_payloads_are_refused_by_the_other_chains_cluster() -> None:
     cluster = make_cluster(BC_SigRW, SIGRW_IDS)
     with pytest.raises(PipelineError, match="refusing"):
-        run(cluster, [0], _two("t"), chain=BC_DTBU, policy=SMALL, timestamp=1001.0)
+        run(
+            cluster,
+            [0],
+            _two("t"),
+            chain=BC_DTBU,
+            policy=SMALL,
+            timestamp=1001.0,
+            submitter_id=SUBMITTER_ID,
+            key=SUBMITTER.private,
+        )
     assert set(cluster.heights().values()) == {0}
     assert cluster.network.stats.sent == 0
 
 
 def test_nothing_to_commit_submits_nothing() -> None:
     cluster = make_cluster()
-    result = run(cluster, [], _two("t"), chain=BC_DTBU, policy=SMALL, timestamp=1001.0)
+    result = run(
+        cluster,
+        [],
+        _two("t"),
+        chain=BC_DTBU,
+        policy=SMALL,
+        timestamp=1001.0,
+        submitter_id=SUBMITTER_ID,
+        key=SUBMITTER.private,
+    )
     assert result.block_count == 0
     assert cluster.network.stats.sent == 0
 
@@ -82,7 +127,14 @@ def test_identical_batches_are_refused_before_submission() -> None:
     cluster = make_cluster()
     txs = make_transactions("d", 2)
     with pytest.raises(PipelineError, match="identical"):
-        commit(cluster, [txs, txs], timestamp=1001.0, wait_s=SMALL.wait_s)
+        commit(
+            cluster,
+            [txs, txs],
+            timestamp=1001.0,
+            wait_s=SMALL.wait_s,
+            submitter_id=SUBMITTER_ID,
+            key=SUBMITTER.private,
+        )
     assert cluster.network.stats.sent == 0
 
 
@@ -97,6 +149,8 @@ def test_one_silent_replica_is_tolerated(faulty) -> None:
         chain=BC_DTBU,
         policy=SMALL,
         timestamp=1001.0,
+        submitter_id=SUBMITTER_ID,
+        key=SUBMITTER.private,
     )
     assert result.block_count == 3
     assert read_chain(cluster).height == 3
@@ -107,5 +161,14 @@ def test_two_silent_replicas_are_reported_not_waited_on_forever() -> None:
     for rid in ("CS_1", "CS_2"):
         cluster.replicas[rid].behaviour = Silent()
     with pytest.raises(PipelineError, match="uncommitted"):
-        run(cluster, [0], _two("t"), chain=BC_DTBU, policy=SMALL, timestamp=1001.0)
+        run(
+            cluster,
+            [0],
+            _two("t"),
+            chain=BC_DTBU,
+            policy=SMALL,
+            timestamp=1001.0,
+            submitter_id=SUBMITTER_ID,
+            key=SUBMITTER.private,
+        )
     assert set(cluster.heights().values()) == {0}

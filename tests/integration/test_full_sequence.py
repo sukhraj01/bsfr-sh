@@ -43,8 +43,8 @@ EVAL_COUNT = 150
 
 def test_backup_honeypot_detection_mitigation_and_recovery_all_five_phases() -> None:
     # --- Phase 1: SYS_i's data reaches BC_DTBU through pBFT (Fig. 3, steps 1-2) -----------------
-    dtbu_cluster = make_cluster()
     key_holder, front = make_server(10), make_server(11)
+    dtbu_cluster = make_cluster(submitters={key_holder.identity: key_holder.public_key})
     victim = make_system(1, 4096)
     original_data = victim.data
     phase1.run(
@@ -58,8 +58,9 @@ def test_backup_honeypot_detection_mitigation_and_recovery_all_five_phases() -> 
 
     # --- Phase 2: the honeypot's two independent draws reach BC_SigRW (Fig. 3, steps 3-4) ------
     node, collector = make_node(seed=6060), make_server(50)
-    train_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=21)
-    eval_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=22)
+    sigrw_submitters = {collector.identity: collector.public_key}
+    train_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=21, submitters=sigrw_submitters)
+    eval_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=22, submitters=sigrw_submitters)
     train_report = phase2.run(
         node=node,
         collector=collector,

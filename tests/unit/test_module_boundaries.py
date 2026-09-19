@@ -14,15 +14,21 @@ import pytest
 SRC = Path(__file__).resolve().parents[2] / "src" / "bsfr_sh"
 PY_FILES = sorted(SRC.rglob("*.py"))
 
-#: `crypto.hashing` is the project's SHA-256 entry point (CLAUDE.md §7) and now the *only*
-#: module in the tree that imports hashlib.
+#: `crypto.hashing` is the project's SHA-256 entry point (CLAUDE.md §7).
 #:
-#: `util/config.py` held the second exemption from M0 until M2a, because it computed a config
+#: `util/config.py` held a second exemption from M0 until M2a, because it computed a config
 #: digest at load time and `util` may not import upward. Retiring that (debt D1) meant moving
 #: `config_hash()` into `crypto.hashing` and dropping the field from `Config`; the consumer that
-#: needs a digest composes the two layers. Adding a name back to this set means re-opening a
-#: question that has now been answered — route the hash through `crypto.hashing.h()` instead.
-HASHLIB_ALLOWED = {"crypto/hashing.py"}
+#: needs a digest composes the two layers. Adding a name back to this set for *our own* hashing
+#: means re-opening a question that has now been answered — route it through `crypto.hashing.h()`
+#: instead.
+#:
+#: `bench/ecdsa_backends.py` (D2, moved here from `scripts/` where nothing checked it) is a
+#: different case: `ecdsa.SigningKey.from_secret_exponent(hashfunc=...)` wants a hashlib-shaped
+#: *constructor* (`.update()`/`.digest()`), not `crypto.hashing.h()`'s one-shot `bytes -> bytes` —
+#: the two are not interchangeable, so there is no `crypto.hashing` call to route this through.
+#: It benchmarks a third-party library's own signing path, never anything of ours.
+HASHLIB_ALLOWED = {"bench/ecdsa_backends.py", "crypto/hashing.py"}
 
 
 def _rel(path: Path) -> str:

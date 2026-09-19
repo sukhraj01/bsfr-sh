@@ -32,8 +32,9 @@ EVAL_COUNT = 150
 
 def test_phase3_detects_over_a_chain_phase2_built_through_consensus() -> None:
     node, collector = make_node(seed=5150), make_server(50)
-    train_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=11)
-    eval_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=12)
+    submitters = {collector.identity: collector.public_key}
+    train_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=11, submitters=submitters)
+    eval_cluster = make_cluster(BC_SigRW, SIGRW_IDS, seed=12, submitters=submitters)
 
     # One honeypot, two sequential harvests: the second draw's seed is the first's plus one,
     # deployed the same way `scripts/make_honeypot_corpus.py` derives Q9's train/eval seeds.

@@ -8,10 +8,12 @@
   (DEV-22: the primary assembles).
 * **lines 11-15**, terminate when all blocks are added: `run` returns once every request commits.
 
-The submitter is authenticated twice. At the session layer, a backup only opens under the
-`SK_{CS_l,SYS_i}` of the system that sent it. At the payload layer, it must be attested by that same
-system (DEV-23). A system therefore cannot put a backup on the chain in another system's name,
-which is the part of DEV-20 item 5 that concerns backups.
+The submitter is authenticated three times over. At the session layer, a backup only opens under
+the `SK_{CS_l,SYS_i}` of the system that sent it. At the payload layer, it must be attested by that
+same system (DEV-23). A system therefore cannot put a backup on the chain in another system's
+name. And at the cluster boundary, the `ClientRequest` `pipeline.run` submits is signed by
+`collector` and checked against `cluster.submitters` (DEV-20 item 5, closed by debt D4) — a
+non-member cannot get junk committed by reaching the bus.
 
 There is no ransomware concept here: Phase 1 runs before any infection exists.
 """
@@ -142,7 +144,14 @@ def run(
         )
 
     result = pipeline.run(
-        cluster, received, build, chain=BC_DTBU, policy=policy.pipeline, timestamp=timestamp
+        cluster,
+        received,
+        build,
+        chain=BC_DTBU,
+        policy=policy.pipeline,
+        timestamp=timestamp,
+        submitter_id=collector.identity,
+        key=collector.keypair.private,
     )
     receipts = tuple(
         BackupReceipt(

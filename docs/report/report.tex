@@ -26,7 +26,8 @@ dataset. We built a complete, from-scratch implementation of all five of its alg
 of its private blockchains under real pBFT consensus, and the honeypot feature pipeline the
 paper specifies but never defines. Reproducing the paper's own evaluation protocol, our best
 model reaches 0.9442 accuracy / 0.9697 F1 -- 4.56 points below the published figure, and an
-exhaustive leakage ablation narrows but does not close a 3.58-point residual gap. We further
+ablation over both candidate leakage sources we identified narrows but does not close a
+3.58-point residual gap. We further
 identify four independent defects spanning the paper's evaluation methodology, security
 argument, and preprocessing specification. The framework's central idea -- chain-protecting a
 detector's ground truth and a system's backups from the same adversary -- is sound; several of
@@ -448,8 +449,10 @@ Decision tree & 2{,}916{,}697 & 0.3972 & 0.4231 & 0.1797 & 0.4012 & 0.4097 \\
 $k$-NN & 2{,}916{,}697 & 0.6008 & 0.2286 & 0.2242 & 0.3654 & 0.3312 \\
 Logistic regression & 2{,}916{,}697 & 0.0000 & 0.0000 & 0.0177 & 0.0000 & 0.0000 \\
 \hline
-Constant-negative baseline & 2{,}916{,}697 & -- & 0.0000 & 0.0142 & 0.0000 & 0.0000 \\
+Constant-negative baseline & 2{,}916{,}697 & undef.$^{\dagger}$ & 0.0000 & 0.0142 & 0.0000 & 0.0000 \\
 \hline
+\multicolumn{7}{l}{\footnotesize $^{\dagger}$Precision is $0/0$: a constant-negative classifier makes no positive predictions,} \\
+\multicolumn{7}{l}{\footnotesize \phantom{$^{\dagger}$}so there is no denominator -- undefined, not zero.} \\
 \multicolumn{7}{l}{\footnotesize Constant-negative accuracy (illustration only, not head-to-head with the paper's 98.98\%): 0.9858.} \\
 \end{tabular}
 \end{table*}
@@ -792,8 +795,8 @@ independent private blockchains under real pBFT consensus, and both a faithful r
 the paper's published evaluation and the honeypot feature pipeline its own Phase 2/3 requires but
 never defines. Reproducing the paper's own methodology exactly, its headline detection result
 does not reproduce: our best model reaches 0.9442/0.9697 against a published 0.9898/0.990, and an
-ablation over every leakage source we could identify narrows but does not close a 3.58-point
-residual gap. We find five further, independent defects -- a disconnect between what the
+ablation over both candidate leakage sources we identified narrows but does not close a
+3.58-point residual gap. We find five further, independent defects -- a disconnect between what the
 framework is designed to detect and what it is evaluated on, a degenerate and undisclosed
 evaluation split, a security argument that inverts pBFT's actual threshold relative to
 proof-of-work, a preprocessing specification that, read literally, deletes the class it exists to
@@ -840,19 +843,19 @@ Machine Learning Repository; cited in \cite{wazid2023} as ref.~[15]).
 
 \bibitem{almashhadani}
 A.~Almashhadani \emph{et al.}, network-traffic-based ransomware detector evaluated on Locky
-traffic traces; cited in \cite{wazid2023} as ref.~[11].
+traffic traces, \emph{IEEE Access}, vol.~7, 2019; cited in \cite{wazid2023} as ref.~[11].
 
 \bibitem{hwang}
-J.~Hwang \emph{et al.}, dynamic-analysis-based ransomware detector; cited in \cite{wazid2023}
-as ref.~[12].
+J.~Hwang \emph{et al.}, dynamic-analysis-based ransomware detector, \emph{Wireless Personal
+Communications}, vol.~112, 2020; cited in \cite{wazid2023} as ref.~[12].
 
 \bibitem{sharmeen}
 S.~Sharmeen \emph{et al.}, semi-supervised ransomware detector evaluated on an independent
-corpus; cited in \cite{wazid2023} as ref.~[13].
+corpus, \emph{IEEE Access}, vol.~8, 2020; cited in \cite{wazid2023} as ref.~[13].
 
 \bibitem{bae}
-S.~I.~Bae \emph{et al.}, PE-file-feature-based ransomware detector; cited in \cite{wazid2023}
-as ref.~[14].
+S.~I.~Bae \emph{et al.}, PE-file-feature-based ransomware detector, \emph{Concurrency and
+Computation: Practice and Experience}, vol.~32, 2020; cited in \cite{wazid2023} as ref.~[14].
 
 \bibitem{rfc6979}
 T.~Pornin, ``Deterministic Usage of the Digital Signature Algorithm (DSA) and Elliptic Curve

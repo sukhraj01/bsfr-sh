@@ -123,6 +123,13 @@ def run(
         )
 
     result = pipeline.run(
-        cluster, records, build, chain=BC_SigRW, policy=policy, timestamp=timestamp
+        cluster,
+        records,
+        build,
+        chain=BC_SigRW,
+        policy=policy,
+        timestamp=timestamp,
+        submitter_id=collector.identity,
+        key=collector.keypair.private,
     )
     return CollectionReport(harvested=len(raw), cleaning=report, records=records, pipeline=result)

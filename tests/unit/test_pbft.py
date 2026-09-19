@@ -15,9 +15,12 @@ from pbft_harness import (
     OUTSIDER,
     POLICY,
     SIGRW_IDS,
+    SUBMITTER,
+    SUBMITTER_ID,
     assert_no_fork,
     key_of,
     make_cluster,
+    make_request,
     make_transactions,
     submit_block,
 )
@@ -38,7 +41,7 @@ from bsfr_sh.consensus.protocol import (
 
 def _propose(cluster: Cluster) -> Proposal:
     """Have the view-0 primary build and propose a block, without delivering anything."""
-    request = ClientRequest(make_transactions("direct"), timestamp=GENESIS_TIME + 1)
+    request = make_request(cluster, "direct", timestamp=GENESIS_TIME + 1)
     primary = cluster.replicas["CS_0"]
     primary.receive(CLIENT_ID, request)
     proposal = primary.proposal_at(0, 1)
@@ -99,9 +102,10 @@ def test_message_count_per_block_is_the_textbook_pbft_count() -> None:
 def test_a_duplicate_request_is_committed_once() -> None:
     cluster = make_cluster()
     txs = make_transactions("same")
-    cluster.submit(txs, timestamp=GENESIS_TIME + 1)
+    submit = {"submitter_id": SUBMITTER_ID, "key": SUBMITTER.private}
+    cluster.submit(txs, timestamp=GENESIS_TIME + 1, **submit)
     cluster.run()
-    cluster.submit(txs, timestamp=GENESIS_TIME + 2)
+    cluster.submit(txs, timestamp=GENESIS_TIME + 2, **submit)
     cluster.run()
     assert cluster.heights() == dict.fromkeys(DTBU_IDS, 1)
 
@@ -292,6 +296,53 @@ def test_a_sybil_swarm_of_outsider_identities_cannot_form_a_certificate() -> Non
         )
     assert not primary.is_prepared(0, 1, proposal.pre_prepare.digest)
     assert len(primary.rejected(RejectReason.NON_MEMBER)) == 50
+
+
+def test_a_client_request_from_a_non_member_submitter_is_rejected() -> None:
+    """DEV-20 item 5 / debt D4: a non-member cannot waste consensus rounds by reaching the bus."""
+    cluster = make_cluster()
+    primary = cluster.replicas["CS_0"]
+    forged = ClientRequest.create(
+        chain=cluster.chain_name,
+        transactions=make_transactions("intruder"),
+        timestamp=GENESIS_TIME + 1,
+        submitter_id="INTRUDER",
+        key=OUTSIDER.private,
+    )
+    primary.receive(CLIENT_ID, forged)
+    assert primary.rejected(RejectReason.NON_MEMBER)
+    assert primary.pending_requests == 0
+    assert primary.proposal_at(0, 1) is None
+
+
+def test_a_client_request_claiming_a_submitters_id_with_the_wrong_key_fails_the_signature() -> None:
+    cluster = make_cluster()
+    primary = cluster.replicas["CS_0"]
+    impostor = ClientRequest.create(
+        chain=cluster.chain_name,
+        transactions=make_transactions("impostor"),
+        timestamp=GENESIS_TIME + 1,
+        submitter_id=SUBMITTER_ID,
+        key=OUTSIDER.private,
+    )
+    primary.receive(CLIENT_ID, impostor)
+    assert primary.rejected(RejectReason.BAD_SIGNATURE)
+    assert primary.pending_requests == 0
+
+
+def test_a_client_request_signed_for_the_other_chain_is_rejected() -> None:
+    cluster = make_cluster()
+    primary = cluster.replicas["CS_0"]
+    foreign = ClientRequest.create(
+        chain=BC_SigRW,
+        transactions=make_transactions("wrong-chain"),
+        timestamp=GENESIS_TIME + 1,
+        submitter_id=SUBMITTER_ID,
+        key=SUBMITTER.private,
+    )
+    primary.receive(CLIENT_ID, foreign)
+    assert primary.rejected(RejectReason.WRONG_CHAIN)
+    assert primary.pending_requests == 0
 
 
 def test_a_block_owned_by_a_non_member_is_not_prepared() -> None:

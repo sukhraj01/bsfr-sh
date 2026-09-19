@@ -35,6 +35,10 @@ consensus:
                                   #   "else re-run consensus" is the view change (DEV-20); this
                                   #   bounds the wait around it so a stalled chain is reported,
                                   #   not waited on forever.
+  serialize_messages: false       # DECLARED — D3 (closed). Off by default: `make test` runs on
+                                  #   the fast, unserialised bus. `bench.harness` turns this on so
+                                  #   Figs. 6(a)-(d) pay the real encode/decode cost DEV-30
+                                  #   quantified from an estimate instead of assuming it.
 
 block:
   version: 1

@@ -329,3 +329,26 @@ This closes the item `docs/DEVIATIONS.md` DEV-31 and `scripts/ada_honest_mode.sb
 produce, and does so **within the same session it was diagnosed as not-yet-complete in** — the
 "submitted, not completed" fallback this paragraph used to describe turned out to be a snapshot
 partway through a job that finished 36 minutes later, not the session's final word on it.
+
+## D3 closed (2026-09-19) — measured, not estimated
+
+`consensus.network.P2PCSNetwork` gained a `serialize=` hook (opaque `object -> object`, so the
+bus still imports nothing internal); `consensus.pbft.Cluster` wires it to
+`consensus.protocol.encode_message`/`decode_message` when `consensus.serialize_messages` is on
+(`configs/chain.yaml` default off for `make test`, `configs/bench.yaml` override on for bench
+runs). Case-3, both chains, n=25, same seeds, serialize on vs. off:
+
+```
+2026-09-19 | bench/d3-measured | BC_DTBU case_3 15blk x 100tx, n=25 | seconds_off=0.48785 seconds_on=0.81785 delta=+67.64% | measured | 20260919T013422Z-1cf934ad | D3 closed; supersedes DEV-30's encode-only ~0.33% estimate
+2026-09-19 | bench/d3-measured | BC_SigRW case_3 15blk x 100tx, n=25 | seconds_off=0.68031 seconds_on=1.01215 delta=+48.78% | measured | 20260919T013422Z-1cf934ad | D3 closed; supersedes DEV-30's encode-only ~0.16% estimate
+```
+
+**The real magnitude is ~50-70%, not the ~0.2-0.3% DEV-30's M6a estimate reported.** The estimate
+priced one `encode_block()` per committed block (the primary's `Proposal` broadcast, reused for
+every recipient, decode cost excluded). The real bus pays encode+decode on *every* `send()` call —
+28 messages per committed block at `n=4`
+(`test_pbft.py::test_message_count_per_block_is_the_textbook_pbft_count`) — so the estimate was a
+lower bound in the literal sense stated at the time, just a far looser one than "small relative to
+compute" suggested. `docs/DEVIATIONS.md` DEV-30 amended accordingly; `docs/report/report.tex`
+never stated the 0.2-0.3% figure (checked — it has no D3/serialization mention at all), so there
+is no report number to correct here.

@@ -42,14 +42,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
-from typing import ClassVar, Final, TypeVar
+from typing import Any, ClassVar, Final, TypeVar, cast
 
 from bsfr_sh.blockchain.block import Block
 from bsfr_sh.blockchain.transaction import Transaction
 from bsfr_sh.crypto.ecdsa import PrivateKey, PublicKey, sign, verify
 from bsfr_sh.crypto.hashing import h
 from bsfr_sh.crypto.merkle import merkle_root
-from bsfr_sh.util.serialization import Value, encode_struct
+from bsfr_sh.util.serialization import CanonicalEncodingError, Value, decode, encode, encode_struct
 
 __all__ = [
     "VOTE_FIELDS",
@@ -67,7 +67,10 @@ __all__ = [
     "Proposal",
     "RejectReason",
     "ViewChange",
+    "check_request_identity",
     "check_vote_identity",
+    "decode_message",
+    "encode_message",
     "resign",
     "verify_commit_certificate",
     "verify_prepared_certificate",
@@ -86,10 +89,12 @@ class MessageKind(Enum):
     COMMIT = "bsfr_sh.pbft.commit.v1"
     VIEW_CHANGE = "bsfr_sh.pbft.view_change.v1"
     NEW_VIEW = "bsfr_sh.pbft.new_view.v1"
+    CLIENT_REQUEST = "bsfr_sh.pbft.client_request.v1"
 
 
 #: The signed body of every normal-case message, in encoding order.
 VOTE_FIELDS: Final = ("chain", "view", "seq", "digest", "replica_id")
+_CLIENT_REQUEST_FIELDS: Final = ("chain", "request_id", "timestamp", "submitter_id")
 _VIEW_CHANGE_FIELDS: Final = (
     "chain",
     "new_view",
@@ -298,16 +303,48 @@ class ClientRequest:
 
     Identified by the Merkle root of its transaction digests, which is exactly the `MTR` of the
     block built from it — so a replica can tell, on commit, which pending request a block answered.
-    Unauthenticated at this layer (DEV-20 item 5); Phase 1's session keys authenticate submitters
-    in M3.
+
+    Signed by the submitting `CS_l` over `(chain, request_id, timestamp, submitter_id)` (DEV-20
+    item 5, closed): a replica checks the signer against the cluster's configured submitters the
+    same way `check_vote_identity` checks a vote's signer against `membership` — see
+    `check_request_identity`. The submitter need not be one of the chain's pBFT replicas (DEV-22
+    leaves that unspecified); `Cluster` is constructed with its own, separate submitter set.
     """
 
+    chain: str
     transactions: tuple[Transaction, ...]
     timestamp: float
+    submitter_id: str
+    signature: bytes = b""
 
     @property
     def request_id(self) -> bytes:
         return merkle_root([tx.digest for tx in self.transactions])
+
+    def signed_body(self) -> bytes:
+        fields: dict[str, Value] = {
+            "chain": self.chain,
+            "request_id": self.request_id,
+            "timestamp": self.timestamp,
+            "submitter_id": self.submitter_id,
+        }
+        return encode_struct(MessageKind.CLIENT_REQUEST.value, _CLIENT_REQUEST_FIELDS, fields)
+
+    def verify(self, key: PublicKey) -> bool:
+        return verify(key, self.signature, self.signed_body())
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        chain: str,
+        transactions: tuple[Transaction, ...],
+        timestamp: float,
+        submitter_id: str,
+        key: PrivateKey,
+    ) -> ClientRequest:
+        unsigned = cls(chain, transactions, timestamp, submitter_id)
+        return replace(unsigned, signature=sign(key, unsigned.signed_body()))
 
 
 # --------------------------------------------------------------------------------------------
@@ -372,6 +409,26 @@ def check_vote_identity(vote: _Vote, membership: Membership, chain: str) -> Reje
     if key is None:
         return RejectReason.NON_MEMBER
     if not vote.verify(key):
+        return RejectReason.BAD_SIGNATURE
+    return None
+
+
+def check_request_identity(
+    request: ClientRequest, submitters: Mapping[str, PublicKey], chain: str
+) -> RejectReason | None:
+    """Chain, submitter authorization, and signature — `check_vote_identity`'s shape, for requests.
+
+    `submitters` is deliberately not a `Membership`: an authorized submitter (a collecting `CS_l`)
+    need not be one of the chain's pBFT replicas (DEV-22 leaves that open), so there is no quorum
+    to enforce — only who may post a `ClientRequest` at all. Closes DEV-20 item 5 / debt D4: a
+    non-member submission is rejected here before it ever occupies a pending slot.
+    """
+    if request.chain != chain:
+        return RejectReason.WRONG_CHAIN
+    key = submitters.get(request.submitter_id)
+    if key is None:
+        return RejectReason.NON_MEMBER
+    if not request.verify(key):
         return RejectReason.BAD_SIGNATURE
     return None
 
@@ -504,3 +561,274 @@ class NewView:
 
 #: Everything a replica can receive.
 Message = ClientRequest | Proposal | Prepare | Commit | ViewChange | NewView
+
+
+# --------------------------------------------------------------------------------------------
+# Wire encoding — D3, `consensus.network.P2PCSNetwork`'s optional serialize mode
+# --------------------------------------------------------------------------------------------
+# Plain mappings and lists via `util.serialization.encode`/`decode`, not a declared `Struct`
+# domain: nothing here is ever hashed or signed (that stays `signed_body()`'s job, above), so a
+# bespoke field-order-and-domain declaration for six message shapes would buy nothing over field
+# lookup by name. This exists only so the bus's serialize mode can pay a real, measured
+# encode-then-decode cost per hop instead of an estimate (DEV-30's magnitude, quantified further).
+#
+# Every `_unwire_*` trusts the shape `_wire_*` produced and reads it with `cast` rather than
+# reconstructing it generically: the fields on each side are typed exactly (`Transaction`,
+# `Block`, ...), and a generic `Mapping[Any, Value]` has no way to state that without losing the
+# static types `mypy --strict` checks everywhere else in this module. `decode()` raising on
+# malformed bytes is still what actually protects this at runtime.
+def _wire_transaction(tx: Transaction) -> dict[str, Value]:
+    return dict(tx.to_fields())
+
+
+def _map(value: Value, what: str) -> Mapping[Any, Value]:
+    if not isinstance(value, Mapping):
+        raise CanonicalEncodingError(f"{what} envelope must be a mapping")
+    return value
+
+
+def _list(value: Value, what: str) -> list[Value]:
+    if not isinstance(value, list):
+        raise CanonicalEncodingError(f"{what} envelope must be a list")
+    return value
+
+
+def _unwire_transaction(value: Value) -> Transaction:
+    v = _map(value, "transaction")
+    return Transaction(
+        tx_id=cast(str, v["tx_id"]),
+        payload_type=cast(str, v["payload_type"]),
+        ciphertext=cast(bytes, v["ciphertext"]),
+        wrapped_key=cast(bytes, v["wrapped_key"]),
+        nonce=cast(bytes, v["nonce"]),
+        digest=cast(bytes, v["digest"]),
+        created_at=cast(int, v["created_at"]),
+    )
+
+
+def _wire_block(block: Block) -> dict[str, Value]:
+    return {
+        "owner_id": block.owner_id,
+        "owner_pubkey": block.owner_pubkey,
+        "transactions": [_wire_transaction(t) for t in block.transactions],
+        "prev_hash": block.prev_hash,
+        "timestamp": block.timestamp,
+        "version": block.version,
+        "nonce": block.nonce,
+        "signature": block.signature,
+    }
+
+
+def _unwire_block(value: Value) -> Block:
+    v = _map(value, "block")
+    txs = _list(v["transactions"], "block.transactions")
+    return Block(
+        owner_id=cast(str, v["owner_id"]),
+        owner_pubkey=cast(bytes, v["owner_pubkey"]),
+        transactions=tuple(_unwire_transaction(t) for t in txs),
+        prev_hash=cast(bytes, v["prev_hash"]),
+        timestamp=cast(float, v["timestamp"]),
+        version=cast(int, v["version"]),
+        nonce=cast(bytes, v["nonce"]),
+        signature=cast(bytes, v["signature"]),
+    )
+
+
+def _wire_client_request(request: ClientRequest) -> dict[str, Value]:
+    return {
+        "chain": request.chain,
+        "transactions": [_wire_transaction(t) for t in request.transactions],
+        "timestamp": request.timestamp,
+        "submitter_id": request.submitter_id,
+        "signature": request.signature,
+    }
+
+
+def _unwire_client_request(value: Value) -> ClientRequest:
+    v = _map(value, "client-request")
+    txs = _list(v["transactions"], "client-request.transactions")
+    return ClientRequest(
+        chain=cast(str, v["chain"]),
+        transactions=tuple(_unwire_transaction(t) for t in txs),
+        timestamp=cast(float, v["timestamp"]),
+        submitter_id=cast(str, v["submitter_id"]),
+        signature=cast(bytes, v["signature"]),
+    )
+
+
+def _wire_vote(vote: PrePrepare | Prepare | Commit) -> dict[str, Value]:
+    return {
+        "chain": vote.chain,
+        "view": vote.view,
+        "seq": vote.seq,
+        "digest": vote.digest,
+        "replica_id": vote.replica_id,
+        "signature": vote.signature,
+    }
+
+
+def _unwire_pre_prepare(value: Value) -> PrePrepare:
+    v = _map(value, "pre-prepare")
+    return PrePrepare(
+        chain=cast(str, v["chain"]),
+        view=cast(int, v["view"]),
+        seq=cast(int, v["seq"]),
+        digest=cast(bytes, v["digest"]),
+        replica_id=cast(str, v["replica_id"]),
+        signature=cast(bytes, v["signature"]),
+    )
+
+
+def _unwire_prepare(value: Value) -> Prepare:
+    v = _map(value, "prepare")
+    return Prepare(
+        chain=cast(str, v["chain"]),
+        view=cast(int, v["view"]),
+        seq=cast(int, v["seq"]),
+        digest=cast(bytes, v["digest"]),
+        replica_id=cast(str, v["replica_id"]),
+        signature=cast(bytes, v["signature"]),
+    )
+
+
+def _unwire_commit(value: Value) -> Commit:
+    v = _map(value, "commit")
+    return Commit(
+        chain=cast(str, v["chain"]),
+        view=cast(int, v["view"]),
+        seq=cast(int, v["seq"]),
+        digest=cast(bytes, v["digest"]),
+        replica_id=cast(str, v["replica_id"]),
+        signature=cast(bytes, v["signature"]),
+    )
+
+
+def _wire_proposal(proposal: Proposal) -> dict[str, Value]:
+    return {
+        "pre_prepare": _wire_vote(proposal.pre_prepare),
+        "block": _wire_block(proposal.block),
+    }
+
+
+def _unwire_proposal(value: Value) -> Proposal:
+    v = _map(value, "proposal")
+    return Proposal(_unwire_pre_prepare(v["pre_prepare"]), _unwire_block(v["block"]))
+
+
+def _wire_view_change(vc: ViewChange) -> dict[str, Value]:
+    return {
+        "chain": vc.chain,
+        "new_view": vc.new_view,
+        "last_seq": vc.last_seq,
+        "commit_proof": None
+        if vc.commit_proof is None
+        else _wire_commit_certificate(vc.commit_proof),
+        "prepared": [_wire_prepared_certificate(p) for p in vc.prepared],
+        "replica_id": vc.replica_id,
+        "signature": vc.signature,
+    }
+
+
+def _unwire_view_change(value: Value) -> ViewChange:
+    v = _map(value, "view-change")
+    proof = v["commit_proof"]
+    prepared = _list(v["prepared"], "view-change.prepared")
+    return ViewChange(
+        chain=cast(str, v["chain"]),
+        new_view=cast(int, v["new_view"]),
+        last_seq=cast(int, v["last_seq"]),
+        commit_proof=None if proof is None else _unwire_commit_certificate(proof),
+        prepared=tuple(_unwire_prepared_certificate(p) for p in prepared),
+        replica_id=cast(str, v["replica_id"]),
+        signature=cast(bytes, v["signature"]),
+    )
+
+
+def _wire_prepared_certificate(cert: PreparedCertificate) -> dict[str, Value]:
+    return {
+        "pre_prepare": _wire_vote(cert.pre_prepare),
+        "prepares": [_wire_vote(p) for p in cert.prepares],
+        "block": _wire_block(cert.block),
+    }
+
+
+def _unwire_prepared_certificate(value: Value) -> PreparedCertificate:
+    v = _map(value, "prepared-certificate")
+    prepares = _list(v["prepares"], "prepared-certificate.prepares")
+    return PreparedCertificate(
+        pre_prepare=_unwire_pre_prepare(v["pre_prepare"]),
+        prepares=tuple(_unwire_prepare(p) for p in prepares),
+        block=_unwire_block(v["block"]),
+    )
+
+
+def _wire_commit_certificate(cert: CommitCertificate) -> list[Value]:
+    return [_wire_vote(commit) for commit in cert.commits]
+
+
+def _unwire_commit_certificate(value: Value) -> CommitCertificate:
+    items = _list(value, "commit-certificate")
+    return CommitCertificate(tuple(_unwire_commit(v) for v in items))
+
+
+def _wire_new_view(nv: NewView) -> dict[str, Value]:
+    return {
+        "chain": nv.chain,
+        "view": nv.view,
+        "view_changes": [_wire_view_change(vc) for vc in nv.view_changes],
+        "proposals": [_wire_proposal(p) for p in nv.proposals],
+        "replica_id": nv.replica_id,
+        "signature": nv.signature,
+    }
+
+
+def _unwire_new_view(value: Value) -> NewView:
+    v = _map(value, "new-view")
+    view_changes = _list(v["view_changes"], "new-view.view_changes")
+    proposals = _list(v["proposals"], "new-view.proposals")
+    return NewView(
+        chain=cast(str, v["chain"]),
+        view=cast(int, v["view"]),
+        view_changes=tuple(_unwire_view_change(vc) for vc in view_changes),
+        proposals=tuple(_unwire_proposal(p) for p in proposals),
+        replica_id=cast(str, v["replica_id"]),
+        signature=cast(bytes, v["signature"]),
+    )
+
+
+def encode_message(message: Message) -> bytes:
+    """Serialize one bus message. Used only by `P2PCSNetwork`'s `serialize=` hook (D3)."""
+    if isinstance(message, ClientRequest):
+        return encode(["client_request", _wire_client_request(message)])
+    if isinstance(message, Prepare):
+        return encode(["prepare", _wire_vote(message)])
+    if isinstance(message, Commit):
+        return encode(["commit", _wire_vote(message)])
+    if isinstance(message, Proposal):
+        return encode(["proposal", _wire_proposal(message)])
+    if isinstance(message, ViewChange):
+        return encode(["view_change", _wire_view_change(message)])
+    if isinstance(message, NewView):
+        return encode(["new_view", _wire_new_view(message)])
+    raise CanonicalEncodingError(f"no wire encoding for {type(message).__name__}")
+
+
+def decode_message(data: bytes) -> Message:
+    """Inverse of `encode_message`. Reconstructs a fresh, independently-validated object."""
+    envelope = decode(data)
+    if not (isinstance(envelope, list) and len(envelope) == 2):
+        raise CanonicalEncodingError("malformed message envelope")
+    kind, body = envelope
+    if kind == "client_request":
+        return _unwire_client_request(body)
+    if kind == "prepare":
+        return _unwire_prepare(body)
+    if kind == "commit":
+        return _unwire_commit(body)
+    if kind == "proposal":
+        return _unwire_proposal(body)
+    if kind == "view_change":
+        return _unwire_view_change(body)
+    if kind == "new_view":
+        return _unwire_new_view(body)
+    raise CanonicalEncodingError(f"unknown message kind {kind!r}")

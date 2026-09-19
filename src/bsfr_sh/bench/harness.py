@@ -139,7 +139,12 @@ class BenchPolicy:
             modelled_delay_sweep_s=tuple(
                 float(v) for v in bench_config.require("network.modelled_delay_sweep_s", list)
             ),
-            pbft=PBFTPolicy.from_config(chain_config),
+            # `chain.yaml`'s own default is off (test speed); `bench.yaml`'s declared
+            # `network.serialize_messages` turns it on for every bench run (D3, closed).
+            pbft=replace(
+                PBFTPolicy.from_config(chain_config),
+                serialize_messages=bool(bench_config.get("network.serialize_messages", True)),
+            ),
         )
 
 
@@ -223,12 +228,26 @@ def _batch(
 # --------------------------------------------------------------------------------------------
 # Cluster
 # --------------------------------------------------------------------------------------------
-def _cluster(*, chain_name: str, id_prefix: str, policy: PBFTPolicy, seed: int) -> Cluster:
+def _cluster(
+    *,
+    chain_name: str,
+    id_prefix: str,
+    policy: PBFTPolicy,
+    seed: int,
+    submitters: Mapping[str, PublicKey],
+) -> Cluster:
     """A fresh cluster of `policy.replicas` nodes, keyed from `seed` (CLAUDE.md §4b)."""
     ids = tuple(f"{id_prefix}_{index}" for index in range(policy.replicas))
     keys = {rid: keypair_from_secret(seed + index + 1).private for index, rid in enumerate(ids)}
     genesis = build_genesis(owner_id=ids[0], private_key=keys[ids[0]], timestamp=0.0)
-    return Cluster(chain_name=chain_name, keys=keys, genesis=genesis, policy=policy, seed=seed)
+    return Cluster(
+        chain_name=chain_name,
+        keys=keys,
+        genesis=genesis,
+        policy=policy,
+        seed=seed,
+        submitters=submitters,
+    )
 
 
 # --------------------------------------------------------------------------------------------
@@ -274,8 +293,15 @@ def run_once(
     Nothing here calls `BackupIndex` inside that loop (DEV-05) — see below.
     """
     id_prefix = "CS" if chain_name == BC_DTBU else "HP"
-    cluster = _cluster(chain_name=chain_name, id_prefix=id_prefix, policy=pbft_policy, seed=seed)
     collector = keypair_from_secret(seed + 90_001)
+    submitter_id = f"{tag}-collector"
+    cluster = _cluster(
+        chain_name=chain_name,
+        id_prefix=id_prefix,
+        policy=pbft_policy,
+        seed=seed,
+        submitters={submitter_id: collector.public},
+    )
     wait_s = pbft_policy.view_change_timeout_s * _WAIT_TIMEOUTS
 
     block_seconds: list[float] = []
@@ -290,7 +316,14 @@ def run_once(
             seed=seed * 100_003 + block_index,
             tag=f"{tag}-b{block_index}",
         )
-        pipeline.commit(cluster, [batch], timestamp=float(block_index + 1), wait_s=wait_s)
+        pipeline.commit(
+            cluster,
+            [batch],
+            timestamp=float(block_index + 1),
+            wait_s=wait_s,
+            submitter_id=submitter_id,
+            key=collector.private,
+        )
         block_seconds.append(time.perf_counter() - started)
 
     chain = pipeline.read_chain(cluster)
@@ -512,8 +545,15 @@ def verify_modelled_network_formula(
     """
     policy = replace(pbft_policy, message_delay_s=delay_s)
     id_prefix = "CS" if chain_name == BC_DTBU else "HP"
-    cluster = _cluster(chain_name=chain_name, id_prefix=id_prefix, policy=policy, seed=seed)
     collector = keypair_from_secret(seed + 90_001)
+    submitter_id = "verify-collector"
+    cluster = _cluster(
+        chain_name=chain_name,
+        id_prefix=id_prefix,
+        policy=policy,
+        seed=seed,
+        submitters={submitter_id: collector.public},
+    )
     wait_s = policy.view_change_timeout_s * _WAIT_TIMEOUTS
     for index in range(blocks):
         batch = _batch(
@@ -525,7 +565,14 @@ def verify_modelled_network_formula(
             seed=seed * 100_003 + index,
             tag=f"verify-b{index}",
         )
-        pipeline.commit(cluster, [batch], timestamp=float(index + 1), wait_s=wait_s)
+        pipeline.commit(
+            cluster,
+            [batch],
+            timestamp=float(index + 1),
+            wait_s=wait_s,
+            submitter_id=submitter_id,
+            key=collector.private,
+        )
     predicted = modelled_network_seconds(blocks=blocks, delay_s=delay_s).total_seconds
     return predicted, cluster.network.now
 

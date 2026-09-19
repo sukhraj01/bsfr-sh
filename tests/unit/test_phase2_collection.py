@@ -16,8 +16,10 @@ from bsfr_sh.honeypot.signatures import SampleSignature
 
 
 def _run(count: int = 9):
-    cluster = make_cluster(BC_SigRW, SIGRW_IDS)
     node, collector = make_node(), make_server(10)
+    cluster = make_cluster(
+        BC_SigRW, SIGRW_IDS, submitters={collector.identity: collector.public_key}
+    )
     report = phase2.run(
         node=node,
         collector=collector,
@@ -81,8 +83,8 @@ def test_the_label_rides_as_metadata_and_the_vector_stays_clean() -> None:
 
 
 def test_records_are_refused_by_the_other_chains_cluster() -> None:
-    cluster = make_cluster(BC_DTBU, DTBU_IDS)
     node, collector = make_node(), make_server(10)
+    cluster = make_cluster(BC_DTBU, DTBU_IDS, submitters={collector.identity: collector.public_key})
     with pytest.raises(PipelineError, match="refusing"):
         phase2.run(
             node=node,

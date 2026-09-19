@@ -25,8 +25,10 @@ PER_BLOCK = POLICY.transactions_per_block  # 100
 
 
 def test_bc_sigrw_builds_case_three_from_real_records() -> None:
-    cluster = make_cluster(BC_SigRW, SIGRW_IDS)
     node, collector = make_node(), make_server(10)
+    cluster = make_cluster(
+        BC_SigRW, SIGRW_IDS, submitters={collector.identity: collector.public_key}
+    )
     # A few samples are dropped by cleaning, so harvest enough to fill the blocks and commit the
     # first BLOCKS * PER_BLOCK records exactly.
     report = phase2.run(

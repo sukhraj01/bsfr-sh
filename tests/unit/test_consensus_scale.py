@@ -22,6 +22,8 @@ from pbft_harness import (
     GENESIS_TIME,
     RECIPIENT,
     SIGRW_IDS,
+    SUBMITTER,
+    SUBMITTER_ID,
     Silent,
     WrongSignature,
     assert_no_fork,
@@ -82,7 +84,12 @@ def _signature_txs(block: int) -> tuple[Transaction, ...]:
 
 def _build(cluster: Cluster, make_txs) -> None:  # type: ignore[no-untyped-def]
     for block in range(BLOCKS):
-        cluster.submit(make_txs(block), timestamp=GENESIS_TIME + 1 + block)
+        cluster.submit(
+            make_txs(block),
+            timestamp=GENESIS_TIME + 1 + block,
+            submitter_id=SUBMITTER_ID,
+            key=SUBMITTER.private,
+        )
         run_for(cluster)
 
 

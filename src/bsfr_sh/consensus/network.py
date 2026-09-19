@@ -32,9 +32,26 @@ What the bus does not do
 It does not authenticate. The `sender` a handler receives is the transport-level source and is
 as spoofable as a source IP; any caller may `send()` under any name, registered or not, which is
 how tests inject messages from outside the membership. Authentication is the pBFT layer's job and
-is done with signatures, never with this argument. The bus also does not serialise: payloads are
-passed as Python objects (immutable dataclasses), so wire encoding cost is not part of the
-modelled consensus cost. Recorded for M6 in the M2b session log.
+is done with signatures, never with this argument.
+
+Serialization — D3, closed
+---------------------------
+By default the bus passes Python objects (immutable dataclasses) between nodes: `serialize=None`,
+so wire-encoding cost is not part of the measured consensus cost — the cheap, fast path every unit
+test runs on. A caller may pass a `serialize` hook — `(payload) -> payload`, meant to round-trip
+the message through an encoder and back — and `send()` then applies it before scheduling delivery,
+so the real cost of whatever that hook does is paid on the same wall-clock span M6 measures, once
+per `send()` call (i.e. once per hop; a broadcast to `n-1` recipients pays it `n-1` times, since
+`Replica._broadcast` sends a possibly-different message per recipient and a shared single encode
+cannot be assumed).
+
+This module still does not know what a pBFT message is: the hook is opaque `object -> object`,
+supplied by `consensus.pbft.Cluster` as `consensus.protocol.encode_message`/`decode_message`
+composed together, keeping the bus reusable for M7's async bus and out of the
+`consensus/network.py imports nothing internal` boundary `test_module_boundaries.py` enforces.
+`configs/chain.yaml` `consensus.serialize_messages` defaults this off for `make test`'s speed and
+on for bench runs (`bench.harness`), per DEV-30's amendment quantifying the real magnitude in
+place of the earlier estimate.
 """
 
 from __future__ import annotations
@@ -151,14 +168,23 @@ class P2PCSNetwork:
         "_order",
         "_queue",
         "_rng",
+        "_serialize",
         "message_delay_s",
         "stats",
     )
 
-    def __init__(self, *, message_delay_s: float = 0.0, seed: int, start_time: float = 0.0) -> None:
+    def __init__(
+        self,
+        *,
+        message_delay_s: float = 0.0,
+        seed: int,
+        start_time: float = 0.0,
+        serialize: Callable[[object], object] | None = None,
+    ) -> None:
         if message_delay_s < 0:
             raise NetworkError("message_delay_s must be non-negative")
         self.message_delay_s = float(message_delay_s)
+        self._serialize = serialize
         self._rng = random.Random(seed)
         self._now = float(start_time)
         self._order = 0
@@ -221,6 +247,8 @@ class P2PCSNetwork:
         ):
             self.stats.dropped += 1
             return
+        if self._serialize is not None:
+            payload = self._serialize(payload)
         base = self._now + self.message_delay_s + faults.extra_delay_s
         for copy in range(1 + faults.duplicates):
             jitter = self._rng.uniform(0.0, faults.jitter_s) if faults.jitter_s > 0.0 else 0.0

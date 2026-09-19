@@ -809,6 +809,37 @@ non-trivial fraction of the modelled network column (DEV-21).
 enough not to change the shape conclusion. Recorded so "the bus doesn't serialise" stops being an
 asterisk with no number attached to it.
 
+**Amendment (2026-09-19, debt D3 closed) — measured, and an order of magnitude larger than the
+estimate above.** `consensus.network.P2PCSNetwork` gained a `serialize=` hook: an opaque
+`object -> object` callable applied in `send()` before scheduling delivery, so the bus itself
+still imports nothing internal (`test_module_boundaries.py`'s
+`consensus/network.py imports nothing internal` check). `consensus.pbft.Cluster` supplies
+`consensus.protocol.encode_message` composed with `decode_message` as that hook when
+`PBFTPolicy.serialize_messages` is set — `configs/chain.yaml`'s own default is off (`make test`
+stays fast and unserialised), `configs/bench.yaml` declares it on for every bench run. Every one
+of the six message shapes (`ClientRequest`, `Proposal`, `Prepare`, `Commit`, `ViewChange`,
+`NewView`) round-trips through plain `util.serialization.encode`/`decode` mappings — not a
+declared `Struct` domain, since nothing here is hashed or signed — and reconstructs a fresh,
+independently `__post_init__`-validated object (`tests/unit/test_protocol.py`).
+
+Case-3, both chains, n=25, identical seeds, serialize on vs. off (`RESULTS.md`
+`bench/d3-measured`, run `20260919T013422Z-1cf934ad`): **BC_DTBU +67.6%, BC_SigRW +48.8%** —
+nothing like the ~0.33%/~0.16% the encode-only estimate above reported. The estimate priced one
+`encode_block()` per committed block; the real bus pays a full encode+decode on *every* `send()`
+call, and one committed block at `n=4` is 28 such calls
+(`test_pbft.py::test_message_count_per_block_is_the_textbook_pbft_count`: 4 requests + 3
+pre-prepares + 3×3 prepares + 4×3 commits), not one. The estimate's own docstring called itself a
+lower bound "excluding decode cost on the receiving side and the small vote messages entirely" —
+true as far as it went, but "small relative to compute" was the wrong reading of what excluding
+27 of 28 hops' cost would do to the total.
+
+**Impact on reproduction:** still none on DEV-13's trend/ratio target — a 50-70% addition to
+Figs. 6(a)-(d)'s already-microsecond-scale numbers does not change the shape conclusion (monotone
+increase, `BC_SigRW` slower than `BC_DTBU`), and `configs/chain.yaml`'s test-path default stays
+`serialize_messages: false` so no existing measured number in `RESULTS.md` is invalidated by this
+— only bench runs from now on pay it, and only when they choose to. `docs/report/report.tex` was
+checked and never stated the earlier 0.2-0.3% figure, so there is no report number to correct.
+
 ### DEV-31 · ADD · `honest_mode`'s memory ceiling is a parameter, not a constant, and KNN degrades instead of vanishing (M6b)
 **Problem:** `detection.models.fits_in_memory()` (M4a) hard-coded an 8 GB ceiling — the dev box.
 Called unparameterised, the same code run on a machine with more memory would still defer KNN,

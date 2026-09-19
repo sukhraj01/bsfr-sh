@@ -4,36 +4,56 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-19 · **Milestone:** M7-2 done (stretch, optional) · **Sessions completed:** 15
+**Last updated:** 2026-09-19 · **Milestone:** debt clearance (D2/D3/D4 closed) · **Sessions completed:** 16
 
 ---
 
 ## One-line status
 
-The core deliverable (report, M0–M6) has been done since before M7 and is unchanged. This
-session closed a second M7 stretch item: **M7-2, the storage-cost analysis GAP-2 flagged at M0
-and never answered.** `docs/STORAGE_ANALYSIS.md` computes per-backup on-chain cost from
-already-measured values only (DEV-15's 4096B payload + 1.14× full-block overhead factor, DEV-24's
-215B+161B per-chunk framing/encryption) — no new code, no new benchmark runs. It gives three
-deployment scenarios (small/medium/large, daily 1MiB backups, ×4 replication: 81 GiB/yr cluster
-at 50 patients up to 79 TiB/yr at 50,000), the backup-frequency lever for the medium scenario
-(daily costs ~7× weekly, ~30× monthly), an on-chain-hash/off-chain-data alternative
-(~504B/backup vs. ~1.14MiB, a ratio that widens with backup size — stated as a trade-off against
-the paper's design, not a replacement for it), and a compute-cost cross-check (large-network
-scenario's block rate: ~4,045 CPU-s/day, feasible on the measured dev-laptop throughput). The
-report (`docs/report/report.tex`) gained `\subsection{GAP-2 -- storage-cost analysis}` in
-§Critique, before "What the paper gets right" — one table, one hash-only paragraph, one
-compute-cost sentence — and recompiles clean via `tectonic`, no new overfull/underfull warnings.
-`make test` (1321 passed) and `make lint` (ruff + mypy clean) reconfirmed green — no source
-touched.
+The core deliverable (report, M0–M6) and both M7 stretch items done so far (M7-1 Scyther, M7-2
+storage analysis) are unchanged. This session closed three items carried since M2b–M6a instead of
+picking up a new M7 stretch item:
 
-**Worth knowing for next time:** this codebase has no separately measured block-header-only or
-Merkle-only byte count, and none should be invented — `bench.harness.estimate_overhead_factor`'s
-measured 1.14× full-block ratio is the right substitute (it already includes header + Merkle root
-+ struct/list encoding, amortised over 100 tx), cross-checked for consistency against DEV-24's
-transaction-level 1.092× in `docs/STORAGE_ANALYSIS.md` §1. Reconstructing header bytes field-by-
-field would require guessing the DER ECDSA signature's exact length, which is logged nowhere in
-this project — resist the temptation next time this comes up.
+- **D2** — `scripts/bench_ecdsa_backends.py`'s logic moved into `src/bsfr_sh/bench/ecdsa_backends.py`
+  (CLAUDE.md §3: scripts carry no logic); the script is now a thin CLI wrapper, so `make lint`'s
+  `mypy --strict`/`ruff` over `src/` cover it. Faster than extending lint to all of `scripts/`,
+  which would have meant type-annotating six other, never-checked scripts.
+- **D4** — `ClientRequest` is now signed and authenticated: `Cluster`/`Replica` take a `submitters:
+  Mapping[str, PublicKey]` distinct from the replica `Membership` (a submitting `CS_l` need not be
+  a miner, DEV-22), and `check_request_identity` rejects a non-member the same way
+  `check_vote_identity` rejects a non-member vote. Every `Cluster.submit`/`pipeline.run`/`.commit`
+  call site now takes `submitter_id`/`key`; new tests confirm both a non-member and a forged
+  signature are rejected (`tests/unit/test_protocol.py`, `test_pbft.py`).
+- **D3** — `consensus.network.P2PCSNetwork` gained a `serialize=` hook (opaque `object -> object`,
+  so the bus still imports nothing internal); `Cluster` wires it to
+  `consensus.protocol.encode_message`/`decode_message` when `PBFTPolicy.serialize_messages` is set
+  (`configs/chain.yaml` default off, `configs/bench.yaml` override on for bench runs). Measured
+  case-3 both chains, n=25, serialize on vs. off: **BC_DTBU +67.6%, BC_SigRW +48.8%**
+  (`RESULTS.md` `bench/d3-measured`, run `20260919T013422Z-1cf934ad`) — an order of magnitude
+  larger than DEV-30's ~0.2-0.3% encode-only estimate, because the estimate priced one encode per
+  block and the real bus pays encode+decode on every one of 28 hops per block. `docs/DEVIATIONS.md`
+  DEV-30 amended; `docs/report/report.tex` was checked and never stated the old figure, so there
+  was no report number to correct.
+- Report cosmetics: refs [4]-[7] filled in with journal/vol/year; Table V's ("Honest-mode
+  evaluation" — see note below) constant-negative precision changed from `--` to `undef.` with a
+  footnote (0/0, not zero); the "every leakage source" overclaim fixed in both the Conclusion and
+  the abstract (task named only §VII/Conclusion; the abstract had the identical overclaim as
+  "exhaustive leakage ablation" and was fixed too, for consistency — flagging this since it goes
+  slightly beyond what was asked).
+
+**Worth knowing for next time:** the task instructions referred to "Table IV" for the
+constant-negative-precision fix; the actual table (confirmed via `report.aux`'s `\newlabel`
+after compiling) is **Table V** (`\label{tab:honest}`) — Table IV is the Q10 leakage-ablation
+table, which has no precision column or constant-negative row at all. Fixed by content match, not
+by the stated number. If a future prompt names a table number, verify against a compile before
+trusting it.
+
+`make test` (1348 passed, +27 this session) and `make lint` (ruff + mypy clean) green.
+`docs/report/report.tex` recompiles; one pre-existing overfull-hbox warning
+(`83.3953pt`, storage table) reproduces identically from the unmodified git-HEAD `report.tex`
+compiled in this same directory (verified directly), so it is not a regression from this
+session's edits — environment/font-cache dependent, not content-dependent (confirmed: identical
+bytes compiled in a fresh `/tmp` directory never show it).
 
 ---
 
@@ -41,28 +61,28 @@ this project — resist the temptation next time this comes up.
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | M0–M6, unchanged this session |
-| `docs/report/report.tex` + `.pdf` | done | M6 + M7-1 Scyther subsection + this session's GAP-2 subsection |
-| `verification/` | done (M7-1) | Scyther models, raw output, README |
-| `docs/STORAGE_ANALYSIS.md` | done (M7-2) | three scenarios, frequency lever, hash-only alternative, compute cross-check |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | consensus gained `ClientRequest` auth (D4) + bus `serialize=` hook (D3) this session |
+| `docs/report/report.tex` + `.pdf` | done | this session's four cosmetic fixes (refs, Table V, Conclusion + abstract wording) |
+| `verification/` | done (M7-1) | unchanged |
+| `docs/STORAGE_ANALYSIS.md` | done (M7-2) | unchanged |
 
 ## Current numbers
 
-No new benchmark runs this session (arithmetic over M6a/M1/M3a's already-recorded values —
-nothing appended to `RESULTS.md`, correctly). See `RESULTS.md` for every benchmark figure;
-unchanged since M6b. See `docs/STORAGE_ANALYSIS.md` for this session's derived (not measured)
-storage-cost figures.
+New this session: `RESULTS.md` `bench/d3-measured` (case-3, both chains, serialize on vs. off,
+run `20260919T013422Z-1cf934ad`) — see One-line status above for the two deltas. Everything else
+unchanged since M6b/M7-2.
 
 ## Next task
 
-**M7 has three remaining stretch items, none required for the deliverable** (`docs/ROADMAP.md`
-M7). Pick one if continuing, or stop here — the core deliverable was already complete before M7:
+**M7 has two remaining stretch items, none required for the deliverable** (`docs/ROADMAP.md` M7).
+Pick one if continuing, or stop here — the core deliverable was already complete before M7:
 
 1. Adversarial evaluation: does the honeypot detector survive feature-space evasion? (Q4, open)
-2. Async pBFT with realistic network latency (relates to DEV-20 item 2, DEV-21).
-3. Hybrid blockchain, which the paper lists as its own future work.
+2. Hybrid blockchain, which the paper lists as its own future work.
 
-None of these follows naturally from M7-2; each is an independent unit of work.
+Async pBFT with realistic network latency (the third stretch item) no longer has a debt-closure
+reason to pick it up now that D3 is closed on its own; it stands purely on its own merits if
+picked up.
 
 ## Blockers
 
@@ -73,17 +93,13 @@ BitcoinHeist run — unchanged, not touched this session.
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q11 | Is 9-page report (now +1 short subsection) sufficient, or expand toward 10-12 pages? | report sign-off | reviewer judgement |
+| Q11 | Is the report's length sufficient, or expand toward 10-12 pages? | report sign-off | reviewer judgement |
 | Q4 | Do we need real feature-space evasion for M7? | M7 item 1 | decide if that item is picked up |
-| Q8 | Does anything before M7 need pBFT state transfer (DEV-20 item 2)? | M7 item 3 | only if that item is picked up |
 
 ## Carried debt
 
 | # | Item | Retire by |
 |---|---|---|
-| D2 | `make lint` covers `src` and `tests` but not `scripts/`, and `mypy` only covers `src`. | low priority; not cited as a report claim |
-| D3 | The bus never serialises; magnitude quantified (DEV-30) but the omission itself is unfixed. | M7 item 3, if async pBFT lands |
-| D4 | `ClientRequest` is unauthenticated (DEV-20 item 5). | when a claim needs it |
 | D5 | `LogisticRegression(penalty=…)` is deprecated in sklearn 1.8, removed in 1.10. | before sklearn 1.10 |
 
 ## Risks

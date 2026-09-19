@@ -75,6 +75,9 @@ from bsfr_sh.consensus.protocol import (
     Proposal,
     RejectReason,
     ViewChange,
+    check_request_identity,
+    decode_message,
+    encode_message,
 )
 from bsfr_sh.consensus.view_change import (
     ViewChangeLog,
@@ -83,7 +86,7 @@ from bsfr_sh.consensus.view_change import (
     verify_new_view,
     verify_view_change,
 )
-from bsfr_sh.crypto.ecdsa import PrivateKey
+from bsfr_sh.crypto.ecdsa import PrivateKey, PublicKey
 from bsfr_sh.util.config import Config
 from bsfr_sh.util.logging import event, get_logger
 
@@ -105,6 +108,16 @@ _LOG: Final = get_logger("consensus.pbft")
 CLIENT_ID: Final = "client"
 
 
+def _roundtrip_message(payload: object) -> object:
+    """The `P2PCSNetwork(serialize=...)` hook for `serialize_messages=True` (D3, closed).
+
+    `consensus.network` must not know what a pBFT message is (`test_module_boundaries.py`), so it
+    takes an opaque `object -> object` hook instead of importing `consensus.protocol` itself; this
+    is that hook, built where the message types are already in scope.
+    """
+    return decode_message(encode_message(payload))  # type: ignore[arg-type]
+
+
 class ConsensusError(RuntimeError):
     """Raised when the protocol reaches a state its own invariants say is impossible."""
 
@@ -122,6 +135,7 @@ class PBFTPolicy:
     view_change_timeout_s: float = 2.0
     message_delay_s: float = 0.0
     log_window: int = 4
+    serialize_messages: bool = False
 
     def __post_init__(self) -> None:
         if self.view_change_timeout_s <= 0:
@@ -146,6 +160,7 @@ class PBFTPolicy:
             view_change_timeout_s=float(config.get("consensus.view_change_timeout_s")),
             message_delay_s=float(config.get("consensus.message_delay_s", 0.0)),
             log_window=int(config.get("consensus.log_window", 4)),
+            serialize_messages=bool(config.get("consensus.serialize_messages", False)),
         )
 
 
@@ -217,6 +232,7 @@ class Replica:
         chain: Chain,
         network: P2PCSNetwork,
         policy: PBFTPolicy,
+        submitters: Mapping[str, PublicKey],
         behaviour: Behaviour | None = None,
     ) -> None:
         if replica_id not in membership:
@@ -232,6 +248,7 @@ class Replica:
         self.chain = chain
         self.network = network
         self.policy = policy
+        self.submitters = submitters
         self.behaviour: Behaviour = behaviour if behaviour is not None else HONEST
 
         self.view = 0
@@ -314,6 +331,10 @@ class Replica:
             )
 
     def _on_request(self, request: ClientRequest) -> None:
+        reason = check_request_identity(request, self.submitters, self.chain.name)
+        if reason is not None:
+            self._reject(reason, "client-request", request.submitter_id, f"chain={request.chain}")
+            return
         request_id = request.request_id
         if request_id in self._committed_requests or request_id in self._pending:
             return
@@ -763,6 +784,7 @@ class Cluster:
         genesis: Block,
         policy: PBFTPolicy,
         seed: int,
+        submitters: Mapping[str, PublicKey],
         chain_policy: ChainPolicy | None = None,
         start_time: float = 0.0,
     ) -> None:
@@ -773,8 +795,12 @@ class Cluster:
             )
         self.chain_name = chain_name
         self.policy = policy
+        self.submitters = dict(submitters)
         self.network = P2PCSNetwork(
-            message_delay_s=policy.message_delay_s, seed=seed, start_time=start_time
+            message_delay_s=policy.message_delay_s,
+            seed=seed,
+            start_time=start_time,
+            serialize=_roundtrip_message if policy.serialize_messages else None,
         )
         self.membership = Membership(
             {rid: key.public_key for rid, key in keys.items()},
@@ -792,14 +818,32 @@ class Cluster:
                 chain=chain,
                 network=self.network,
                 policy=policy,
+                submitters=self.submitters,
             )
 
-    def submit(self, transactions: tuple[Transaction, ...], *, timestamp: float) -> bytes:
-        """Send a request to every replica, as a submitting system would. Returns its id.
+    def submit(
+        self,
+        transactions: tuple[Transaction, ...],
+        *,
+        timestamp: float,
+        submitter_id: str,
+        key: PrivateKey,
+    ) -> bytes:
+        """Send a signed request to every replica, as a submitting `CS_l` would. Returns its id.
 
         Implements Alg. 1, line 4 / Alg. 2, line 9 — hand the encrypted transactions to P2PCS.
+        `submitter_id` must be one of `self.submitters` for the request to survive
+        `check_request_identity` on the other end (DEV-20 item 5 / debt D4); callers outside the
+        configured set can still call this (nothing here enforces membership on send), but every
+        replica will reject what arrives, which is exactly the boundary check being tested.
         """
-        request = ClientRequest(transactions=transactions, timestamp=timestamp)
+        request = ClientRequest.create(
+            chain=self.chain_name,
+            transactions=transactions,
+            timestamp=timestamp,
+            submitter_id=submitter_id,
+            key=key,
+        )
         self.network.broadcast(CLIENT_ID, request, self.membership.ids)
         return request.request_id
 

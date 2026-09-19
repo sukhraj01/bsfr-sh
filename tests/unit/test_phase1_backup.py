@@ -18,7 +18,7 @@ SMALL = phase1.BackupPolicy(
 
 
 def _run(systems, collector, **kwargs):
-    cluster = make_cluster()
+    cluster = make_cluster(submitters={collector.identity: collector.public_key})
     report = phase1.run(
         systems=systems,
         collector=collector,

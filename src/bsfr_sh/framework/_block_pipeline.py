@@ -40,6 +40,7 @@ from typing import TypeVar
 from bsfr_sh.blockchain.chain import Chain
 from bsfr_sh.blockchain.transaction import Transaction
 from bsfr_sh.consensus.pbft import Cluster
+from bsfr_sh.crypto.ecdsa import PrivateKey
 from bsfr_sh.util.config import Config
 from bsfr_sh.util.logging import event, get_logger
 
@@ -129,17 +130,28 @@ def run(
     chain: str,
     policy: PipelinePolicy,
     timestamp: float,
+    submitter_id: str,
+    key: PrivateKey,
 ) -> PipelineResult:
     """Implements Alg. 1, lines 2-15 / Alg. 2, lines 7-20, for any payload builder.
 
     `chain` names the chain the items belong on. It must be `cluster`'s chain, so that a phase
     cannot write its payloads to the other chain by being handed the wrong cluster (CLAUDE.md §4).
+    `submitter_id`/`key` identify and sign as the submitting `CS_l` (DEV-20 item 5 / debt D4) —
+    must be one of `cluster.submitters`, or every replica rejects the request.
     """
     if cluster.chain_name != chain:
         raise PipelineError(f"refusing to write {chain} payloads to {cluster.chain_name}")
     transactions = [tx for item in items for tx in builder(item)]
     batches = batch(transactions, policy.transactions_per_block)
-    return commit(cluster, batches, timestamp=timestamp, wait_s=policy.wait_s)
+    return commit(
+        cluster,
+        batches,
+        timestamp=timestamp,
+        wait_s=policy.wait_s,
+        submitter_id=submitter_id,
+        key=key,
+    )
 
 
 def commit(
@@ -148,8 +160,10 @@ def commit(
     *,
     timestamp: float,
     wait_s: float,
+    submitter_id: str,
+    key: PrivateKey,
 ) -> PipelineResult:
-    """Submit each batch as one `ClientRequest` and wait until every one is committed.
+    """Submit each batch as one signed `ClientRequest` and wait until every one is committed.
 
     Implements Alg. 1, lines 4-15. The batches are submitted together. Which height each one
     lands at is consensus's decision, and the result reports it.
@@ -159,7 +173,10 @@ def commit(
     # never commit and the wait below would run to its deadline for nothing.
     if len({tuple(tx.digest for tx in b) for b in to_submit}) != len(to_submit):
         raise PipelineError("two batches hold identical transactions; pBFT would commit one")
-    request_ids = [cluster.submit(b, timestamp=timestamp) for b in to_submit]
+    request_ids = [
+        cluster.submit(b, timestamp=timestamp, submitter_id=submitter_id, key=key)
+        for b in to_submit
+    ]
     network = cluster.network
     deadline = network.now + wait_s
     tick = cluster.policy.message_delay_s or cluster.policy.view_change_timeout_s

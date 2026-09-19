@@ -45,7 +45,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from bsfr_sh.blockchain.chain import BC_SigRW, build_genesis  # noqa: E402
 from bsfr_sh.consensus.pbft import Cluster, PBFTPolicy  # noqa: E402
-from bsfr_sh.crypto.ecdsa import PrivateKey, keypair_from_secret  # noqa: E402
+from bsfr_sh.crypto.ecdsa import PrivateKey, PublicKey, keypair_from_secret  # noqa: E402
 from bsfr_sh.crypto.hashing import CONFIG_HASH_SCHEME, config_hash  # noqa: E402
 from bsfr_sh.detection.detector import Detection  # noqa: E402
 from bsfr_sh.framework import phase2_collection as phase2  # noqa: E402
@@ -79,14 +79,23 @@ def _git_rev() -> str:
     return result.stdout.strip()
 
 
-def _cluster(*, policy: PBFTPolicy, seed: int, id_prefix: str) -> Cluster:
+def _cluster(
+    *, policy: PBFTPolicy, seed: int, id_prefix: str, submitters: dict[str, PublicKey]
+) -> Cluster:
     """A fresh `BC_SigRW` cluster, keyed off `seed` so the run is reproducible (CLAUDE.md §4b)."""
     ids = tuple(f"{id_prefix}_{index}" for index in range(policy.replicas))
     keys: dict[str, PrivateKey] = {
         rid: keypair_from_secret(seed + index).private for index, rid in enumerate(ids)
     }
     genesis = build_genesis(owner_id=ids[0], private_key=keys[ids[0]], timestamp=0.0)
-    return Cluster(chain_name=BC_SigRW, keys=keys, genesis=genesis, policy=policy, seed=seed)
+    return Cluster(
+        chain_name=BC_SigRW,
+        keys=keys,
+        genesis=genesis,
+        policy=policy,
+        seed=seed,
+        submitters=submitters,
+    )
 
 
 def main() -> int:
@@ -111,8 +120,13 @@ def main() -> int:
         honeypot=Honeypot(honeypot_id="HP_phase3", seed=args.seed),
     )
     collector = CloudServer(identity="CS_phase3", keypair=keypair_from_secret(args.seed + 900_002))
-    train_cluster = _cluster(policy=pbft_policy, seed=args.seed, id_prefix="CS_train")
-    eval_cluster = _cluster(policy=pbft_policy, seed=args.seed + 1, id_prefix="CS_eval")
+    submitters = {collector.identity: collector.public_key}
+    train_cluster = _cluster(
+        policy=pbft_policy, seed=args.seed, id_prefix="CS_train", submitters=submitters
+    )
+    eval_cluster = _cluster(
+        policy=pbft_policy, seed=args.seed + 1, id_prefix="CS_eval", submitters=submitters
+    )
 
     started = time.perf_counter()
     train_report = phase2.run(
