@@ -239,7 +239,11 @@ existing baseline convention). Variance is reported and the repeat count follows
 
 - [x] Scyther model of the session protocol (DEV-14) — `verification/`, all claims verified,
       no code change needed (2026-09-18)
-- [ ] Adversarial evaluation: does the detector survive feature-space evasion?
+- [x] Adversarial evaluation: does the detector survive feature-space evasion? — `scripts/
+      run_adversarial_robustness.py`, top-5 RF features perturbed single/combined/adaptively
+      against the committed corpus; nuanced result (no top-5 subset collapses the ensemble, but a
+      median adaptive adversary needs only ~32% of the evasion range and 25% of malicious samples
+      evade with <=5% perturbation), report §Adversarial Robustness, `RESULTS.md` M7-3 (2026-09-22)
 - [x] Storage-cost analysis for on-chain backups (GAP-2) — `docs/STORAGE_ANALYSIS.md`, three
       scenarios, frequency lever, on-chain-hash alternative + ratio (2026-09-19)
 - [ ] Async pBFT with realistic network latency

@@ -720,6 +720,18 @@ parameters.
 not on this. It is what lets M4 run the framework's *own* data path at all, and per FLAW-2 both
 backends are reported side by side.
 
+**Amendment (M7-3, 2026-09-22): the two carriers are not bit-identical, and that is now measured,
+not assumed.** `write_corpus` formats every feature at six significant figures
+(`f"{value:.6g}"`); `BC_SigRW`'s `SignatureRecordPayload` carries full float64 precision. Fitting
+the same seed/config on the committed CSVs and scoring through the same `DetectionModule` ensemble
+gives **bal_acc=0.8408**, not `RESULTS.md`'s chain-path M4b entry of 0.8422 (delta 0.0014) —
+discovered when M7-3's exit test ("0% perturbation reproduces 0.8422 exactly") failed and was
+traced, not silently absorbed. Neither number is wrong; they are the same generator draw read at
+two different precisions, and this session's baseline is 0.8408 throughout. Any future experiment
+that must match 0.8422 bit-for-bit needs the chain path (`run_phase3_detection.py`), not the
+committed CSVs; (b)'s "committed corpus is the fixed dataset" still holds for everything that does
+not require matching that one specific figure.
+
 ### DEV-28 · FILL · `NProf`/`AProf` as fitted profiles, and the Phase 4 handoff (Alg. 3, M4b)
 **Paper:** Alg. 3 line 3 says `DM_CSl` builds `NProf` and `AProf`, "definitions of normal and
 abnormal files... via the four algorithms," and line 4 "detects" through them. Neither term is

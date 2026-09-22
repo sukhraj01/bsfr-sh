@@ -788,6 +788,133 @@ definition, Algorithms 2 and 3 connect into a working, non-degenerate detection 
 the strongest available rebuttal to a reading of FLAW-2 as ``the framework as designed cannot
 work'': it can. The paper simply never tried.
 
+\section{Adversarial Robustness of the Honeypot Detector}
+\label{sec:adversarial}
+
+\S\ref{sec:honeypot-eval}'s 0.8422/0.8408\footnote{This section trains and evaluates on
+\texttt{data/honeypot/corpus\_\{train,eval\}.csv} directly, per \S\ref{sec:honeypot}'s ``committed
+corpus is the fixed dataset'' convention. Read this way the same seed and configuration give
+0.8408, not 0.8422: \texttt{honeypot/corpus.py} formats every feature to six significant figures
+when it writes the CSV, and that rounding alone accounts for the 0.0014 difference from
+Table~\ref{tab:honeypot}'s chain-reconstructed, full-precision number. Both are measured; neither
+is wrong; every threshold below is relative to 0.8408.} balanced accuracy answers ``does the
+detector work.'' It does not answer ``does it keep working against an adversary who knows a
+behavioural sensor is watching.'' The paper's threat model is silent on this: Algorithm 3 assumes
+$FT_{RW}$ is simply observed, never that a rational attacker -- one motivated to avoid exactly the
+detection Algorithm 3 performs -- would adjust their program's observable behaviour to defeat it.
+This is not a gap we can hold against the paper alone: testing it requires a defined, differentiable
+feature pipeline, which is precisely what \S IV of the paper never provides (FLAW-2). Only having
+built $FT_{RW}$ ourselves (DEV-03, DEV-27) makes the question answerable at all.
+
+\begin{table}[t]
+\centering
+\caption{Top-5 features by Random Forest importance (individually, bal.\ acc.\ 0.8513 on the
+committed corpus -- the higher of the two importance-bearing models, Decision Tree scoring
+0.8063), with each feature's evasion direction and physical bound.}
+\label{tab:top5}
+\footnotesize
+\begin{tabular}{lccl}
+\hline
+\textbf{Feature} & \textbf{Importance} & \textbf{Direction} & \textbf{Bound} \\
+\hline
+observed\_stages & 0.126 & $\downarrow$ & 0 stages \\
+extension\_change\_rate & 0.109 & $\downarrow$ & 0 \\
+rename\_rate\_per\_s & 0.079 & $\downarrow$ & 0 s$^{-1}$ \\
+write\_entropy\_var & 0.074 & $\uparrow$ & 6.5494 \\
+crypto\_ngram\_novelty & 0.067 & $\downarrow$ & 0 \\
+\hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:top5}'s bounds are not arbitrary. Four features move toward 0 -- an attacker can
+always throttle: delay the kill chain so fewer of the four observable stages complete inside a
+honeypot's finite dwell time (\texttt{observed\_stages}), rename files less aggressively or not at
+all (\texttt{extension\_change\_rate}), slow the rename loop (\texttt{rename\_rate\_per\_s}), or
+mimic a common, previously-seen crypto-API call sequence instead of a distinctive one
+(\texttt{crypto\_ngram\_novelty}). The fifth, \texttt{write\_entropy\_var}, moves the other way:
+ransomware ciphertext is consistently near-maximal entropy (\emph{low} variance across blocks),
+while benign writes are heterogeneous, so an attacker raises variance by interleaving some
+deliberately low-entropy writes among the ciphertext. Its bound, 6.5494, is not an abstract limit
+but the highest \texttt{write\_entropy\_var} the generator's own benign profiles are ever observed
+to produce in the committed corpus -- an attacker cannot manufacture more heterogeneity than a
+real, non-malicious write pattern in this environment exhibits. No feature in the top-5 turned out
+structurally robust (unlike mean write entropy, which cannot fall below the entropy of properly
+encrypted data and is exactly the kind of feature that would resist this attack, but did not rank
+in the top 5).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig7a_single_feature_degradation.png}
+\caption{Each top-5 feature perturbed independently, 0--100\% of its evasion range, against the
+committed eval corpus's 353 malicious rows. Ensemble fit once; never retrained.}
+\label{fig:single-feature}
+\end{figure}
+
+\textbf{Single-feature evasion is weak.} Figure~\ref{fig:single-feature} shows every individual
+feature, pushed all the way to its bound, costing the detector at most 9 points of balanced
+accuracy (0.841 $\to$ 0.752 for \texttt{write\_entropy\_var}, the largest single-feature drop;
+\texttt{rename\_rate\_per\_s} alone costs under 3 points). None approaches 0.50. A one-dimensional
+attacker -- one who tunes a single observable behaviour and leaves everything else alone -- does
+not meaningfully dent this detector.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig7b_combined_evasion.png}
+\caption{All five features perturbed simultaneously (bold), against the five single-feature curves
+as context (light gray) on the same axes.}
+\label{fig:combined}
+\end{figure}
+
+\textbf{Combined evasion compounds, but does not collapse the detector.} Perturbing all five
+features together (Figure~\ref{fig:combined}) drops balanced accuracy from 0.841 to a floor
+around 0.57--0.60 by 60--100\% joint perturbation -- roughly triple any single feature's damage,
+confirming the features compound as a competent adversary would exploit. It never reaches the
+0.50 useless-detector line, though: the top-5 features carry only 45.5\% of Random Forest's total
+importance mass (0.126+0.109+0.079+0.074+0.067), so the remaining 17 features, entirely
+unperturbed here, still carry real discriminative signal even once the five most important ones
+are pushed to their physical limits. This is itself the finding -- exactly the outcome the session
+brief's own test criterion anticipated as a possibility (``the model uses features outside the
+top-5 enough to still discriminate''), and it is a mild point in the detector's favor: no small,
+named feature subset is a single point of failure.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig7c_adaptive_evasion_histogram.png}
+\caption{Per-sample minimum $L_\infty$ perturbation (top-5 features, each normalized to its own
+evasion range) that flips the ensemble's verdict, over all 353 positive eval rows.}
+\label{fig:adaptive}
+\end{figure}
+
+\textbf{Adaptive, per-sample evasion is a different picture.} An adversary who knows the model and
+optimizes per sample does much better than one perturbing blindly. Binary search per positive row
+over the $L_\infty$ ball (Figure~\ref{fig:adaptive}) finds: median minimum perturbation
+\textbf{0.321} (a typical ransomware sample needs about a third of the available evasion range to
+flip); 10th percentile \textbf{0.000} -- driven by the 61 of 353 positive rows (17.3\%) the
+detector already misses at 0\% perturbation (consistent with the measured 0.8408's own false-negative
+rate), plus a further 7.9\% needing under 5\% perturbation, so roughly a quarter of ransomware
+samples are trivially evadable by an adaptive attacker; 90th percentile \textbf{0.977} -- the
+hardest samples need nearly the entire evasion range. 28 of 353 positive rows (7.9\%) never flip
+even at the full $L_\infty$ ball. Checking those survivors against the sixth-through-tenth ranked
+features (never perturbed here) shows exactly what the session's own test criterion predicted:
+survivors average \texttt{c2\_beacon\_count} 10.3 against 7.0 for the malicious class as a whole,
+\texttt{entropy\_delta} 3.58 against 2.61, and similarly elevated \texttt{key\_generation\_events},
+\texttt{shadow\_copy\_deletions} and \texttt{dns\_entropy} -- these are the ransomware samples so
+extreme on features outside the top-5 that disguising only the top-5 cannot save them.
+
+\textbf{Conclusion: shape (c), the nuanced answer.} No single top-5 feature is fragile enough to
+break the detector alone, and no combination of exactly these five is either -- the ensemble's
+reliance on 17 further features is real and measured, not assumed. But a median-effort adaptive
+adversary needs only about a third of the physically plausible evasion range, and roughly a
+quarter of ransomware samples are evadable with under 5\% perturbation on features an attacker can
+freely throttle to zero. The paper's implicit assumption that $FT_{RW}$ is unconditionally robust
+is false for a meaningful minority of cases and approximately true for the rest, and this
+asymmetry -- some samples essentially free to evade, others requiring near-maximal effort -- is
+exactly the kind of result a single aggregate accuracy number cannot show. It is a direct
+consequence of FLAW-2 (\S\ref{sec:flaw2}): the paper's own evaluation, run on BitcoinHeist address
+features that no attacker can \emph{choose their own value of} at will, could never have surfaced
+this question, because it is a question about behavioural features an attacker actually controls.
+Only the framework path this project built makes it a question with a measured answer.
+
 \section{Conclusion}
 
 We built a complete, from-scratch implementation of BSFR-SH's five algorithms, both of its

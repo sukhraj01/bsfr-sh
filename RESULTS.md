@@ -352,3 +352,45 @@ lower bound in the literal sense stated at the time, just a far looser one than 
 compute" suggested. `docs/DEVIATIONS.md` DEV-30 amended accordingly; `docs/report/report.tex`
 never stated the 0.2-0.3% figure (checked — it has no D3/serialization mention at all), so there
 is no report number to correct here.
+
+## M7-3 — adversarial robustness of the honeypot detector (2026-09-22)
+
+`scripts/run_adversarial_robustness.py --seed 20260912`: fits `configs/ml.yaml`'s four models plus
+`NProf`/`AProf` once on the committed `data/honeypot/corpus_{train,eval}.csv` (never the chain
+path, per DEV-27's "committed corpus is the fixed dataset"; never retrained after), then perturbs
+the eval corpus's 353 malicious rows toward the top-5 Random-Forest-important features' physically
+plausible bounds. Full method, bounds table and figures: `docs/report/report.tex`
+§Adversarial Robustness (after §VI); sidecar `results/logs/20260922T155316Z-3ce801ca.json`.
+
+**0% perturbation reproduces 0.8408, not RESULTS.md's chain-path 0.8422 — a real, explained
+0.0014 gap, not a framework bug.** `honeypot/corpus.py`'s `write_corpus` formats every feature to
+6 significant figures (`f"{value:.6g}"`); the M4b entry above was read back through `BC_SigRW`'s
+full-precision `SignatureRecordPayload`, never through the CSV. Verified directly: loading the
+committed CSVs and scoring with zero perturbation code in the path already gives 0.8408. Every
+number below is relative to 0.8408.
+
+```
+2026-09-22 | detection/honeypot-adversarial | feature importances, random_forest (individual bal_acc=0.8513, beats decision_tree 0.8063) | top5: observed_stages=0.1259 extension_change_rate=0.1091 rename_rate_per_s=0.0792 write_entropy_var=0.0741 crypto_ngram_novelty=0.0670 | measured | 20260922T155316Z-3ce801ca | M7-3
+2026-09-22 | detection/honeypot-adversarial | ensemble baseline, committed corpus, 0% perturbation | bal_acc=0.8408 | measured | 20260922T155316Z-3ce801ca | M7-3, cf. M4b 0.8422 (chain-path float precision, see above)
+2026-09-22 | detection/honeypot-adversarial | single-feature evasion, 100% perturbation each | observed_stages=0.784 extension_change_rate=0.810 rename_rate_per_s=0.814 write_entropy_var=0.752 crypto_ngram_novelty=0.830 | measured | 20260922T155316Z-3ce801ca | none cross 0.50; largest single-feature drop write_entropy_var (-0.089)
+2026-09-22 | detection/honeypot-adversarial | combined evasion, top-5 simultaneous | frac=0.0:0.841 frac=0.5:0.635 frac=0.7:0.576 frac=1.0:0.570 | measured | 20260922T155316Z-3ce801ca | floor ~0.57-0.60, never reaches 0.50 — top-5 carry only 45.5% of RF importance
+2026-09-22 | detection/honeypot-adversarial | adaptive evasion, n=353 positive eval rows | p10=0.0000 median=0.3213 p90=0.9771 | measured | 20260922T155316Z-3ce801ca | 61/353 (17.3%) already miss at 0% perturbation; 28/353 (7.9%) never flip even at t=1.0
+```
+
+**Adaptive evasion is far more effective than blind perturbation, and unevenly so.** A quarter of
+malicious eval rows (25.2%) are evadable with ≤5% of the physically plausible perturbation range —
+17.3 points of that is baseline false negatives the detector already misses. The hardest 10% of
+samples need ≥97.7% of the range. The 28 rows that never flip (7.9%) are the eval set's most
+extreme on features ranked 6th-10th (`c2_beacon_count`, `entropy_delta`, `key_generation_events`,
+`shadow_copy_deletions`, `dns_entropy` — all never perturbed here): survivors average
+`c2_beacon_count` 10.3 vs. 7.0 for the malicious class overall, and similarly elevated on the
+other four — confirming they survive because they rely on unperturbed features, exactly the check
+the session's own exit test asked for.
+
+**Finding shape: (c), the nuanced answer** (per the session brief's own taxonomy). No single top-5
+feature, and no combination of exactly these five, collapses the detector to uselessness — the
+ensemble's real reliance on the other 17 features holds it above 0.57 even at 100% combined
+perturbation. But a median-effort *adaptive* adversary needs only ~32% of the evasion range, and a
+quarter of ransomware samples are trivially evadable. Figures:
+`results/figures/fig7{a,b,c}_{single_feature_degradation,combined_evasion,adaptive_evasion_histogram}.png`,
+each with a sidecar JSON alongside it.

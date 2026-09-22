@@ -1,0 +1,16 @@
+{
+  "config_hash": "c72fe37a143deffa0b60734fad3bb2599a05f651819f96c340eb669c9fe8b2b7",
+  "config_hash_scheme": 2,
+  "git_rev": "4d8ee91",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "purpose": "M7-3 Fig. 7(c) \u2014 per-sample minimum L-inf perturbation (top-5 features, each normalized to its own evasion range) that flips the ensemble's verdict from ransomware to benign, over every positive row in the committed eval corpus.",
+  "run_id": "20260922T155316Z-3ce801ca",
+  "seed": 20260912
+}
