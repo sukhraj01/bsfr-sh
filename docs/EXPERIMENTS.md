@@ -132,6 +132,17 @@ properties above are **not** reproduced as stated:
   than `BackupPayload`'s single bytes blob — not tuned to match, and the percentage does not
   match the paper's exactly, which is expected of a structural rather than fitted cause.
 
+**The 35-45% figure above is the serialization-OFF condition specifically — say which condition
+before citing it.** `RESULTS.md` `bench/target3-time-serialized`, run `20260922T172916Z-22992372`
+(`docs/DEVIATIONS.md` DEV-30's second amendment): re-running the same three-case, both-chain
+matrix with `configs/bench.yaml`'s now-current `network.serialize_messages: true` narrows the gap
+to ~25-27% (case 1 +25.76%, case 2 +24.60%, case 3 +27.36%) — real serialization cost, close to
+chain-independent in absolute seconds, dilutes but does not eliminate the ECDSA/encoding
+attribution above. Monotone increase and `BC_SigRW` > `BC_DTBU` both still hold; only the
+percentage is condition-dependent. Marginal cost stays flat under serialization too (DEV-08's
+second amendment) — `BC_DTBU` 0.0541-0.0543s/block, `BC_SigRW` 0.0678-0.0688s/block, each varying
+<1% across cases 1-3, same shape as serialization-OFF just uniformly ~50-65% higher.
+
 ---
 
 ## Target 4 — Fig. 6(c)/(d), transactions per second
@@ -160,6 +171,12 @@ span, `tps = tx / (blocks * marginal_cost)` has no `blocks` term left to rise ag
 hypothesis — the paper's rising TPS is amortisation, not a throughput property — is now backed by
 a measurement showing what TPS looks like *without* that amortisation, rather than by the
 arithmetic identity alone. See DEV-08's amendment.
+
+**Reconfirmed, serialization ON (2026-09-22).** Still flat, at a uniformly lower level:
+`BC_DTBU` ~1832-1848 tx/s, `BC_SigRW` ~1438-1476 tx/s (`RESULTS.md`
+`bench/target3-time-serialized`). No `blocks` term reappears — serialization's cost is per-message,
+not fixed-per-setup, so it lowers the flat line without un-flattening it. See DEV-08's second
+amendment.
 
 ---
 

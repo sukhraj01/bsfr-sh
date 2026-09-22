@@ -4,39 +4,38 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-22 · **Milestone:** M7 stretch items (3 of 4 done) · **Sessions completed:** 17
+**Last updated:** 2026-09-22 · **Milestone:** results reconfirmed under D3's honest condition; report recompile still blocked · **Sessions completed:** 18
 
 ---
 
 ## One-line status
 
-This session (M7-3) measured the honeypot detector's adversarial robustness: how far an attacker
-can perturb the top-5 Random-Forest-important features (within physically plausible, generator-
-grounded bounds) before balanced accuracy collapses to the 0.50 constant-positive baseline.
+This session re-verified every timing/detection number the report presents, now that D3 (prior
+session) showed consensus serialization adds real cost the original M6a numbers never paid.
 
-- **No single top-5 feature, and no combination of exactly these five, collapses the detector.**
-  Single-feature perturbation at 100% costs at most 9 points (0.841→0.752, `write_entropy_var`);
-  combined perturbation of all five drops to a floor of ~0.57-0.60 and never reaches 0.50, because
-  the top-5 features carry only 45.5% of Random Forest's importance mass — the ensemble's real
-  reliance on the other 17 features holds it up.
-- **A per-sample adaptive adversary does much better and unevenly so:** median minimum
-  perturbation to flip a positive sample is 32% of the evasion range; 25.2% of malicious eval rows
-  (including 17.3% already-false-negative at 0% perturbation) are evadable with ≤5%; the hardest
-  10% need ≥97.7%. 28/353 (7.9%) never flip — confirmed to rely on features ranked 6th-10th
-  (`c2_beacon_count`, `entropy_delta`, etc.), never perturbed.
-- **Found and traced, not absorbed, a real precision discrepancy**: the committed CSV corpus
-  (`data/honeypot/corpus_*.csv`, 6-significant-figure formatting) and the chain-reconstructed path
-  (`RESULTS.md` M4b, full float64) give 0.8408 vs. 0.8422 balanced accuracy for the *same*
-  seed/config — a 0.0014 gap from CSV rounding, not a bug. `docs/DEVIATIONS.md` DEV-27 amended;
-  this session's own baseline is 0.8408 throughout, stated explicitly everywhere it's used.
-- New `scripts/run_adversarial_robustness.py`, three figures (`results/figures/fig7{a,b,c}_*.png`
-  + sidecars), new `docs/report/report.tex` §Adversarial Robustness (after §VI, before
-  §Conclusion). **Not recompiled to PDF** — no LaTeX toolchain in this session's environment (see
-  Blockers). `RESULTS.md` §M7-3; full narrative in
-  `sessions/2026-09-22-01-m7-3-adversarial-robustness.md`.
+- **Re-ran the full M6a bench matrix with `configs/bench.yaml`'s `serialize_messages: true`**
+  (already the current default since D3 closed — no code change needed, just a run). Marginal
+  per-block cost stays flat (DEV-08 survives), confirming the amortisation-shape claim holds
+  regardless of serialization. **The BC_SigRW/BC_DTBU gap narrows from 35-45% (serialization off)
+  to ~25-27% (serialization on)** — a real, explained finding (both chains pay a near-identical
+  absolute serialization tax, which dilutes but doesn't reverse the structural ECDSA/encoding
+  attribution), not noise. `RESULTS.md` new section, `docs/DEVIATIONS.md` DEV-08/DEV-30 amended,
+  `docs/EXPERIMENTS.md` Targets 3-4 updated.
+- **Re-ran M4a (`make repro`, `make honest`) and M4b (`run_phase3_detection.py`) at their
+  published seeds — all byte-reproducible**, exactly matching existing `RESULTS.md` lines. One
+  near-miss caught and fixed: `make honest` overwrote `results/tables/table2_honest_mode.csv`'s
+  canonical Ada full-scale KNN row with the local-subsampled numbers; caught via `git status`
+  immediately and reverted with `git checkout --` before committing anything.
+- **`docs/report/report.tex` updated** (D3 footnote on both timing tables + new "Supplementary:
+  timing under honest, serialization-on conditions" subsection with its own table), **but not
+  recompiled** — `brew install --cask basictex` was retried (the task's suggested first move) and
+  got further than last session (cask resolved, download started) but stalled at ~55/110 MB on a
+  slow CTAN mirror at the ~23-minute mark and was stopped there, per the task's own 20-minute
+  installation cap. `report.pdf` is now stale across **two** sessions (missing both M7-3's
+  adversarial-robustness section and this session's supplementary material).
 
-`make test` (1348 passed, no `src/`/`tests/` changes this session) and `make lint` (ruff + mypy on
-`src`/`tests`, out of scope for this session's `scripts/`-only code) both green.
+`make test` (1348 passed) and `make lint` (ruff + mypy) both green — no `src/`/`tests/` changes
+this session.
 
 ---
 
@@ -45,53 +44,47 @@ grounded bounds) before balanced accuracy collapses to the 0.50 constant-positiv
 | Layer | State | Notes |
 |---|---|---|
 | Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session |
-| `docs/report/report.tex` | done, **needs recompile** | this session added §Adversarial Robustness; `report.pdf` is stale |
+| `docs/report/report.tex` | done, **needs recompile (2 sessions stale)** | M7-3's section + this session's D3 supplement both added, neither ever rendered |
 | `verification/` | done (M7-1) | unchanged |
 | `docs/STORAGE_ANALYSIS.md` | done (M7-2) | unchanged |
-| `scripts/run_adversarial_robustness.py` | done (M7-3) | self-contained, mirrors `run_phase3_detection.py`'s precedent (logic in `scripts/`, not `src/`) |
+| `scripts/run_adversarial_robustness.py` | done (M7-3) | unchanged |
+| Results reconfirmation (bench + detection, honest/serialization-on condition) | done | this session — see One-line status |
 
 ## Current numbers
 
-New this session: `RESULTS.md` §M7-3 (feature importances, single/combined/adaptive evasion
-thresholds — see One-line status above for the headline figures). Everything else unchanged since
-M6b/M7-2/debt-clearance.
+New this session: `RESULTS.md` "Bench reconfirmation — serialization ON" section (six
+`bench/target3-time-serialized` lines, run `20260922T172916Z-22992372`) and the "M4a/M4b —
+reconfirmed byte-reproducible" pointer block. Everything else unchanged since M7-3.
 
 ## Next task
 
-**One M7 stretch item remains, and it is optional** (`docs/ROADMAP.md` M7 — not required for the
-deliverable, which was already complete before M7):
+**Get a working LaTeX toolchain and compile `docs/report/report.pdf`.** This is now the clear,
+singular next action — nothing else is blocked on anything else. Specifics for whoever picks this
+up: `brew install --cask basictex` is the right cask (small, ~100-110 MB, not full `mactex`'s
+~4 GB) but the default CTAN mirror this environment resolved to
+(`mirrors.in3.sahilister.net`) was too slow twice now, once here at ~23 minutes/55 MB. Try a
+different network, a pinned faster mirror, or a pre-existing install. After installing:
+`cd docs/report && pdflatex report.tex` twice (cross-references), then check every table/figure
+renders — specifically the M7-3 figures and this session's new supplementary subsection — before
+committing `report.pdf`.
 
-1. Hybrid blockchain, which the paper lists as its own future work.
-
-Async pBFT with realistic network latency was dropped from the M7 list in the prior session (no
-longer has a debt-closure reason now that D3 is closed on its own merits).
-
-**If nobody picks up the hybrid-blockchain item next**, the highest-value next action is simply:
-**compile `docs/report/report.pdf`** from the current `report.tex` (see Blockers) and proofread
-the new §Adversarial Robustness section under real compilation — its LaTeX was only checked for
-balanced braces/environments programmatically, never rendered.
+**After that**, one optional M7 stretch item remains (`docs/ROADMAP.md` M7, not required for the
+deliverable): hybrid blockchain, the paper's own listed future work.
 
 ## Blockers
 
-**No LaTeX toolchain (`pdflatex`/`xelatex`/`latexmk`) is available in this session's sandboxed
-environment** — checked directly, none on `PATH`, no TeX distribution found under common install
-locations. `docs/report/report.tex` was edited but not recompiled; `report.pdf` on disk predates
-this session's new section. A prior session's `PROJECT_STATE.md` claimed the report "recompiles,"
-which may have been true in a different environment (e.g. a cloud agent) but could not be
-re-verified here. Whoever next has a working LaTeX install should compile and proofread the new
-section before treating it as final.
+**No LaTeX toolchain in this environment, twice confirmed.** See Next task above for the specific
+retry information (cask, mirror, time-to-stall). `docker`/`pdflatex`/`xelatex`/`latexmk` all
+absent from `PATH`.
 
-`data/raw/` is gitignored; a fresh clone needs `make data` (~56 minutes here) before any
-BitcoinHeist run — unchanged, not touched this session.
+`data/raw/` is present in this environment already (used this session for `make repro`/`make
+honest`); a genuinely fresh clone still needs `make data` (~56 minutes) first.
 
 ## Open questions
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
 | Q11 | Is the report's length sufficient, or expand toward 10-12 pages? | report sign-off | reviewer judgement |
-
-Q4 ("do we need real feature-space evasion for M7?") is **closed** this session — yes, and it was
-run; see One-line status.
 
 ## Carried debt
 
@@ -104,9 +97,10 @@ run; see One-line status.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 tested and ruled out address/split leakage; report states the gap as measured-but-unexplained |
-| `data/raw/` is gitignored and slow to fetch | a fresh machine cannot rerun M4a quickly | `make data` verifies counts; README + `provenance.json` state the wait and the sha256 |
+| `docs/report/report.pdf` is stale relative to `report.tex` (2 sessions now) | a reader of the PDF misses §Adversarial Robustness and the D3 supplement | this file states it plainly every session until compiled; do not treat `report.pdf` as current |
+| `make honest` (local) overwrites `table2_honest_mode.csv`'s canonical Ada full-scale KNN row with locally-subsampled numbers | a careless re-run silently downgrades the honest_mode table | now documented here; anyone running `make honest` locally must `git diff` that file afterward and revert if it changed, or regenerate the Ada row |
 | Scyther binary not committed (third-party, single-platform) | a fresh clone can't re-run the verification without a manual download | exact release URL + sha256 in `verification/README.md`; the raw output is committed, so the claims don't depend on re-running it |
-| `docs/report/report.pdf` is stale relative to `report.tex` | a reader of the PDF misses §Adversarial Robustness | this file states it plainly; next session with LaTeX should recompile before anything else touches the report |
+| The BC_SigRW/BC_DTBU timing gap is condition-dependent (35-45% off, ~25-27% on) | a reader citing "the gap" without saying which condition is wrong half the time | both figures now in `RESULTS.md`/`docs/EXPERIMENTS.md`/the report supplement, each labelled with its condition |
 
 ---
 

@@ -224,6 +224,19 @@ for the same conclusion, this time a measurement rather than an identity. See
 `docs/EXPERIMENTS.md` Target 3/4 for the full numbers and `bench/harness.py`'s module docstring
 for what is `measured` here versus `computed`.
 
+**Amendment (2026-09-22): reconfirmed under the honest, serialization-ON condition — survives
+unchanged.** D3's closure (DEV-30) found consensus message serialization adds +48-68% at case-3;
+before presenting any M6a number again, the full three-case, both-chain matrix was re-run with
+`configs/bench.yaml`'s now-current `network.serialize_messages: true`
+(`RESULTS.md` `bench/target3-time-serialized`, run `20260922T172916Z-22992372`). Marginal per-block
+cost stays flat under serialization too: `BC_DTBU` 0.0541-0.0543 s/block, `BC_SigRW`
+0.0678-0.0688 s/block, case-1 through case-3 — each chain's own cost varies by under 1% across
+cases, same as the serialization-OFF reading, just uniformly ~60-65%/~50% higher. TPS is
+correspondingly flat-but-lower (`BC_DTBU` ~1832-1848 tx/s, `BC_SigRW` ~1438-1476 tx/s) rather than
+rising. Serialization is a per-message cost, not a per-block-count-dependent one, so it does not
+reintroduce the fixed-cost-amortisation shape this entry already ruled out — the flat-marginal-cost
+finding is condition-independent, not an artefact of measuring with serialization off.
+
 ### DEV-09 · POLICY · Case-3 ransom payment is simulated only
 **Paper:** Alg. 4 line 7 automates paying the adversary and retrieving `K_d` when
 `RW_amt < DT-SYS_i-amt`.
@@ -851,6 +864,37 @@ increase, `BC_SigRW` slower than `BC_DTBU`), and `configs/chain.yaml`'s test-pat
 `serialize_messages: false` so no existing measured number in `RESULTS.md` is invalidated by this
 — only bench runs from now on pay it, and only when they choose to. `docs/report/report.tex` was
 checked and never stated the earlier 0.2-0.3% figure, so there is no report number to correct.
+
+**Amendment (2026-09-22): full matrix confirms the magnitude, and finds a second effect the
+case-3-only measurement above could not see.** The closure amendment above measured one case
+(case-3, n=25). This session re-ran all three cases, both chains, at the now-current
+`configs/bench.yaml` default (`RESULTS.md` `bench/target3-time-serialized`, run
+`20260922T172916Z-22992372`, n=5 — a different repeat count than the case-3 closure run, decided
+from a quieter variance reading; same adaptive logic, see that RESULTS.md section). **Magnitude
+confirmed across all three cases**, not just case-3: `BC_DTBU` +60.85%/+59.34%/+70.96%, `BC_SigRW`
++49.40%/+47.59%/+50.83% (cases 1/2/3) — consistent with, and this run's own case-3 reading close
+to, the closure's +67.6%/+48.8%.
+
+**New finding this full matrix surfaces that the case-3-only measurement could not: the
+`BC_SigRW`/`BC_DTBU` gap narrows under serialization, from the serialization-OFF 35-45%
+(`docs/EXPERIMENTS.md` Target 3) to ~25-27%.** Both chains' D3 encode-only cost is nearly identical
+in absolute terms (`BC_DTBU` 0.000072s/block, `BC_SigRW` 0.000073s/block at case-3 — see this
+run's own `d3` sidecar section), so the real bus's fuller encode+decode-per-`send()` cost is
+plausibly close to chain-independent in absolute seconds too. Because that roughly-fixed tax is
+added to `BC_DTBU`'s smaller base, it inflates `BC_DTBU`'s own time by a larger *percentage*
+(≈60-71%) than it inflates the *gap* between the chains, which is why the gap narrows in relative
+terms even though it does not narrow (and slightly grows) in absolute seconds. This does not
+overturn the structural ECDSA/payload-encoding attribution for the gap — that attribution was
+always specifically about the serialization-OFF condition, and the serialization-OFF 35-45% number
+is unchanged — but it means "the `BC_SigRW`/`BC_DTBU` gap" is no longer a single number once both
+conditions are on record, and any future citation of it must say which condition it is under.
+`docs/EXPERIMENTS.md` Target 3 amended with this finding alongside the existing 35-45% one.
+
+**Impact on reproduction:** still none on the trend/ratio target (DEV-13) — monotone increase and
+`BC_SigRW` > `BC_DTBU` both hold under either condition; only the size of the `BC_SigRW`/`BC_DTBU`
+gap is condition-dependent, and that gap was never itself a claim the paper's own Target 3
+properties list makes (§EXPERIMENTS.md's three reproduced/not-reproduced properties are monotone
+increase, sub-linearity, and the qualitative "SigRW slower than DTBU" — not a specific percentage).
 
 ### DEV-31 · ADD · `honest_mode`'s memory ceiling is a parameter, not a constant, and KNN degrades instead of vanishing (M6b)
 **Problem:** `detection.models.fits_in_memory()` (M4a) hard-coded an 8 GB ceiling — the dev box.

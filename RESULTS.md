@@ -353,6 +353,90 @@ compute" suggested. `docs/DEVIATIONS.md` DEV-30 amended accordingly; `docs/repor
 never stated the 0.2-0.3% figure (checked — it has no D3/serialization mention at all), so there
 is no report number to correct here.
 
+## Bench reconfirmation — serialization ON, honest conditions (2026-09-22)
+
+D3's closure (above) measured +48-68% at case-3 only, one-off, n=25. Every timing number the
+report presents (Table V/VI, Fig. 1's Figs. 6(a)-(d)) was measured *before* `configs/bench.yaml`
+gained `network.serialize_messages: true` and is therefore serialization-OFF. This section re-runs
+the **full** M6a matrix — all three cases, both chains — under the now-current, serialization-ON
+config, so every published timing claim has an honest-condition counterpart on record before
+anything is presented or built on further.
+
+`scripts/run_bench.py --seed 20260917 --no-figures` (same seed, same `decide_repeat_count` logic
+as the M6a run below; `--no-figures` so this run's numbers do not silently overwrite the existing
+serialization-OFF Figs. 6(a)-(d)/`target3_target4.csv` — those stay as the record of what they
+were measured under). The variance probe read CV ≈1.3% on both chains this time (quiet machine),
+so `decide_repeat_count` kept the floor of 5 repeats rather than M6a's 25 — the same *logic*, a
+different repeat count decided from a different variance reading, exactly as already happened once
+between M6a's own two back-to-back runs (see that section above). `trend_resolvable` is `True` on
+both chains at this repeat count.
+
+```
+2026-09-22 | bench/target3-time-serialized | BC_DTBU case_1 5blk x 100tx, n=5 | seconds=0.27057 stdev=0.00048 tps=1848.0 | measured | 20260922T172916Z-22992372 | serialize_messages=true; cf. no-serialization 0.16822s (+60.85%)
+2026-09-22 | bench/target3-time-serialized | BC_SigRW case_1 5blk x 100tx, n=5 | seconds=0.34024 stdev=0.00079 tps=1469.5 | measured | 20260922T172916Z-22992372 | serialize_messages=true; cf. no-serialization 0.22774s (+49.40%)
+2026-09-22 | bench/target3-time-serialized | BC_DTBU case_2 10blk x 100tx, n=5 | seconds=0.54373 stdev=0.01001 tps=1839.1 | measured | 20260922T172916Z-22992372 | serialize_messages=true; cf. no-serialization 0.34124s (+59.34%)
+2026-09-22 | bench/target3-time-serialized | BC_SigRW case_2 10blk x 100tx, n=5 | seconds=0.67746 stdev=0.00482 tps=1476.1 | measured | 20260922T172916Z-22992372 | serialize_messages=true; cf. no-serialization 0.45902s (+47.59%)
+2026-09-22 | bench/target3-time-serialized | BC_DTBU case_3 15blk x 100tx, n=5 | seconds=0.81886 stdev=0.02551 tps=1831.8 | measured | 20260922T172916Z-22992372 | serialize_messages=true; cf. no-serialization 0.47895s (+70.96%), cf. D3's own case-3-only n=25 reading +67.6%
+2026-09-22 | bench/target3-time-serialized | BC_SigRW case_3 15blk x 100tx, n=5 | seconds=1.04285 stdev=0.03659 tps=1438.4 | measured | 20260922T172916Z-22992372 | serialize_messages=true; cf. no-serialization 0.69141s (+50.83%), cf. D3's own case-3-only n=25 reading +48.8%
+2026-09-22 | bench/variance-case3-serialized | BC_DTBU n=12 | mean=0.80267 stdev=0.01071 cv=0.0133 | measured | 20260922T172916Z-22992372 | quiet-machine reading; repeats stayed at floor (5)
+2026-09-22 | bench/variance-case3-serialized | BC_SigRW n=12 | mean=1.02225 stdev=0.01316 cv=0.0129 | measured | 20260922T172916Z-22992372 | quiet-machine reading; repeats stayed at floor (5)
+```
+
+**Marginal per-block cost, serialize ON** (mean seconds/block over the full case, not just the
+first 3): `BC_DTBU` 0.05409 / 0.05426 / 0.05429 (case 1/2/3); `BC_SigRW` 0.06797 / 0.06777 / 0.06878.
+Compare to the serialization-OFF marginal costs already in `RESULTS.md`/`docs/report/report.tex`
+Table VI: `BC_DTBU` 0.0335/0.0334/0.0316; `BC_SigRW` 0.0455/0.0450/0.0450.
+
+**a) Does marginal cost stay flat? Yes — DEV-08 survives.** Both chains' marginal cost varies by
+<1% across cases 1-3 under serialization, same as without it — just uniformly ~60-65% (`BC_DTBU`)
+/ ~50% (`BC_SigRW`) higher in absolute terms. Serialization adds a per-message tax, not a
+per-block-count-dependent one, so it does not reintroduce the amortisation shape DEV-08 already
+ruled out.
+
+**b) Does the BC_SigRW/BC_DTBU gap stay at 35-45%? No — it narrows to ~25-27%, and this is a real
+finding, not noise.** Recomputed per case from the table above: case 1 +25.76%, case 2 +24.60%,
+case 3 +27.36% (marginal-cost basis: +25.66%/+24.90%/+26.69%, consistent). The *absolute*-seconds
+gap between the two chains still grows slightly under serialization (case 3: 0.212s → 0.224s), but
+`BC_DTBU`'s own base grew proportionally more (+71% on a smaller starting number) than the
+absolute gap did, so the *percentage* gap shrinks. Reading: serialization's per-message encode/
+decode cost is close to constant across the two chains in absolute terms (`BC_SigRW`'s own D3
+estimate above is barely larger than `BC_DTBU`'s: 0.000073s vs 0.000072s per block, encode-only),
+so it dilutes — without eliminating — ECDSA/payload-encoding's share of the gap rather than adding
+to it proportionally. **The structural ECDSA/payload-encoding attribution is not wrong** (it is
+still the isolated, measured cause of the serialization-OFF 35-45% gap, and that number is
+unchanged and still correctly reported wherever it is quoted) **but is no longer the whole picture
+once serialization is counted**, and any future claim about "the gap" must say which condition it
+is under. `docs/EXPERIMENTS.md` Target 3 and `docs/DEVIATIONS.md` DEV-30 amended with this finding.
+
+**c) Do the trends still hold? Yes, on every axis checked**: monotone increasing (both chains,
+both conditions), `trend_resolvable=True` at the decided repeat count, `BC_SigRW` slower than
+`BC_DTBU` (narrower gap, but never inverts or approaches parity), and TPS is flat rather than
+rising (`BC_DTBU` ~1832-1848 tx/s, `BC_SigRW` ~1438-1476 tx/s across cases — lower than the
+serialization-OFF ~2930-3190/~2170-2230 tx/s, and still flat).
+
+Full sidecar: `results/logs/20260922T172916Z-22992372.json` (includes the Q2 payload-sweep and D3
+encode-estimate re-measurements too, consistent with their prior values within run-to-run noise;
+not reproduced in full here since neither is what this reconfirmation was checking).
+
+### M4a/M4b — reconfirmed byte-reproducible, same seeds (2026-09-22)
+
+Not exposed to D3 (no consensus traffic in the detection pipeline's ML path), but presented
+alongside the bench numbers above, so verified rather than assumed per this session's brief.
+`make repro` (`20260922T173217Z-69eb48f0`), `make honest` (`20260922T173229Z-87832d2b`) and
+`scripts/run_phase3_detection.py --seed 20260912` (`20260922T173724Z-b99c8896`) were all re-run:
+every number — `paper_mode`'s four models + baseline, `honest_mode`'s four models + baseline (KNN
+locally subsampled to 780,336 rows, matching run `20260917T175754Z-f3b9e363`, not the Ada
+full-scale run this table cites — Ada was not re-run this session, out of scope), and M4b's
+ensemble `bal_acc=0.8422 prec=0.8439 rec=0.8272 mcc=0.6849 pr_auc=0.9100` — matched its existing
+`RESULTS.md` line exactly, to the precision both report. No new numeric lines added here since
+nothing differs from what is already published; the run_ids above are the provenance for this
+session's "confirmed, not assumed" check. One incidental correction made while checking:
+`make honest`'s run overwrote `results/tables/table2_honest_mode.csv` with the local
+KNN-subsampled numbers, clobbering the canonical Ada full-scale row recorded in the same table
+(git showed the diff immediately); restored via `git checkout -- results/tables/table2_honest_mode.csv`
+before anything else touched it. `make honest` should not be re-run casually without regenerating
+the Ada row afterward — noted in `PROJECT_STATE.md`.
+
 ## M7-3 — adversarial robustness of the honeypot detector (2026-09-22)
 
 `scripts/run_adversarial_robustness.py --seed 20260912`: fits `configs/ml.yaml`'s four models plus

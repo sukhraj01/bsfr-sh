@@ -496,7 +496,10 @@ consensus benchmark.
 
 \begin{table}[t]
 \centering
-\caption{Target 3/4: measured vs.\ published time and derived TPS, both chains, all three cases.}
+\caption{Target 3/4: measured vs.\ published time and derived TPS, both chains, all three
+cases.\footnote{All timing measurements in this table exclude consensus message serialization;
+measured serialization overhead is +48--68\% (D3). Tables with serialization included are in the
+supplementary material (\S\ref{sec:d3-supplement}).}}
 \label{tab:timing}
 \footnotesize
 \begin{tabular}{lccc}
@@ -522,7 +525,10 @@ measurement, and not a claim we contest. The comparison we make is trend and rat
 \centering
 \caption{Mean measured per-block marginal cost by case (three samples per cell, seconds), the
 direct evidence for DEV-08. If the paper's amortisation account were absent from our own harness
-by construction, marginal cost would fall from case 1 to case 3; instead it is flat.}
+by construction, marginal cost would fall from case 1 to case 3; instead it is
+flat.\footnote{All timing measurements in this table exclude consensus message serialization;
+measured serialization overhead is +48--68\% (D3). Tables with serialization included are in the
+supplementary material (\S\ref{sec:d3-supplement}).}}
 \label{tab:marginal}
 \footnotesize
 \begin{tabular}{lccc}
@@ -566,6 +572,57 @@ $BC_{SigRW}$ is consistently slower than $BC_{DTBU}$, by 35--44\% across the thr
 signature per transaction -- the honeypot pipeline's \texttt{attestation}
 (\S\ref{sec:honeypot}) -- plus a many-small-floats payload encoding that costs more per byte to
 canonicalise than the backup chain's single opaque byte blob.
+
+\subsection{Supplementary: timing under honest, serialization-on conditions}
+\label{sec:d3-supplement}
+
+Tables~\ref{tab:timing} and~\ref{tab:marginal} measure consensus with message serialization off --
+the M6a run's original configuration. D3 (\texttt{docs/DEVIATIONS.md} DEV-30) found that turning
+consensus message serialization on --
+every \texttt{Proposal}/\texttt{Prepare}/\texttt{Commit} paying a real encode/decode round-trip,
+not the in-memory Python objects the unserialized bus passes -- adds +48--68\% at case-3. Before
+presenting the tables above, or building anything further on them, we re-ran the full three-case,
+both-chain matrix with serialization on, at the same seed and the same adaptive repeat-count
+protocol Table~\ref{tab:timing} uses.
+
+\begin{table}[t]
+\centering
+\caption{Target 3/4, serialization ON (\texttt{configs/bench.yaml}
+\texttt{network.serialize\_messages: true}), same seed and protocol as Table~\ref{tab:timing}.
+$\Delta$ is the increase over the serialization-off measurement in that table.}
+\label{tab:timing-serialized}
+\footnotesize
+\begin{tabular}{lccc}
+\hline
+\textbf{Case / chain} & \textbf{Time (serialized)} & \textbf{$\Delta$ vs.\ Table~\ref{tab:timing}} & \textbf{TPS} \\
+\hline
+Case 1, $BC_{DTBU}$  & 0.271\,s & +60.9\% & 1848 \\
+Case 1, $BC_{SigRW}$ & 0.340\,s & +49.4\% & 1470 \\
+Case 2, $BC_{DTBU}$  & 0.544\,s & +59.3\% & 1839 \\
+Case 2, $BC_{SigRW}$ & 0.677\,s & +47.6\% & 1476 \\
+Case 3, $BC_{DTBU}$  & 0.819\,s & +71.0\% & 1832 \\
+Case 3, $BC_{SigRW}$ & 1.043\,s & +50.8\% & 1438 \\
+\hline
+\end{tabular}
+\end{table}
+
+Three questions this answers. \textbf{Does marginal cost stay flat?} Yes -- DEV-08 survives
+unchanged: $BC_{DTBU}$ 0.0541--0.0543\,s/block and $BC_{SigRW}$ 0.0678--0.0688\,s/block across
+cases 1--3, each varying under 1\%, same shape as serialization-off, just uniformly higher.
+Serialization is a per-message cost, not a per-block-count-dependent one, so it cannot
+reintroduce the fixed-cost-amortisation shape DEV-08 already ruled out. \textbf{Does the
+$BC_{SigRW}$/$BC_{DTBU}$ gap stay at 35--45\%?} No -- it narrows to $\sim$25--27\% (case 1
++25.8\%, case 2 +24.6\%, case 3 +27.4\%). Both chains' D3 encode cost is nearly identical in
+absolute terms (0.000072\,s vs.\ 0.000073\,s per block at case 3), so the real bus's fuller
+encode+decode cost is plausibly close to chain-independent in absolute seconds; added to
+$BC_{DTBU}$'s smaller base, it inflates $BC_{DTBU}$'s own time by a larger percentage than it
+inflates the gap, which is why the percentage gap shrinks even as the absolute-seconds gap
+grows slightly. This does not overturn the structural ECDSA/encoding attribution above -- that
+attribution is specifically about the serialization-off condition, and the serialization-off
+35--45\% figure is unchanged -- but any future citation of ``the gap'' must now say which
+condition it is under. \textbf{Do the trends still hold?} Yes, on every axis checked: monotone
+increase, $BC_{SigRW}$ slower than $BC_{DTBU}$ (narrower, never inverting), and TPS flat rather
+than rising, just at a uniformly lower level than Table~\ref{tab:timing}.
 
 \section{Critique}
 \label{sec:critique}
