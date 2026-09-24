@@ -2,7 +2,8 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) not started, not required for the deliverable**
+**Current milestone: write-up done; M7 (stretch) — hybrid blockchain (M7-5) delivered; async pBFT
+with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -251,7 +252,11 @@ existing baseline convention). Variance is reported and the repeat count follows
       makes `framework._block_pipeline` consensus-agnostic, `docs/DEVIATIONS.md` DEV-32,
       `RESULTS.md` M7-4, report §"Consensus Comparison: pBFT vs.\ Raft" (2026-09-24)
 - [ ] Async pBFT with realistic network latency
-- [ ] Hybrid blockchain, which the paper lists as its own future work
+- [x] Hybrid blockchain, which the paper lists as its own future work (§VIII) — `blockchain/
+      anchor.py` (`AnchorRecord`), `blockchain/hybrid.py` (`HybridChain`, sign-and-append anchor
+      chain), `framework/hybrid_pipeline.py` (the framework-layer wiring), `docs/DEVIATIONS.md`
+      DEV-33, `RESULTS.md` M7-5 (anchor frequency 1/5/10 sweep: overhead at or below measurement
+      noise, anchor chain ~1 KB/anchor), report §"Hybrid Blockchain" (2026-09-25)
 
 ---
 

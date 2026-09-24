@@ -120,6 +120,30 @@ target and no validation rule. Nothing should ever loop over it looking for lead
 **Timestamps** are non-decreasing within a tolerance, not strictly monotonic, and the tolerance is
 the same configured value `crypto.session` uses — see DEV-17.
 
+### `anchor.py` + `hybrid.py` (M7-5, DEV-33) — the public anchor chain
+
+`AnchorRecord` (`anchor.py`, frozen, signature-verified at construction like `Block`):
+`anchored_chain`, `block_height`, `block_hash` (`HC_βj`, copied verbatim), `merkle_root` (`MTR`,
+copied verbatim), `timestamp`, `creator_id`, `creator_pubkey`, `signature`. Never encrypted —
+`transaction.wrap_anchor_record` carries it as plaintext, a third transaction kind alongside the
+paper's two `E_KU_CSl(Tx)` payloads, because a public record that needed a key to read would
+defeat its own purpose.
+
+`HybridChain` (`hybrid.py`) owns one anchor `Chain` and schedules `AnchorRecord`s onto it with
+`sync()`/`flush()`, answering `verify_anchor`/`verify_range`/`verify_anchor_chain_integrity`. It
+imports nothing from `consensus` or `framework` — every method that needs the private chain's
+current state takes an already-trusted `Chain` as a parameter rather than owning a reference to
+one, because establishing that trust (quorum agreement across a multi-replica cluster) is a
+`consensus.interface.ConsensusCluster` question that belongs one layer up. `framework/
+hybrid_pipeline.py` is that layer: it calls the existing, unmodified `framework._block_pipeline`
+first, then reads the now-trusted chain and hands it to `HybridChain`. `phase1_backup.py`/
+`phase2_collection.py` are untouched by this — hybrid mode is opt-in at the cluster-construction
+call site, never inside either phase.
+
+See `docs/DEVIATIONS.md` DEV-33 for why the anchor chain's "own consensus" is direct
+`Chain.append()` by a single signing authority rather than a pBFT instance, and what that decision
+cost the first draft (a real `test_module_boundaries.py` failure, not a hypothetical one).
+
 ---
 
 ## `consensus/`
@@ -368,6 +392,7 @@ Participants and phase orchestration. Depends on everything below it; nothing de
 | `phase1_backup.py` | Alg. 1: collect over `SK`, attest (DEV-23), chunk (DEV-24), encrypt, pipeline |
 | `phase4_mitigation.py` (M5) | Alg. 4: isolate, remediate, dispatch to `mitigation.cases`; binds Case-2's restore to `phase5_recovery.run` |
 | `phase5_recovery.py` | Alg. 5: request, identify, begin, decrypt at `CS'_l`, two hops, `SYS_i` verifies |
+| `hybrid_pipeline.py` (M7-5, DEV-33) | The only module that imports both `blockchain.hybrid` and `consensus`: calls `_block_pipeline.run` unmodified, then hands the trusted chain to `HybridChain.sync`/`flush`. See `blockchain/`'s §anchor.py + hybrid.py above |
 
 **Where a boundary bit.** `recovery/` implements Alg. 5's hops between entities that live in
 `framework/`, and may not import it. So `recovery` takes a decryption callable (`Decryptor`) and

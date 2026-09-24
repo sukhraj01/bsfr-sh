@@ -1,0 +1,207 @@
+{
+  "config_hash": "f51a419988b9b0c801727d7f49391650644ae1a202fe8c3b7fc8efeb67df5e27",
+  "config_hash_scheme": 2,
+  "frequencies": [
+    1,
+    5,
+    10
+  ],
+  "git_rev": "9a2d148",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260925",
+    "system": "Darwin 24.6.0"
+  },
+  "matrix": {
+    "case_1/BC_DTBU/f1": {
+      "anchor_bytes_per_anchor": 1005.8,
+      "anchor_chain_bytes": 5029,
+      "anchor_count": 5,
+      "anchor_seconds": 0.0023864999529905617,
+      "blocks": 5,
+      "hybrid_total_seconds": 0.27286808501230553,
+      "overhead_pct": -0.365790841063105,
+      "private_only_seconds": 0.2738698759349063
+    },
+    "case_1/BC_DTBU/f10": {
+      "anchor_bytes_per_anchor": 1004.0,
+      "anchor_chain_bytes": 1004,
+      "anchor_count": 1,
+      "anchor_seconds": 0.00048274995060637593,
+      "blocks": 5,
+      "hybrid_total_seconds": 0.2741898759850301,
+      "overhead_pct": 0.11684382922050139,
+      "private_only_seconds": 0.2738698759349063
+    },
+    "case_1/BC_DTBU/f5": {
+      "anchor_bytes_per_anchor": 1004.0,
+      "anchor_chain_bytes": 1004,
+      "anchor_count": 1,
+      "anchor_seconds": 0.00048212503315880895,
+      "blocks": 5,
+      "hybrid_total_seconds": 0.27372283407021314,
+      "overhead_pct": -0.05369041198533055,
+      "private_only_seconds": 0.2738698759349063
+    },
+    "case_1/BC_SigRW/f1": {
+      "anchor_bytes_per_anchor": 1007.0,
+      "anchor_chain_bytes": 5035,
+      "anchor_count": 5,
+      "anchor_seconds": 0.002353207964915782,
+      "blocks": 5,
+      "hybrid_total_seconds": 0.33887295896420255,
+      "overhead_pct": -0.2514027092858972,
+      "private_only_seconds": 0.33972704195184633
+    },
+    "case_1/BC_SigRW/f10": {
+      "anchor_bytes_per_anchor": 1005.0,
+      "anchor_chain_bytes": 1005,
+      "anchor_count": 1,
+      "anchor_seconds": 0.0004838330205529928,
+      "blocks": 5,
+      "hybrid_total_seconds": 0.3390721660107374,
+      "overhead_pct": -0.19276532634741977,
+      "private_only_seconds": 0.33972704195184633
+    },
+    "case_1/BC_SigRW/f5": {
+      "anchor_bytes_per_anchor": 1006.0,
+      "anchor_chain_bytes": 1006,
+      "anchor_count": 1,
+      "anchor_seconds": 0.0004863340291194618,
+      "blocks": 5,
+      "hybrid_total_seconds": 0.33673400001134723,
+      "overhead_pct": -0.8810137465958149,
+      "private_only_seconds": 0.33972704195184633
+    },
+    "case_2/BC_DTBU/f1": {
+      "anchor_bytes_per_anchor": 1006.0,
+      "anchor_chain_bytes": 10060,
+      "anchor_count": 10,
+      "anchor_seconds": 0.004683625011239201,
+      "blocks": 10,
+      "hybrid_total_seconds": 0.54370624787407,
+      "overhead_pct": -0.112473148933606,
+      "private_only_seconds": 0.5443184599862434
+    },
+    "case_2/BC_DTBU/f10": {
+      "anchor_bytes_per_anchor": 1009.0,
+      "anchor_chain_bytes": 1009,
+      "anchor_count": 1,
+      "anchor_seconds": 0.0004848749958910048,
+      "blocks": 10,
+      "hybrid_total_seconds": 0.54137420700863,
+      "overhead_pct": -0.5409063248907211,
+      "private_only_seconds": 0.5443184599862434
+    },
+    "case_2/BC_DTBU/f5": {
+      "anchor_bytes_per_anchor": 1006.5,
+      "anchor_chain_bytes": 2013,
+      "anchor_count": 2,
+      "anchor_seconds": 0.000965333019848913,
+      "blocks": 10,
+      "hybrid_total_seconds": 0.5432935419958085,
+      "overhead_pct": -0.18829381433450146,
+      "private_only_seconds": 0.5443184599862434
+    },
+    "case_2/BC_SigRW/f1": {
+      "anchor_bytes_per_anchor": 1007.7,
+      "anchor_chain_bytes": 10077,
+      "anchor_count": 10,
+      "anchor_seconds": 0.00467279099393636,
+      "blocks": 10,
+      "hybrid_total_seconds": 0.6808690829784609,
+      "overhead_pct": 0.14392037100450014,
+      "private_only_seconds": 0.6798905819305219
+    },
+    "case_2/BC_SigRW/f10": {
+      "anchor_bytes_per_anchor": 1009.0,
+      "anchor_chain_bytes": 1009,
+      "anchor_count": 1,
+      "anchor_seconds": 0.0004871669807471335,
+      "blocks": 10,
+      "hybrid_total_seconds": 0.7436029589152895,
+      "overhead_pct": 9.370975077174755,
+      "private_only_seconds": 0.6798905819305219
+    },
+    "case_2/BC_SigRW/f5": {
+      "anchor_bytes_per_anchor": 1010.5,
+      "anchor_chain_bytes": 2021,
+      "anchor_count": 2,
+      "anchor_seconds": 0.0009444590541534126,
+      "blocks": 10,
+      "hybrid_total_seconds": 0.6719345810124651,
+      "overhead_pct": -1.1701884287712991,
+      "private_only_seconds": 0.6798905819305219
+    },
+    "case_3/BC_DTBU/f1": {
+      "anchor_bytes_per_anchor": 1007.0,
+      "anchor_chain_bytes": 15105,
+      "anchor_count": 15,
+      "anchor_seconds": 0.00702091702260077,
+      "blocks": 15,
+      "hybrid_total_seconds": 0.8181057071196847,
+      "overhead_pct": 0.2974463826944357,
+      "private_only_seconds": 0.8156794979586266
+    },
+    "case_3/BC_DTBU/f10": {
+      "anchor_bytes_per_anchor": 1008.0,
+      "anchor_chain_bytes": 2016,
+      "anchor_count": 2,
+      "anchor_seconds": 0.0009808329632505774,
+      "blocks": 15,
+      "hybrid_total_seconds": 0.8651176249841228,
+      "overhead_pct": 6.060974579994144,
+      "private_only_seconds": 0.8156794979586266
+    },
+    "case_3/BC_DTBU/f5": {
+      "anchor_bytes_per_anchor": 1006.0,
+      "anchor_chain_bytes": 3018,
+      "anchor_count": 3,
+      "anchor_seconds": 0.0014403339591808617,
+      "blocks": 15,
+      "hybrid_total_seconds": 0.9139812920475379,
+      "overhead_pct": 12.05152199300434,
+      "private_only_seconds": 0.8156794979586266
+    },
+    "case_3/BC_SigRW/f1": {
+      "anchor_bytes_per_anchor": 1008.7333333333333,
+      "anchor_chain_bytes": 15131,
+      "anchor_count": 15,
+      "anchor_seconds": 0.007083459000568837,
+      "blocks": 15,
+      "hybrid_total_seconds": 1.0338078308850527,
+      "overhead_pct": 1.3657211467642165,
+      "private_only_seconds": 1.0198791259899735
+    },
+    "case_3/BC_SigRW/f10": {
+      "anchor_bytes_per_anchor": 1009.5,
+      "anchor_chain_bytes": 2019,
+      "anchor_count": 2,
+      "anchor_seconds": 0.0009670419967733324,
+      "blocks": 15,
+      "hybrid_total_seconds": 1.021779791044537,
+      "overhead_pct": 0.1863617958371783,
+      "private_only_seconds": 1.0198791259899735
+    },
+    "case_3/BC_SigRW/f5": {
+      "anchor_bytes_per_anchor": 1009.0,
+      "anchor_chain_bytes": 3027,
+      "anchor_count": 3,
+      "anchor_seconds": 0.0014348330441862345,
+      "blocks": 15,
+      "hybrid_total_seconds": 1.0178859989973716,
+      "overhead_pct": -0.19542776607641793,
+      "private_only_seconds": 1.0198791259899735
+    }
+  },
+  "purpose": "M7-5 \u2014 hybrid vs private-only blockchain, anchor frequency sweep",
+  "repeats": 5,
+  "run_id": "20260924T213216Z-2bd78940",
+  "seed": 20260925,
+  "started_at": 1790285536.7869608,
+  "wall_seconds": 92.11449027061462,
+  "warmup_runs": 1
+}

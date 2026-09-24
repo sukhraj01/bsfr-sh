@@ -45,6 +45,7 @@ from bsfr_sh.util.serialization import (
 __all__ = [
     "CONFIG_HASH_SCHEME",
     "DIGEST_SIZE",
+    "DOMAIN_ANCHOR_RECORD",
     "DOMAIN_BACKUP_ATTESTATION",
     "DOMAIN_BACKUP_ID",
     "DOMAIN_BACKUP_PAYLOAD",
@@ -111,6 +112,11 @@ DOMAIN_BACKUP_TX_ID: Final = "bsfr_sh.hash.backup.tx_id.v1"
 #: sample's canonical behavioural trace, and the pre-image `CS_l` signs to attest to that digest.
 DOMAIN_SAMPLE_TRACE: Final = "bsfr_sh.hash.sample.trace.v1"
 DOMAIN_SAMPLE_ATTESTATION: Final = "bsfr_sh.hash.sample.attestation.v1"
+
+#: M7-5/DEV-33: the pre-image an anchor creator signs over one `AnchorRecord`. Distinct from
+#: `DOMAIN_BLOCK_HEADER` so an anchor record can never be replayed as a block header, even though
+#: both cover a `(chain, height, hash)`-shaped tuple.
+DOMAIN_ANCHOR_RECORD: Final = "bsfr_sh.hash.anchor.record.v1"
 
 
 def h(data: bytes) -> bytes:

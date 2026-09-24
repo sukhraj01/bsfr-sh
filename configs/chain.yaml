@@ -72,6 +72,21 @@ chains:
     genesis_owner_id: CS_0
     genesis_payload: "BSFR-SH BC_SigRW genesis"
 
+hybrid:                           # DECLARED — M7-5/DEV-33. PAPER §VII names only a private chain;
+                                  #   §VIII lists hybrid blockchain as its own future work and
+                                  #   gives no design. Off by default: every phase runs
+                                  #   private-only unless this is explicitly turned on, so nothing
+                                  #   here changes M0-M7-4's existing numbers.
+  enabled: false
+  anchor_frequency: 1             # anchor every Nth committed private block. 1 = every block =
+                                  #   maximum integrity/maximum anchor traffic; see docs/RESULTS.md
+                                  #   M7-5 for the cost/integrity sweep at 1, 5, 10.
+  anchor_chain_suffix: "_anchor"  # the anchor cluster's own chain name is
+                                  #   f"{BC_DTBU|BC_SigRW}{anchor_chain_suffix}" — distinct from
+                                  #   both private chain names, so `blockchain.chain.Chain`'s
+                                  #   non-empty-name check and any chain-name-keyed registry can
+                                  #   tell all three apart.
+
 transaction:
   # DECLARED — Q2 / GAP-2. The paper never states a transaction payload size, yet every timing
   # number in Figs. 6(a)-(d) depends on it. 4 KiB is our declared default: large enough to be a

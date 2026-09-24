@@ -49,6 +49,7 @@ from bsfr_sh.util.serialization import (
 )
 
 __all__ = [
+    "PAYLOAD_TYPE_ANCHOR",
     "PAYLOAD_TYPE_BACKUP",
     "PAYLOAD_TYPE_SIGNATURE_RECORD",
     "BackupPayload",
@@ -59,14 +60,21 @@ __all__ = [
     "encrypt",
     "encrypt_backup",
     "encrypt_signature_record",
+    "read_anchor_record",
+    "wrap_anchor_record",
 ]
 
 #: `DT_BU` — Alg. 1 line 2.
 PAYLOAD_TYPE_BACKUP: Final = "DT_BU"
 #: `Sig_RW` + `FT_RW` — Alg. 2 line 7.
 PAYLOAD_TYPE_SIGNATURE_RECORD: Final = "SIG_RW"
+#: M7-5/DEV-33. Not an algorithm line the paper defines — §VIII lists hybrid blockchain as its
+#: own future work. See `wrap_anchor_record` for why this payload type is never encrypted.
+PAYLOAD_TYPE_ANCHOR: Final = "ANCHOR"
 
-_PAYLOAD_TYPES: Final = frozenset({PAYLOAD_TYPE_BACKUP, PAYLOAD_TYPE_SIGNATURE_RECORD})
+_PAYLOAD_TYPES: Final = frozenset(
+    {PAYLOAD_TYPE_BACKUP, PAYLOAD_TYPE_SIGNATURE_RECORD, PAYLOAD_TYPE_ANCHOR}
+)
 
 
 class TransactionError(ValueError):
@@ -425,6 +433,51 @@ def encrypt_signature_record(
         plaintext=payload.to_bytes(),
         created_at=created_at,
     )
+
+
+def wrap_anchor_record(*, tx_id: str, plaintext: bytes, created_at: int) -> Transaction:
+    """Carry a public-chain `AnchorRecord` (M7-5, `blockchain.anchor`) as a transaction.
+
+    Every other payload here is `E_KU_CSl(Tx)` — encrypted so only one cloud server can read it
+    (Alg. 1 line 2 / Alg. 2 line 7). An anchor record is the opposite: its whole purpose is
+    external verifiability, so encrypting it would defeat the point of publishing it. `ciphertext`
+    therefore holds `plaintext` directly and `wrapped_key`/`nonce` are empty — the tell, on
+    inspection, that this transaction was never sealed to a recipient at all. `digest` still
+    covers the same content-digest construction `encrypt()` produces, so the anchor chain's
+    `Block`/`Chain` machinery (Merkle root, header hash, signature) is unmodified by this being
+    public.
+    """
+    digest = _content_digest(
+        tx_id=tx_id,
+        payload_type=PAYLOAD_TYPE_ANCHOR,
+        ciphertext=plaintext,
+        wrapped_key=b"",
+        nonce=b"",
+        created_at=created_at,
+    )
+    return Transaction(
+        tx_id=tx_id,
+        payload_type=PAYLOAD_TYPE_ANCHOR,
+        ciphertext=plaintext,
+        wrapped_key=b"",
+        nonce=b"",
+        digest=digest,
+        created_at=created_at,
+    )
+
+
+def read_anchor_record(transaction: Transaction) -> bytes:
+    """Recover an anchor record's plaintext. No key needed — see `wrap_anchor_record`."""
+    if transaction.payload_type != PAYLOAD_TYPE_ANCHOR:
+        raise TransactionError(
+            f"transaction {transaction.tx_id!r} is not an anchor record "
+            f"(payload_type={transaction.payload_type!r})"
+        )
+    if not transaction.verify_digest():
+        raise TransactionError(
+            f"anchor record {transaction.tx_id!r} digest does not match its contents"
+        )
+    return transaction.ciphertext
 
 
 def decrypt(recipient: PrivateKey, transaction: Transaction) -> bytes:

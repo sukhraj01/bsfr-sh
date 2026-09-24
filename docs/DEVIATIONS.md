@@ -1046,3 +1046,63 @@ gap this session closes.
 **Impact on reproduction:** none. No paper number is measured differently; this is a new
 comparison the paper never makes, reported alongside the existing pBFT-only Target 3/4 numbers,
 never merged into them.
+
+### DEV-33 · ADD+FILL · Hybrid blockchain — a public anchor chain for external verifiability
+**Paper:** §VIII: "in future, we have plan to work with hybrid blockchain," and stops there. No
+design, no schema, no anchor frequency, nothing. §IV-A already states the trade-off this answers:
+a private chain is fast and confidential, but its integrity rests entirely on trusting the
+operators who run it — there is no way for anyone outside the four cloud servers to confirm
+`BC_DTBU`/`BC_SigRW` have not been silently rewritten.
+
+**Ours (M7-5):** `blockchain/anchor.py` defines `AnchorRecord` — one private block's height,
+`current_hash` (`HC_βj`), `merkle_root` (`MTR`), a timestamp, and the anchor creator's ECDSA
+signature over all of it. Never encrypted (`transaction.wrap_anchor_record`, a third, plaintext
+transaction kind alongside the paper's two `E_KU_CSl(Tx)` payloads) — the whole point of a public
+record is that it needs no key to read. `blockchain/hybrid.py`'s `HybridChain` schedules and
+appends these onto its own anchor `Chain`, and answers three queries: `verify_anchor(chain,
+height)` (does the private block at `height` still match its anchor?), `verify_range`, and
+`verify_anchor_chain_integrity` (has the anchor chain's own storage been tampered with?).
+`AnchorPolicy.frequency` is the cost/integrity lever: 1 anchors every private block, `N` anchors
+every `N`-th (`N`x less anchor traffic, up to `N-1` blocks' unanchored tampering window) —
+`RESULTS.md` M7-5 sweeps 1/5/10.
+
+**The anchor chain's "own consensus" is sign-and-append, not a pBFT instance — a redesign, not the
+first draft.** The first implementation modelled the anchor chain literally as a single-node
+`consensus.pbft.Cluster` (`n=1, f=0, commit_threshold=1` — `consensus.protocol.Membership`
+accepts this: `n >= 3f+1` is `1 >= 1`), reached through `framework._block_pipeline.commit` exactly
+like the two private chains. It worked (`tests/unit/test_hybrid_chain.py`'s scheduling and
+security tests all passed against it), but `tests/unit/test_module_boundaries.py::
+test_nothing_below_framework_imports_it` correctly failed: reaching from `blockchain/hybrid.py`
+into `framework._block_pipeline` pulls `blockchain` upward across the dependency direction
+`docs/ARCHITECTURE.md` fixes (`util <- crypto <- blockchain <- consensus <- framework`), a
+boundary every other module in this codebase holds absolutely. The fix is not a workaround around
+the test — it is the correct design the test caught the absence of: a single signing authority has
+no second replica to convince, so pBFT's pre-prepare/prepare/commit rounds would be pure overhead
+with nothing underneath them. `HybridChain` now appends anchor blocks with one direct
+`Chain.append()` call (the same primitive every chain write in this codebase already uses) and
+imports nothing from `consensus` or `framework`. The quorum-agreement check a real multi-replica
+private chain still needs stays where it already lived — `framework._block_pipeline.read_chain` —
+and a new, thin `framework/hybrid_pipeline.py` is the only module that imports both layers,
+calling the existing, unmodified pipeline first and `HybridChain.sync`/`flush` after.
+`phase1_backup.py`/`phase2_collection.py` needed zero changes, which is the actual content of
+"hybrid is transparent to the framework": there was nothing in either to change.
+
+**The anchor chain is simulated, not real Ethereum or Bitcoin — stated, not hidden.** In
+production the anchor chain is a real public blockchain with its own separate consensus, its own
+latency, and a real gas cost per anchor; none of that is modelled here. `verify_anchor_chain_
+integrity`'s own docstring states the assumption its guarantee rests on plainly: it catches
+tampering of the anchor chain's *stored* blocks, exactly as `Chain.verify_integrity` does for any
+chain, but it does not model an attacker who controls the anchor authority's signing key from the
+start — in production, an operator who also controlled the real public chain's consensus would
+defeat the entire hybrid design, not just this check. The paper's own threat model (§II) never
+specifies who the external verifier actually is either (a regulator? a patient? a security
+researcher auditing the deployment?) — this design makes verification possible for any of them,
+without picking one, because `AnchorRecord` requires no relationship with the private chain's
+operators to check.
+
+**Impact on reproduction:** none. Hybrid mode is off by default (`configs/chain.yaml`
+`hybrid.enabled: false`) and `blockchain.hybrid`/`framework.hybrid_pipeline` are additive modules
+nothing else imports; every M0-M7-4 number is produced by the identical, unmodified private-chain
+path. `tests/unit/test_hybrid_transparency.py` demonstrates this rather than asserting it: the
+same backups recover byte-identical and the same `BC_SigRW` records commit byte-identical whether
+or not a `HybridChain` observes the run afterward.

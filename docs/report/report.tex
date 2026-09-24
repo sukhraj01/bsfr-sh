@@ -1114,6 +1114,147 @@ a minor implementation detail: it is the entire reason pBFT, not Raft, is the co
 -- but it is a reason the paper never states, and the 7--11\% speed cost of stating it and paying
 for it honestly is modest.
 
+\section{Hybrid Blockchain}
+\label{sec:hybrid}
+
+\S VIII of the paper itself states its own limitation and stops: ``in future, we have plan to
+work with hybrid blockchain.'' No design follows. \S IV-A already names the trade-off this answers
+without resolving it: a private, permissioned chain is fast and keeps healthcare data
+confidential, but its integrity rests entirely on trusting the four cloud servers that operate
+it -- nothing in the paper's design lets anyone outside that set confirm $BC_{DTBU}$ or
+$BC_{SigRW}$ have not been silently rewritten. A public chain would give that external
+verifiability, at the cost of exposing whatever it carries to everyone. A hybrid design keeps the
+paper's own private chains exactly as built -- same speed, same confidentiality, \S IV's pBFT
+consensus unchanged -- and adds one small, public commitment alongside them.
+
+\subsection{Architecture: an anchor chain and the \texttt{AnchorRecord} schema}
+
+An \texttt{AnchorRecord} carries one private block's height, its header hash $HC_{\beta_j}$, its
+Merkle root $MTR$, a timestamp, and the anchor creator's ECDSA signature over all of it -- copied
+verbatim from the private block's own header, never derived from, or requiring decryption of, its
+transactions. Every other transaction in this codebase is $E_{KU_{CS_l}}(Tx)$ (Alg.~1 line~2 /
+Alg.~2 line~7), sealed so only one cloud server can read it; an anchor record inverts that
+deliberately -- its only job is to be readable by anyone, so it is never encrypted.
+
+The anchor chain is simulated, not real Ethereum or Bitcoin, and is modelled as a second,
+independent \texttt{Chain} instance with its own consensus. That consensus is direct
+sign-and-append by a single authority, not a second pBFT cluster: a single signer has no other
+replica to convince, so pBFT's message rounds would be pure overhead with nothing underneath them.
+This was a correction, not the first design -- an earlier version ran the anchor chain through a
+literal single-node pBFT cluster, which worked, but pulled a dependency from the blockchain layer
+up into consensus/framework code that this project's own architectural boundary (enforced by a
+standing test, not merely documented) correctly rejected. The point of the exercise was always the
+\emph{interface} a hybrid chain needs from its anchor -- commit, and answer whether a given block
+still matches what was committed -- not the anchor's own Byzantine fault tolerance, which a real
+public chain supplies for itself. Full rationale in \texttt{docs/DEVIATIONS.md} DEV-33.
+
+Given an anchor record and a candidate block claiming to be the one it covers, anyone can check
+its hash and Merkle root against the record without decrypting a single transaction inside it.
+That is the whole guarantee: the private chain's shape at that height is fixed the moment the
+anchor commits, even against an operator who controls every private-chain replica. It is not a
+claim about the private chain's contents being correct -- only that they cannot change afterward
+without the change being visible to anyone holding the anchor.
+
+\subsection{The anchor frequency trade-off}
+
+\texttt{AnchorPolicy.frequency} is the cost/integrity lever: anchoring every block gives maximum
+integrity at maximum anchor traffic; anchoring every $N$th block cuts that traffic by $N\times$ at
+the cost of up to $N{-}1$ blocks' unanchored tampering window. Table~\ref{tab:m7-5-matrix} sweeps
+$N \in \{1, 5, 10\}$ across the paper's own three cases, both chains, serialization on -- the same
+condition \S VIII's comparison settled on.
+
+\begin{table*}[t]
+\centering
+\caption{Hybrid vs.\ private-only, both chains, all three cases, anchor frequency 1/5/10,
+serialization on (5 repeats, seed 20260925, run \texttt{20260924T213216Z-2bd78940}). Hybrid
+seconds is the identical private commit plus one \texttt{sync()}+\texttt{flush()} pair.}
+\label{tab:m7-5-matrix}
+\footnotesize
+\begin{tabular}{llccccc}
+\hline
+\textbf{Case} & \textbf{Chain} & \textbf{Freq} & \textbf{Private (s)} & \textbf{Hybrid (s)} &
+\textbf{Overhead} & \textbf{Anchors (bytes)} \\
+\hline
+1 & $BC_{DTBU}$  & 1  & 0.27387 & 0.27287 & $-0.37\%$ & 5 (5029) \\
+1 & $BC_{DTBU}$  & 5  & 0.27387 & 0.27372 & $-0.05\%$ & 1 (1004) \\
+1 & $BC_{DTBU}$  & 10 & 0.27387 & 0.27419 & $+0.12\%$ & 1 (1004) \\
+1 & $BC_{SigRW}$ & 1  & 0.33973 & 0.33887 & $-0.25\%$ & 5 (5035) \\
+1 & $BC_{SigRW}$ & 5  & 0.33973 & 0.33673 & $-0.88\%$ & 1 (1006) \\
+1 & $BC_{SigRW}$ & 10 & 0.33973 & 0.33907 & $-0.19\%$ & 1 (1005) \\
+2 & $BC_{DTBU}$  & 1  & 0.54432 & 0.54371 & $-0.11\%$ & 10 (10060) \\
+2 & $BC_{DTBU}$  & 5  & 0.54432 & 0.54329 & $-0.19\%$ & 2 (2013) \\
+2 & $BC_{DTBU}$  & 10 & 0.54432 & 0.54137 & $-0.54\%$ & 1 (1009) \\
+2 & $BC_{SigRW}$ & 1  & 0.67989 & 0.68087 & $+0.14\%$ & 10 (10077) \\
+2 & $BC_{SigRW}$ & 5  & 0.67989 & 0.67193 & $-1.17\%$ & 2 (2021) \\
+2 & $BC_{SigRW}$ & 10 & 0.67989 & 0.74360 & $+9.37\%$ & 1 (1009) \\
+3 & $BC_{DTBU}$  & 1  & 0.81568 & 0.81811 & $+0.30\%$ & 15 (15105) \\
+3 & $BC_{DTBU}$  & 5  & 0.81568 & 0.91398 & $+12.05\%$ & 3 (3018) \\
+3 & $BC_{DTBU}$  & 10 & 0.81568 & 0.86512 & $+6.06\%$ & 2 (2016) \\
+3 & $BC_{SigRW}$ & 1  & 1.01988 & 1.03381 & $+1.37\%$ & 15 (15131) \\
+3 & $BC_{SigRW}$ & 5  & 1.01988 & 1.01789 & $-0.20\%$ & 3 (3027) \\
+3 & $BC_{SigRW}$ & 10 & 1.01988 & 1.02178 & $+0.19\%$ & 2 (2019) \\
+\hline
+\end{tabular}
+\end{table*}
+
+Two findings, both against the frequency lever's intuition. First, anchor overhead is at or below
+measurement noise, not a real structural cost: 15 of 18 cells fall within $\pm 1.4\%$, and the
+three outliers ($+9.37\%$, $+12.05\%$, $+6.06\%$) do not track with frequency or chain in any
+consistent direction -- the signature of scheduling jitter between two separately built clusters,
+not a per-anchor cost, and expected given \texttt{sync()}/\texttt{flush()} runs no consensus at
+all. Second, anchor chain storage is tiny and flat: every anchor costs
+$\approx$1.00--1.01\,KB regardless of case or chain (5029/5, 10060/10, 15105/15 bytes-per-anchor
+all $\approx$1006), because an \texttt{AnchorRecord} is two 32-byte hashes plus fixed-size
+metadata, never a function of the private block's own payload size. The frequency lever therefore
+trades anchor count linearly against the tampering window it leaves open, not against a real
+cost curve on the anchor side -- the anchor's own cost is already negligible at $N{=}1$.
+
+\subsection{What external verifiability buys: three security tests}
+
+Three tests, mirroring \texttt{tests/unit/test\_hybrid\_chain.py}, demonstrate what the anchor
+adds and where it honestly does not reach.
+
+\textbf{(a) Tamper a private block after it is anchored.} A private-chain block already covered by
+an \texttt{AnchorRecord} is replaced, on every replica, by a different, internally
+well-formed, validly-signed block at the same height -- the same class of attack \S VIII's
+Byzantine-leader test constructs, applied here to storage rather than to consensus.
+\texttt{verify\_anchor} recomputes the live block's hash and Merkle root on every call and compares
+them against the stored record: \texttt{anchored=True, verified=False}. The tamper is caught.
+
+\textbf{(b) Tamper a private block that has not been anchored yet.} At frequency $N{=}5$, heights
+6 and 7 of a 7-block chain are not covered by any anchor until a later multiple or a flush closes
+the window. Tampering height 6 in that gap produces \texttt{anchored=False}: there is nothing to
+check it against, so nothing is claimed either way. This is stated as the honest cost of
+infrequent anchoring, not smoothed over -- it is exactly the $N{-}1$-block tampering window named
+above as the trade-off's price, demonstrated rather than assumed.
+
+\textbf{(c) Tamper the anchor chain itself.} The anchor chain's own stored blocks are replaced the
+same way as in (a). \texttt{verify\_anchor\_chain\_integrity} -- \texttt{Chain.verify\_integrity},
+unmodified, applied to the anchor chain -- catches the broken link and the invalid signature, the
+same way it would for either private chain. This catches storage-level tampering of the anchor
+chain, but rests on an assumption stated plainly rather than hidden: it does not model an attacker
+who controls the anchor authority's own signing key from the start. In production the anchor chain
+is a real public blockchain with its own, separate consensus; an operator who also controlled that
+consensus would defeat the entire hybrid design, not just this check.
+
+\subsection{Limitations, stated honestly}
+
+The anchor chain here is simulated, and three simplifications matter for anyone reading these
+numbers as evidence about a real deployment. First, a real public chain (Ethereum, Bitcoin, or a
+purpose-built one) has real network latency and a real per-transaction cost -- gas fees on
+Ethereum, most concretely -- neither of which this simulation pays; the $\approx$1\,KB/anchor
+figure above is a storage cost, not a gas estimate, and the two do not convert directly. Second,
+this simulation's anchor authority is a single signing key with no consensus of its own; a real
+deployment anchoring to a public chain submits one signed transaction per anchor to that chain's
+own, already-running consensus, which is a fair analogue of what is modelled here, but the
+public chain's own liveness and finality guarantees are not exercised by anything in this section.
+Third, and most fundamentally, the paper's threat model (\S II) never specifies who the external
+verifier actually is -- a regulator, a patient, an independent security researcher auditing the
+deployment -- and this design does not pick one either. What it provides is that verification is
+possible for any of them without a relationship with the private chain's operators, which is the
+property \S IV-A's trade-off was missing; deciding who should exercise it is a policy question
+this report does not answer.
+
 \section{Conclusion}
 
 We built a complete, from-scratch implementation of BSFR-SH's five algorithms, both of its
@@ -1135,12 +1276,15 @@ actually built.
 
 What remains open: the 3.58-point gap between our best reproduction and the published figure has
 a measured lower bound but no identified cause -- neither address-as-feature nor split strategy,
-alone or together, explains it, and no further candidate was tested for lack of one. We did not
-pursue the stretch extensions in the project roadmap -- a formal (Scyther) model of the
-session-establishment protocol, adversarial feature-space evasion against the detector, a
-storage-cost analysis for on-chain healthcare backups at realistic scale, an asynchronous pBFT
-variant with modelled network latency, and hybrid-blockchain support, all of which the paper's
-own conclusion or our design work flags as open -- since they fall outside this report's scope.
+alone or together, explains it, and no further candidate was tested for lack of one. Of the five
+stretch extensions the project roadmap identified, four are built and reported above: a formal
+(Scyther) model of the session-establishment protocol (\S III-B), a storage-cost analysis for
+on-chain healthcare backups at realistic scale (\S V-F), adversarial feature-space evasion against
+the detector (\S VII), and a comparison against Raft as an alternative consensus protocol
+(\S VIII). A fifth, hybrid-blockchain support, is reported in \S IX, directly answering \S VIII of
+the paper itself, which names it as its own future work. One extension remains unpursued: an
+asynchronous pBFT variant with modelled network latency beyond the fixed delays
+\S IV-C already sweeps.
 
 Taken together, the two findings point in the same direction rather than opposite ones. A paper
 whose evaluation methodology cannot be checked because its protocol is underspecified, and whose
