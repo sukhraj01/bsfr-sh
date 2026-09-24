@@ -497,9 +497,7 @@ consensus benchmark.
 \begin{table}[t]
 \centering
 \caption{Target 3/4: measured vs.\ published time and derived TPS, both chains, all three
-cases.\footnote{All timing measurements in this table exclude consensus message serialization;
-measured serialization overhead is +48--68\% (D3). Tables with serialization included are in the
-supplementary material (\S\ref{sec:d3-supplement}).}}
+cases.}
 \label{tab:timing}
 \footnotesize
 \begin{tabular}{lccc}
@@ -514,6 +512,10 @@ Case 3, $BC_{DTBU}$  & 0.479\,s & 5.71\,s & 3132 \\
 Case 3, $BC_{SigRW}$ & 0.691\,s & 6.76\,s & 2169 \\
 \hline
 \end{tabular}
+\vspace{2pt}
+{\footnotesize\textit{Note: all timing measurements in this table exclude consensus message
+serialization; measured serialization overhead is +48--68\% (D3). Tables with serialization
+included are in the supplementary material (\S\ref{sec:d3-supplement}).}}
 \end{table}
 
 Table~\ref{tab:timing} reports Targets 3--4 at the paper's own three cases (5/10/15 blocks
@@ -526,9 +528,7 @@ measurement, and not a claim we contest. The comparison we make is trend and rat
 \caption{Mean measured per-block marginal cost by case (three samples per cell, seconds), the
 direct evidence for DEV-08. If the paper's amortisation account were absent from our own harness
 by construction, marginal cost would fall from case 1 to case 3; instead it is
-flat.\footnote{All timing measurements in this table exclude consensus message serialization;
-measured serialization overhead is +48--68\% (D3). Tables with serialization included are in the
-supplementary material (\S\ref{sec:d3-supplement}).}}
+flat.}
 \label{tab:marginal}
 \footnotesize
 \begin{tabular}{lccc}
@@ -539,6 +539,10 @@ $BC_{DTBU}$  & 0.0335\,s & 0.0334\,s & 0.0316\,s \\
 $BC_{SigRW}$ & 0.0455\,s & 0.0450\,s & 0.0450\,s \\
 \hline
 \end{tabular}
+\vspace{2pt}
+{\footnotesize\textit{Note: all timing measurements in this table exclude consensus message
+serialization; measured serialization overhead is +48--68\% (D3). Tables with serialization
+included are in the supplementary material (\S\ref{sec:d3-supplement}).}}
 \end{table}
 
 \begin{figure}[t]
@@ -736,7 +740,7 @@ full-block overhead factor (header, Merkle root and canonical encoding, amortise
 block, \S\ref{sec:5c}) -- rather than from new estimates; full arithmetic in
 \texttt{docs/STORAGE\_ANALYSIS.md}.
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
 \caption{On-chain storage growth, daily 1~MiB backups, 4 replicas. Every figure is arithmetic
 over \S\ref{sec:5c}'s measured overhead factor, not a new measurement.}
@@ -751,7 +755,7 @@ Medium hospital (5{,}000 pts) & 1.98~TiB & 7.94~TiB & $\approx$6.05~mo \\
 Large network (50{,}000 pts) & 19.8~TiB & 79.4~TiB & $\approx$18.4~days \\
 \hline
 \end{tabular}
-\end{table}
+\end{table*}
 
 At hospital scale, the paper's own on-chain design fills 1~TiB per replica in about six months
 under daily backups; at network scale, in under three weeks. Backup frequency is the larger lever
@@ -1003,7 +1007,7 @@ the same kind of reduction pBFT's own view-change implementation already accepte
 
 \subsection{Quantitative: timing, messages, TPS}
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
 \caption{pBFT vs.\ Raft, both chains, all three cases, serialization on (5 repeats, seed 20260924,
 run \texttt{20260924T045952Z-2eaa456f}). Messages and signature operations are the median across
@@ -1029,7 +1033,7 @@ repeats of the whole run's totals; timing and TPS as in Table~\ref{tab:timing}.}
 3 & $BC_{SigRW}$ & Raft & 0.9483 & 1582 & 252 &   0 \\
 \hline
 \end{tabular}
-\end{table}
+\end{table*}
 
 Table~\ref{tab:m7-4-matrix} is the full matrix: cases 1--3, both chains, both protocols,
 serialization on (the condition DEV-30 settled M6a's own numbers on). Two structural properties

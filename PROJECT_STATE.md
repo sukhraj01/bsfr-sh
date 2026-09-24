@@ -4,8 +4,8 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-24 · **Milestone:** M7-4 done (pBFT vs Raft comparison); report recompile
-still blocked · **Sessions completed:** 19
+**Last updated:** 2026-09-25 · **Milestone:** report.pdf compiled and verified (M7-1..M7-4 all
+present); M7-5 (hybrid blockchain) next · **Sessions completed:** 20
 
 ---
 
@@ -65,21 +65,17 @@ New this session: `RESULTS.md` "M7-4 — pBFT vs Raft consensus comparison" sect
 
 ## Next task
 
-**Get a working LaTeX toolchain and compile `docs/report/report.pdf`.** Unchanged from the last
-two sessions — still the clear, singular next action. `brew install --cask basictex` is the right
-cask (~100-110 MB, not full `mactex`'s ~4 GB) but the default CTAN mirror this environment
-resolves to has been too slow to finish twice now. Try a different network, a pinned faster
-mirror, or a pre-existing install. After installing: `cd docs/report && pdflatex report.tex` twice
-(cross-references), then check every table/figure renders — specifically M7-3's figures, the D3
-supplement, and this session's M7-4 table and section — before committing `report.pdf`.
-
-**After that**, one optional M7 stretch item remains (`docs/ROADMAP.md` M7, not required for the
-deliverable): hybrid blockchain, the paper's own listed future work.
+**M7-5: hybrid blockchain** (`docs/ROADMAP.md` M7, the paper's own §VIII-listed future work).
+See session file for the brief.
 
 ## Blockers
 
-**No LaTeX toolchain in this environment, three times confirmed.** See Next task above. `docker`/
-`pdflatex`/`xelatex`/`latexmk` all absent from `PATH`.
+None currently. (Resolved 2026-09-25: `tectonic` — a self-contained LaTeX engine, not
+`brew`/`install-tl`/TeX Live — was already present in `PATH` and compiled the report directly,
+no CTAN mirror involved. Two real bugs found and fixed in the process: `\footnote{}` inside
+`\caption{}` is fatal under IEEEtran's `\@caption` — replaced with post-table `\footnotesize`
+note text in both affected tables; two data tables (storage-cost, pBFT/Raft matrix) overflowed
+single-column width — widened to `table*`.)
 
 `data/raw/` is present in this environment already; a genuinely fresh clone still needs
 `make data` (~56 minutes) first.
