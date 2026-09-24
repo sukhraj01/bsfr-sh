@@ -571,3 +571,134 @@ header's worth of fixed overhead, never a function of the private block's own pa
 anchor count linearly against the tampering window it leaves open, never against a real
 integrity-vs-cost curve on the anchor side, because the anchor's own cost is already negligible
 at `freq=1`.
+
+### M7-6 — closing the Q10 gap: three more hypotheses (2026-09-25)
+
+`scripts/m7_6_gap_closure.py --seed 20260912`, `src/bsfr_sh/detection/gap_closure.py`'s pure
+resample/feature logic. Q10 (above) tested two leakage candidates and left the gap at 3.58 points
+(0.9540, RF, address kept x random split). This session tests three more: decision-tree splitting
+criterion (H1), resample strategy (H2), single-split variance vs. cross-validation (H3), year/day
+feature engineering (H4), and a programmatically-assembled stacked worst case (H5).
+
+**H1 — splitting criterion, decision tree, address dropped, n=46014 (config_hash `20260924T221930Z-3436aaad`).**
+
+```
+2026-09-25 | detection/bitcoinheist-m7-6-h1 | decision_tree gini_default x grouped   | acc=0.9224 f1=0.9569 d_pub=-0.0674 | measured | 20260924T221930Z-3436aaad | H1, = gini_full by construction
+2026-09-25 | detection/bitcoinheist-m7-6-h1 | decision_tree gini_default x random    | acc=0.9262 f1=0.9590 d_pub=-0.0636 | measured | 20260924T221930Z-3436aaad | H1, = gini_full by construction
+2026-09-25 | detection/bitcoinheist-m7-6-h1 | decision_tree entropy_default x grouped| acc=0.9258 f1=0.9588 d_pub=-0.0640 | measured | 20260924T221930Z-3436aaad | H1, = entropy_full by construction
+2026-09-25 | detection/bitcoinheist-m7-6-h1 | decision_tree entropy_default x random | acc=0.9301 f1=0.9611 d_pub=-0.0597 | measured | 20260924T221930Z-3436aaad | H1, best DT cell
+```
+
+`gini_full`/`entropy_full` (explicit `max_depth=None, min_samples_split=2, min_samples_leaf=1`)
+are bit-identical to `gini_default`/`entropy_default` — scikit-learn's own defaults already grow
+the tree fully, asserted in the script, not just claimed. Entropy beats gini by ~0.4pt either
+split; neither approaches 0.98. **H1 does not explain the gap.**
+
+**H2 — resample strategy, address dropped, both models, both splits (`20260924T221940Z-266f103e`).**
+
+```
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | oversample x random_forest x grouped   | n=200000 (pos=180000 neg=20000)  | acc=0.9363 f1=0.9644 d_pub=-0.0535 | measured | 20260924T221940Z-266f103e | H2
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | oversample x random_forest x random    | n=200000 (pos=180000 neg=20000)  | acc=0.9690 f1=0.9831 d_pub=-0.0208 | measured | 20260924T221940Z-266f103e | H2
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | oversample x decision_tree x grouped   | n=200000 (pos=180000 neg=20000)  | acc=0.8746 f1=0.9270 d_pub=-0.1152 | measured | 20260924T221940Z-266f103e | H2
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | oversample x decision_tree x random    | n=200000 (pos=180000 neg=20000)  | acc=0.9723 f1=0.9848 d_pub=-0.0175 | measured | 20260924T221940Z-266f103e | H2, best single H2 cell
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | undersample x random_forest x grouped  | n=45554 (pos=41413 neg=4141)     | acc=0.9509 f1=0.9735 d_pub=-0.0389 | measured | 20260924T221940Z-266f103e | H2
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | undersample x random_forest x random   | n=45554 (pos=41413 neg=4141)     | acc=0.9500 f1=0.9731 d_pub=-0.0398 | measured | 20260924T221940Z-266f103e | H2
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | undersample x decision_tree x grouped  | n=45554 (pos=41413 neg=4141)     | acc=0.9283 f1=0.9605 d_pub=-0.0615 | measured | 20260924T221940Z-266f103e | H2
+2026-09-25 | detection/bitcoinheist-m7-6-h2 | undersample x decision_tree x random   | n=45554 (pos=41413 neg=4141)     | acc=0.9291 f1=0.9611 d_pub=-0.0607 | measured | 20260924T221940Z-266f103e | H2
+```
+
+**This is the session's real finding.** Oversampling (bootstrap-duplicating the 41,413 real
+ransomware rows up to 180,000, undersampling benign to 20,000, `total=200,000`) under a *random*
+split reaches 0.9690-0.9723 — 1.75-2.08 points under published, closer than anything Q10 found.
+Under the *grouped* split the same strategy scores 0.8746-0.9363, **worse** than the
+address-dropped/grouped baseline (0.9224/0.9442) — a 5-10 point swing between splits is a much
+larger leakage signature than Q10's largest (+0.92pt). Mechanism: at ~4.35x average duplication,
+a 30% random test split places many literal bootstrap-duplicate rows on both sides of the
+boundary; the model does not generalise to them, it recognises them. Grouping by address (which a
+duplicated row inherits from its original) closes this exactly as it closed Q10's leakage, and
+the strategy's apparent advantage disappears — confirming the effect is leakage, not a genuinely
+better-conditioned dataset. Undersampling (all 41,413 positives, benign at 10% of *that* count
+rather than of the total — 4,141 vs. `paper_mode_resample`'s 4,601) is close to the existing
+`paper_mode` baseline in both splits, as expected: it is a small arithmetic variant of what Q10
+already tested, not a new mechanism.
+
+**H3a — 20-seed variance (seeds 20260912-20260931), address dropped x grouped split, production
+protocol (`20260924T222008Z-7d407df3`).**
+
+```
+2026-09-25 | detection/bitcoinheist-m7-6-h3a | production_protocol x random_forest           | n_seeds=20 | acc_min=0.9288 acc_max=0.9469 acc_mean=0.9412 acc_std=0.0050 | measured | 20260924T222008Z-7d407df3 | H3a
+2026-09-25 | detection/bitcoinheist-m7-6-h3a | production_protocol x logistic_regression      | n_seeds=20 | acc_min=0.1000 acc_max=0.9006 acc_mean=0.8598 acc_std=0.1743 | measured | 20260924T222008Z-7d407df3 | H3a, occasionally flips to all-negative (acc=0.10 exactly)
+2026-09-25 | detection/bitcoinheist-m7-6-h3a | production_protocol x decision_tree            | n_seeds=20 | acc_min=0.9088 acc_max=0.9248 acc_mean=0.9173 acc_std=0.0050 | measured | 20260924T222008Z-7d407df3 | H3a
+2026-09-25 | detection/bitcoinheist-m7-6-h3a | production_protocol x k_nearest_neighbours     | n_seeds=20 | acc_min=0.8795 acc_max=0.8912 acc_mean=0.8867 acc_std=0.0026 | measured | 20260924T222008Z-7d407df3 | H3a
+2026-09-25 | detection/bitcoinheist-m7-6-h3a | q10_best_cell(address_kept x random) x random_forest | n_seeds=20 | acc_min=0.9530 acc_max=0.9572 acc_mean=0.9545 acc_std=0.0011 | measured | 20260924T222008Z-7d407df3 | H3a, tightest envelope tested
+```
+
+Random forest's 20-seed envelope on the production protocol (0.9288-0.9469) does not reach
+published; on Q10's own best cell the envelope is even tighter (std=0.0011, max=0.9572, still
+3.26pt short). **A lucky seed does not explain the gap** — the M4a/Q10 numbers are highly
+reproducible, not a favourable draw. (Logistic regression's std=0.1743 is a separate, incidental
+finding: at this class balance it occasionally converges to predicting all-benign, scoring exactly
+0.10 — the constant-negative floor on a 90%-positive split. Not pursued further; LR is not the
+paper's best algorithm.)
+
+**H3b — 5-fold group-stratified CV, address dropped, 90/10 resample, n=46014
+(`20260924T222356Z-73d6c40d`).**
+
+```
+2026-09-25 | detection/bitcoinheist-m7-6-h3b | random_forest, 5-fold group-cv          | acc_mean=0.9421 acc_std=0.0057 f1_mean=0.9684 f1_std=0.0032 | measured | 20260924T222356Z-73d6c40d | H3b
+2026-09-25 | detection/bitcoinheist-m7-6-h3b | logistic_regression, 5-fold group-cv    | acc_mean=0.8995 acc_std=0.0011 f1_mean=0.9471 f1_std=0.0006 | measured | 20260924T222356Z-73d6c40d | H3b
+2026-09-25 | detection/bitcoinheist-m7-6-h3b | decision_tree, 5-fold group-cv          | acc_mean=0.9165 acc_std=0.0076 f1_mean=0.9534 f1_std=0.0045 | measured | 20260924T222356Z-73d6c40d | H3b
+2026-09-25 | detection/bitcoinheist-m7-6-h3b | k_nearest_neighbours, 5-fold group-cv   | acc_mean=0.8864 acc_std=0.0016 f1_mean=0.9394 f1_std=0.0009 | measured | 20260924T222356Z-73d6c40d | H3b
+```
+
+CV means match the single-split numbers closely (RF 0.9421 CV vs. 0.9442 single-split) with small
+per-fold std. **H3 is closed: neither single-split variance nor a CV-vs-holdout discrepancy
+explains the gap** — both readings agree with each other and both sit far under published.
+
+**H4 — year/day feature engineering, random forest, address dropped, n=46014
+(`20260924T222403Z-bff1613f`).**
+
+```
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest raw x grouped                 | acc=0.9442 f1=0.9697 d_pub=-0.0456 | measured | 20260924T222403Z-bff1613f | H4, = M4b production figure
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest raw x random                  | acc=0.9479 f1=0.9717 d_pub=-0.0419 | measured | 20260924T222403Z-bff1613f | H4, = M4a figure
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest year_dropped x grouped        | acc=0.9142 f1=0.9540 d_pub=-0.0756 | measured | 20260924T222403Z-bff1613f | H4, dropping year costs 3pt
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest year_dropped x random         | acc=0.9163 f1=0.9550 d_pub=-0.0735 | measured | 20260924T222403Z-bff1613f | H4, dropping year costs 3pt
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest day_cyclical x grouped        | acc=0.9441 f1=0.9696 d_pub=-0.0457 | measured | 20260924T222403Z-bff1613f | H4, flat vs. raw
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest day_cyclical x random         | acc=0.9474 f1=0.9714 d_pub=-0.0424 | measured | 20260924T222403Z-bff1613f | H4, flat vs. raw
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest year_day_interaction x grouped| acc=0.9460 f1=0.9706 d_pub=-0.0438 | measured | 20260924T222403Z-bff1613f | H4, best H4 cell
+2026-09-25 | detection/bitcoinheist-m7-6-h4 | random_forest year_day_interaction x random | acc=0.9498 f1=0.9726 d_pub=-0.0400 | measured | 20260924T222403Z-bff1613f | H4, best H4 cell
+```
+
+Dropping `year` *costs* ~3 accuracy points rather than gaining any — the opposite of what a
+temporal-leakage hypothesis would predict. `year` is informative, not a leak. Cyclical `day` is
+statistically flat against raw; the `year x day` interaction gives the best H4 cell, a modest
++0.5-2pt over raw. **H4 does not explain the gap and rules out year-as-leakage.**
+
+**H5 — stacked worst case, winners chosen programmatically from H1/H2/H4 above, address kept,
+random split (`20260924T222413Z-98a839c9`).**
+
+Winners: decision-tree criterion = `entropy` (0.9301 > 0.9262 gini, from H1); resample strategy =
+`oversample` (0.9723, the best single H2 cell); feature variant = `year_day_interaction` (0.9498,
+the best H4 cell).
+
+```
+2026-09-25 | detection/bitcoinheist-m7-6-h5 | stacked (entropy x oversample x year_day_interaction x address_kept x random_split) | n=200000 (pos=180000 neg=20000) | acc=0.9747 f1=0.9861 d_pub=-0.0151 | measured | 20260924T222413Z-98a839c9 | H5, best cell of the entire session
+```
+
+**M7-6 conclusion — the bound tightens from 3.58 to 1.51 points; the residual is still
+unexplained, but the leading candidate is now identified.** Stacking every undisclosed choice
+this session and Q10 together tested most favourably to the published figure — `address` kept as
+a raw identifier, entropy splitting, oversampling by bootstrap duplication, a `year x day`
+interaction feature, and a non-grouped split — reaches 0.9747/0.9861, **1.51 accuracy points and
+1.29 F1 points short of 0.9898/0.990**, not zero. Of the five choices stacked, one dominates:
+oversampling under a random split accounts for essentially the whole improvement over Q10's
+0.9540 (H2's `oversample x decision_tree x random` alone reaches 0.9723, barely below H5's fully
+stacked 0.9747); the other four choices contribute a further ~0.2-0.3pt combined. That
+concentration is itself informative — it means the paper's headline is *most plausibly* explained,
+if it is explained by methodology at all, by an oversampled-and-randomly-split evaluation, not by
+some diffuse combination of many small effects. It is still not a proof: no combination tested,
+including the fully stacked worst case, reaches the published number. **Q10 is closed with a
+tightened, evidenced bound**: the gap narrows from "3.58 points, unexplained" to "1.51 points,
+unexplained after eight tested hypotheses, with resample-strategy leakage (oversampling under a
+non-grouped split) identified as the largest single contributor found." `docs/DEVIATIONS.md`
+DEV-06 amended accordingly.

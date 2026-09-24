@@ -196,6 +196,53 @@ column was both dropped *and* the group column (`configs/ml.yaml` declares `addr
 Fixed by exempting `group_column` from that check — it is loaded for grouping only and, per the
 test added alongside it, never reaches the feature matrix.
 
+**Amendment (M7-6, 2026-09-25) — three more hypotheses tested; the bound tightens from 3.58 to
+1.51 points, still not closed.** Q10 tested two leakage candidates out of at least five testable
+ones and left the report calling the gap "unexplained." `scripts/m7_6_gap_closure.py` and
+`src/bsfr_sh/detection/gap_closure.py` test the remaining three — decision-tree splitting
+criterion (H1), resample strategy (H2), single-split variance vs. cross-validation (H3), plus
+year/day feature engineering (H4) and a programmatically-assembled stacked worst case (H5). Full
+table and per-cell numbers: `RESULTS.md` "M7-6 — closing the Q10 gap".
+
+- **H1 (splitting criterion) does not explain the gap.** Entropy beats gini by ~0.4pt; explicit
+  `max_depth=None` etc. is bit-identical to scikit-learn's own default (asserted, not assumed) —
+  best DT cell 0.9301, 5.97pt short.
+- **H2 (resample strategy) is the session's real finding.** Bootstrap-duplicating the 41,413 real
+  ransomware rows to 180,000 (oversampled, ~4.35x average duplication) and undersampling benign to
+  20,000, under a *random* split, reaches 0.9690-0.9723 — closer than anything Q10 found. Under a
+  *grouped* split the same strategy scores 0.8746-0.9363, **worse** than the existing baseline: a
+  5-10 point swing between splits, several times larger than Q10's largest leakage signature
+  (+0.92pt). Mechanism: duplicated rows carry the same address, so a random (non-grouped) split
+  routinely places literal duplicates of a training row into the test set; the model recognises
+  them rather than generalising to them. This is oversampling-under-non-grouped-split leakage, a
+  mechanism distinct from Q10's two candidates, and a materially larger effect than either.
+  Undersampling (all positives, benign sized to 10% of the *positive* count rather than of the
+  resample total) scores close to the existing `paper_mode` baseline in both splits — a small
+  arithmetic variant of what Q10 already covered, not a new mechanism.
+- **H3 is closed: neither explains the gap.** 20 seeds (20260912-20260931) on the production
+  protocol give random forest an envelope of 0.9288-0.9469 (std 0.0050); on Q10's own best cell
+  the envelope is even tighter (std 0.0011, max 0.9572, still 3.26pt short) — the measured numbers
+  are highly reproducible, not a lucky draw. 5-fold group-stratified CV agrees with the
+  single-split figure closely (RF: 0.9421 CV mean vs. 0.9442 single-split).
+- **H4 rules out year-as-leakage.** Dropping `year` *costs* ~3 accuracy points — the opposite of
+  what a temporal-leakage hypothesis predicts, so `year` is informative, not a leak. Cyclical
+  `day` is flat against raw; a `year x day` interaction gives the best H4 cell, +0.5-2pt over raw.
+- **H5 (stacked worst case), winners chosen programmatically:** entropy criterion (H1's winner,
+  0.9301), oversample resample (H2's winner, 0.9723), `year x day` interaction (H4's winner,
+  0.9498), address kept, random split. Reaches **0.9747/0.9861 — 1.51 accuracy points and 1.29 F1
+  points short of published**, not zero. One ingredient dominates: H2's `oversample x
+  decision_tree x random` cell alone (0.9723) accounts for nearly all of H5's improvement over
+  Q10's 0.9540; the other four stacked choices contribute a further ~0.2-0.3pt combined. If the
+  published figure is explained by methodology at all, the evidence now points specifically at an
+  oversampled, non-grouped-split evaluation — not a diffuse combination of many small effects.
+
+**Q10 is closed with a tightened, evidenced bound, not a proof.** No configuration tested across
+either session — including H5's fully stacked worst case — reaches 0.9898/0.990. The gap narrows
+from "3.58 points, unexplained, two hypotheses tested" to "**1.51 points, unexplained after eight
+hypotheses tested, with oversample-strategy leakage under a non-grouped split identified as the
+largest single contributor found**." The residual is reported with that qualifier, not as a bare
+"unexplained," and not attributed to a cause beyond what was actually measured (CLAUDE.md §2).
+
 ### DEV-07 · FIX · Annotate Table II with source datasets
 **Paper:** Table II compares BSFR-SH's BitcoinHeist score against four schemes evaluated on
 entirely different data (network traces, dynamic analysis logs, PE features).

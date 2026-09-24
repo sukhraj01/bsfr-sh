@@ -1,0 +1,90 @@
+{
+  "cells": {
+    "day_cyclical x grouped": {
+      "accuracy": 0.9440782325244477,
+      "f1": 0.9696397671857795,
+      "n": 46014
+    },
+    "day_cyclical x random": {
+      "accuracy": 0.9474065488264272,
+      "f1": 0.9713970530297061,
+      "n": 46014
+    },
+    "raw x grouped": {
+      "accuracy": 0.9442231075697212,
+      "f1": 0.9697160387005428,
+      "n": 46014
+    },
+    "raw x random": {
+      "accuracy": 0.9479136482179078,
+      "f1": 0.9716739550092581,
+      "n": 46014
+    },
+    "year_day_interaction x grouped": {
+      "accuracy": 0.9459616081130026,
+      "f1": 0.9705719921104536,
+      "n": 46014
+    },
+    "year_day_interaction x random": {
+      "accuracy": 0.9497971602434077,
+      "f1": 0.9726378963161844,
+      "n": 46014
+    },
+    "year_dropped x grouped": {
+      "accuracy": 0.9142339731981166,
+      "f1": 0.9539944047248989,
+      "n": 46014
+    },
+    "year_dropped x random": {
+      "accuracy": 0.916256157635468,
+      "f1": 0.9550404480398258,
+      "n": 46014
+    }
+  },
+  "config_hash": "c72fe37a143deffa0b60734fad3bb2599a05f651819f96c340eb669c9fe8b2b7",
+  "config_hash_scheme": 2,
+  "dataset": {
+    "columns": [
+      "year",
+      "day",
+      "length",
+      "weight",
+      "count",
+      "looped",
+      "neighbors",
+      "income"
+    ],
+    "matches_paper_counts": true,
+    "n_negative": 2875284,
+    "n_positive": 41413,
+    "n_rows": 2916697,
+    "positive_rate": 0.014198595191752863,
+    "ransomware_families": 28,
+    "source": "BitcoinHeistData.csv"
+  },
+  "git_rev": "8ba94a9",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "published_accuracy": 0.9898,
+  "published_f1": 0.99,
+  "purpose": "M7-6 H4 \u2014 year/day feature engineering",
+  "q10_best_accuracy": 0.954,
+  "q10_best_f1": 0.9749,
+  "reference_run_id": "20260913T014037Z-47d61ade",
+  "resample": {
+    "drawn_from_rows": 2916697,
+    "n_negative": 4601,
+    "n_positive": 41413,
+    "n_rows": 46014,
+    "positive_fraction": 0.9,
+    "share_of_dataset": 0.01577606450035777
+  },
+  "run_id": "20260924T222403Z-bff1613f",
+  "seed": 20260912
+}

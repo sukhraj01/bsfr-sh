@@ -1,0 +1,34 @@
+{
+  "config_hash": "c72fe37a143deffa0b60734fad3bb2599a05f651819f96c340eb669c9fe8b2b7",
+  "config_hash_scheme": 2,
+  "git_rev": "8ba94a9",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "published_accuracy": 0.9898,
+  "published_f1": 0.99,
+  "purpose": "M7-6 H5 \u2014 stacked worst case",
+  "q10_best_accuracy": 0.954,
+  "q10_best_f1": 0.9749,
+  "reference_run_id": "20260913T014037Z-47d61ade",
+  "result": {
+    "accuracy": 0.9746666666666667,
+    "address": "kept",
+    "criterion": "entropy",
+    "delta_vs_published": -0.015133333333333332,
+    "f1": 0.9860662951012027,
+    "feature_variant": "year_day_interaction",
+    "n": 200000,
+    "n_negative": 20000,
+    "n_positive": 180000,
+    "resample_strategy": "oversample",
+    "split": "random"
+  },
+  "run_id": "20260924T222413Z-98a839c9",
+  "seed": 20260912
+}

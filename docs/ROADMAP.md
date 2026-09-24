@@ -157,6 +157,15 @@ published. Revised the honest `paper_mode` figure to address-dropped x **grouped
 See `docs/DEVIATIONS.md` DEV-06. **D6 retired in M4b:** `scripts/run_detection.py` now groups by
 address too, so the production pipeline and the ablation script agree.
 
+**M7-6, closed 2026-09-25 (stretch follow-up, not a numbered M7 item).** Tested the three
+remaining Q10-style hypotheses — splitting criterion, resample strategy, single-split variance vs.
+CV — plus feature engineering and a programmatically-stacked worst case
+(`scripts/m7_6_gap_closure.py`, `detection/gap_closure.py`). Oversampling (bootstrap-duplicating
+ransomware rows) under a non-grouped split is a materially larger leakage mechanism than either
+Q10 candidate; the fully-stacked worst case reaches 0.9747/0.9861, **1.51 points short of
+published** — tighter than Q10's 3.58, still not zero. `docs/DEVIATIONS.md` DEV-06 amended,
+`RESULTS.md` M7-6, report §"M7-6".
+
 ### M4b — the honeypot backend and Alg. 3 `[x]`
 
 - [x] `detection/dataset.py` — `HoneypotBackend`/`load_from_chain`, decrypted from `BC_SigRW`;

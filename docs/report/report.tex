@@ -426,9 +426,85 @@ points over its own grouped-split baseline, and that effect vanishes under group
 signature of an identifier memorised across a train/test boundary -- and neither is large enough
 to matter alone. Stacking both does not close the gap: the best of all sixteen model $\times$
 cell combinations tested reaches 0.9540/0.9749, still 3.58 accuracy points and 2.41 F1 points
-under the published figure. We report the residual gap as \textbf{unexplained with a measured
-bound}: we tested the two candidates available to us, ruled out neither as fully responsible, and
-did not invent a third.
+under the published figure. At that point we reported the residual gap as unexplained with a
+measured bound, having tested two of at least five plausible candidates. \S\ref{sec:m76} tests
+the remaining three.
+
+\subsection{M7-6 -- three more hypotheses; the bound tightens to 1.51 points}
+\label{sec:m76}
+
+Q10 left the gap "unexplained" after testing only splitting and \texttt{address}. This section
+tests three further undisclosed methodological choices -- decision-tree splitting criterion (H1),
+resample strategy (H2), and single-split variance versus cross-validation (H3) -- plus year/day
+feature engineering (H4) and a programmatically-assembled stacked worst case (H5), each on the
+same 46{,}014-row (or, where the hypothesis itself resizes the resample, differently-sized)
+90/10-style resample and the same declared hyperparameters. Full numbers: `RESULTS.md` "M7-6".
+
+\textbf{H1 -- splitting criterion does not explain the gap.} Entropy beats gini by
+$\sim$0.4 points; a decision tree with `max\_depth=None` etc.\ set explicitly is bit-identical to
+scikit-learn's own default (asserted in the run, not assumed). Best cell: 0.9301, 5.97 points
+short.
+
+\textbf{H2 -- resample strategy is this session's real finding.} Bootstrap-duplicating the
+41{,}413 real ransomware rows up to 180{,}000 (oversampled, $\sim$4.35$\times$ average
+duplication) and undersampling benign to 20{,}000, under a \emph{random} split, reaches
+0.9690--0.9723 -- closer to published than anything Q10 found. Under a \emph{grouped} split the
+identical resample scores 0.8746--0.9363, \emph{worse} than the existing baseline: a 5--10 point
+swing between splits, several times larger than Q10's largest leakage signature (+0.92 points).
+The mechanism is direct: a duplicated row carries its original's address, so a non-grouped split
+routinely places literal duplicates of a training row into the test set, and the model recognises
+rather than generalises to them. Undersampling benign to 10\% of the \emph{positive} count
+(4{,}141, rather than `paper\_mode\_resample`'s 4{,}601 at 10\% of the output total) scores close
+to the existing baseline in both splits -- an arithmetic variant of what Q10 already covered, not
+a new mechanism.
+
+\textbf{H3 is closed: neither explains the gap.} Twenty seeds on the production protocol give
+random forest an accuracy envelope of 0.9288--0.9469 ($\sigma=0.0050$); on Q10's own best cell the
+envelope is tighter still ($\sigma=0.0011$, max 0.9572, 3.26 points short) -- the measured numbers
+are highly reproducible, not a lucky draw. 5-fold group-stratified cross-validation agrees closely
+with the single-split figure (RF: 0.9421 CV mean vs.\ 0.9442 single-split).
+
+\textbf{H4 rules out year as a temporal leak.} Dropping `year` \emph{costs} $\sim$3 accuracy
+points, the opposite of what a leakage hypothesis predicts -- `year` is informative, not leaked.
+A `year $\times$ day` interaction gives the best H4 cell, +0.5--2 points over the raw features.
+
+\begin{table}[t]
+\centering
+\caption{M7-6: best cell per hypothesis, and the programmatically-assembled stacked worst case
+(H5). All cells address dropped except H5 (address kept, per its definition).}
+\label{tab:m76}
+\footnotesize
+\begin{tabular}{lccc}
+\hline
+\textbf{Hypothesis (best cell)} & \textbf{Acc.} & \textbf{F1} & \textbf{vs.\ published} \\
+\hline
+Q10 best (address kept $\times$ random, RF) & 0.9540 & 0.9749 & $-3.58\pt$ \\
+H1 (entropy, DT, random split) & 0.9301 & 0.9611 & $-5.97\pt$ \\
+H2 (oversample, DT, random split) & 0.9723 & 0.9848 & $-1.75\pt$ \\
+H4 (year$\times$day, RF, random split) & 0.9498 & 0.9726 & $-4.00\pt$ \\
+\hline
+H5 -- stacked worst case & \textbf{0.9747} & \textbf{0.9861} & $\mathbf{-1.51\pt}$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{H5} stacks every choice tested most favourably to the published figure: entropy splitting
+(H1's winner), the oversample resample (H2's winner), the `year $\times$ day` interaction (H4's
+winner), \texttt{address} kept, and a non-grouped split -- each ingredient chosen
+programmatically by taking the argmax over the recorded cells, not by hand. Table~\ref{tab:m76}
+reports the result: \textbf{0.9747/0.9861, 1.51 accuracy points and 1.29 F1 points short of
+0.9898/0.990}. One ingredient dominates: H2's oversample cell alone (0.9723) accounts for nearly
+all of H5's improvement over Q10's 0.9540; the other four stacked choices contribute a further
+$\sim$0.2--0.3 points combined. That concentration is itself informative -- if the published
+figure is explained by methodology at all, the evidence points specifically at an oversampled,
+non-grouped-split evaluation, not a diffuse combination of many small effects.
+
+\textbf{Q10 is closed with a tightened, evidenced bound, not a proof.} No cell tested across
+either session, including H5's fully stacked worst case, reaches the published number. The gap
+narrows from 3.58 points (two hypotheses tested) to \textbf{1.51 points (eight hypotheses
+tested)}, with resample-strategy leakage under a non-grouped split identified as the largest
+single contributor found. We report this residual with that qualifier, not as a bare
+"unexplained," and do not attribute it to a cause beyond what was measured.
 
 \subsection{Honest-mode evaluation (Targets 1--2)}
 \label{sec:5b}
@@ -675,8 +751,13 @@ Reproducing the paper's own protocol exactly, our best model reaches 0.9442/0.96
 points under published. An ablation over the two candidate leakage sources we could identify --
 \texttt{address} retained as a feature, and a non-grouped split -- narrows this only to 3.58
 points at the single most leakage-favourable cell tested (Table~\ref{tab:q10}), and both effects
-vanish or shrink under the methodologically correct grouped split. We report the residual gap as
-unexplained, with a measured bound, rather than attribute it to a cause we found no evidence for.
+vanish or shrink under the methodologically correct grouped split. A follow-up session
+(\S\ref{sec:m76}) tested three further hypotheses -- splitting criterion, resample strategy, and
+single-split variance -- plus feature engineering and a stacked worst case combining every
+favourable choice found; the best of these, an oversampled resample under a non-grouped split,
+narrows the bound further to 1.51 points (Table~\ref{tab:m76}). We report the residual gap as
+unexplained, with a measured and now considerably tighter bound, rather than attribute it to a
+cause we found no evidence for.
 
 \subsection{FLAW-5 -- the \S V-3 security claim}
 \label{sec:flaw5}

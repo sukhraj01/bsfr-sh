@@ -1,0 +1,116 @@
+{
+  "cells": {
+    "oversample x decision_tree x grouped": {
+      "accuracy": 0.874615397408818,
+      "f1": 0.9269795147464768,
+      "n": 200000,
+      "n_negative": 20000,
+      "n_positive": 180000
+    },
+    "oversample x decision_tree x random": {
+      "accuracy": 0.9723166666666667,
+      "f1": 0.9847733418893524,
+      "n": 200000,
+      "n_negative": 20000,
+      "n_positive": 180000
+    },
+    "oversample x random_forest x grouped": {
+      "accuracy": 0.9362516007783525,
+      "f1": 0.9643750058089281,
+      "n": 200000,
+      "n_negative": 20000,
+      "n_positive": 180000
+    },
+    "oversample x random_forest x random": {
+      "accuracy": 0.9690166666666666,
+      "f1": 0.9830542464654567,
+      "n": 200000,
+      "n_negative": 20000,
+      "n_positive": 180000
+    },
+    "undersample x decision_tree x grouped": {
+      "accuracy": 0.9282947152985893,
+      "f1": 0.9605279040759667,
+      "n": 45554,
+      "n_negative": 4141,
+      "n_positive": 41413
+    },
+    "undersample x decision_tree x random": {
+      "accuracy": 0.9290941021513245,
+      "f1": 0.9610827744086108,
+      "n": 45554,
+      "n_negative": 4141,
+      "n_positive": 41413
+    },
+    "undersample x random_forest x grouped": {
+      "accuracy": 0.9508807835684526,
+      "f1": 0.973520371975727,
+      "n": 45554,
+      "n_negative": 4141,
+      "n_positive": 41413
+    },
+    "undersample x random_forest x random": {
+      "accuracy": 0.9500219522903556,
+      "f1": 0.9730879861302651,
+      "n": 45554,
+      "n_negative": 4141,
+      "n_positive": 41413
+    }
+  },
+  "config_hash": "c72fe37a143deffa0b60734fad3bb2599a05f651819f96c340eb669c9fe8b2b7",
+  "config_hash_scheme": 2,
+  "dataset": {
+    "columns": [
+      "year",
+      "day",
+      "length",
+      "weight",
+      "count",
+      "looped",
+      "neighbors",
+      "income"
+    ],
+    "matches_paper_counts": true,
+    "n_negative": 2875284,
+    "n_positive": 41413,
+    "n_rows": 2916697,
+    "positive_rate": 0.014198595191752863,
+    "ransomware_families": 28,
+    "source": "BitcoinHeistData.csv"
+  },
+  "git_rev": "8ba94a9",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "published_accuracy": 0.9898,
+  "published_f1": 0.99,
+  "purpose": "M7-6 H2 \u2014 resample strategy",
+  "q10_best_accuracy": 0.954,
+  "q10_best_f1": 0.9749,
+  "reference_run_id": "20260913T014037Z-47d61ade",
+  "run_id": "20260924T221940Z-266f103e",
+  "seed": 20260912,
+  "strategies": {
+    "oversample": {
+      "drawn_from_rows": 2916697,
+      "n_negative": 20000,
+      "n_positive": 180000,
+      "n_rows": 200000,
+      "positive_fraction": 0.9,
+      "share_of_dataset": 0.06857071543598804
+    },
+    "undersample": {
+      "drawn_from_rows": 2916697,
+      "n_negative": 4141,
+      "n_positive": 41413,
+      "n_rows": 45554,
+      "positive_fraction": 0.9090968959915704,
+      "share_of_dataset": 0.015618351854854995
+    }
+  }
+}
