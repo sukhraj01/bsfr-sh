@@ -4,38 +4,46 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-22 · **Milestone:** results reconfirmed under D3's honest condition; report recompile still blocked · **Sessions completed:** 18
+**Last updated:** 2026-09-24 · **Milestone:** M7-4 done (pBFT vs Raft comparison); report recompile
+still blocked · **Sessions completed:** 19
 
 ---
 
 ## One-line status
 
-This session re-verified every timing/detection number the report presents, now that D3 (prior
-session) showed consensus serialization adds real cost the original M6a numbers never paid.
+This session answered the question FLAW-5 leaves open (does BSFR-SH's 4-node deployment need
+Byzantine tolerance, or would crash-fault-tolerant Raft do more cheaply?) by implementing Raft
+alongside pBFT and benchmarking both.
 
-- **Re-ran the full M6a bench matrix with `configs/bench.yaml`'s `serialize_messages: true`**
-  (already the current default since D3 closed — no code change needed, just a run). Marginal
-  per-block cost stays flat (DEV-08 survives), confirming the amortisation-shape claim holds
-  regardless of serialization. **The BC_SigRW/BC_DTBU gap narrows from 35-45% (serialization off)
-  to ~25-27% (serialization on)** — a real, explained finding (both chains pay a near-identical
-  absolute serialization tax, which dilutes but doesn't reverse the structural ECDSA/encoding
-  attribution), not noise. `RESULTS.md` new section, `docs/DEVIATIONS.md` DEV-08/DEV-30 amended,
-  `docs/EXPERIMENTS.md` Targets 3-4 updated.
-- **Re-ran M4a (`make repro`, `make honest`) and M4b (`run_phase3_detection.py`) at their
-  published seeds — all byte-reproducible**, exactly matching existing `RESULTS.md` lines. One
-  near-miss caught and fixed: `make honest` overwrote `results/tables/table2_honest_mode.csv`'s
-  canonical Ada full-scale KNN row with the local-subsampled numbers; caught via `git status`
-  immediately and reverted with `git checkout --` before committing anything.
-- **`docs/report/report.tex` updated** (D3 footnote on both timing tables + new "Supplementary:
-  timing under honest, serialization-on conditions" subsection with its own table), **but not
-  recompiled** — `brew install --cask basictex` was retried (the task's suggested first move) and
-  got further than last session (cask resolved, download started) but stalled at ~55/110 MB on a
-  slow CTAN mirror at the ~23-minute mark and was stopped there, per the task's own 20-minute
-  installation cap. `report.pdf` is now stale across **two** sessions (missing both M7-3's
-  adversarial-robustness section and this session's supplementary material).
+- **`consensus/raft.py`** (new): a scoped-down Raft (leader election, log replication, majority
+  commit, failover) over the same bus and `ClientRequest` auth path as pBFT. No signatures in the
+  consensus path, by design — that asymmetry is the comparison's point. Scope reductions (no log
+  compaction/membership changes/snapshotting, one entry in flight, no retransmission) mirror the
+  precedent DEV-20 already set for pBFT's own view-change reduction.
+- **`consensus/interface.py`** (new): `ConsensusCluster`, a `Protocol` both `pbft.Cluster` and
+  `raft.RaftCluster` satisfy, so `framework._block_pipeline` no longer imports a specific
+  consensus module. Small, targeted refactor (`chain_name`/`network`/`replicas` declared as
+  read-only `@property` members so mypy checks them covariantly — a plain-attribute protocol
+  member would demand invariant compatibility no concrete `dict` subtype satisfies). Production
+  phases (`phase1_backup`, `phase2_collection`) untouched, still pBFT-only.
+- **Measured (not estimated), `RESULTS.md` M7-4, run `20260924T045952Z-2eaa456f`:** pBFT sends a
+  flat 28 messages/block in every case; Raft converges to ~16.8/block (~60% of pBFT's count at
+  `n=4` — real, but far short of the O(n)-vs-O(n^2) asymptotic gap a larger cluster would show).
+  Signature ops: pBFT = its own message count exactly; Raft = 0, every cell. **Timing gap (Raft
+  7-11% faster) is much smaller than the message-count gap (~40% fewer)** — confirms DEV-08/DEV-21
+  a second way: consensus messaging is a small fraction of wall-clock time at zero simulated
+  delay, so cutting it buys a proportionally smaller speedup than the message count alone suggests.
+- **The qualitative half — a byzantine Raft leader forks honest followers with a single faulty
+  node** (pBFT needs two colluding, per FLAW-5's own bound): different, honestly-signed
+  transaction sets sent to different followers at one log index, both "commit" locally, neither
+  side's own chain-integrity check catches it. Standing regression test:
+  `tests/unit/test_raft_byzantine.py`. Crash tolerance (1-of-4 silent) is symmetric — both
+  protocols still commit.
+- `docs/DEVIATIONS.md` DEV-32 (full writeup), `docs/report/report.tex` new §"Consensus Comparison:
+  pBFT vs.\ Raft" (source only — see Blockers), `docs/ARCHITECTURE.md` §consensus, `docs/ROADMAP.md`
+  M7 ticked.
 
-`make test` (1348 passed) and `make lint` (ruff + mypy) both green — no `src/`/`tests/` changes
-this session.
+`make test` (1360+ tests, all new Raft tests included) and `make lint` (ruff + mypy) both green.
 
 ---
 
@@ -43,42 +51,38 @@ this session.
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session |
-| `docs/report/report.tex` | done, **needs recompile (2 sessions stale)** | M7-3's section + this session's D3 supplement both added, neither ever rendered |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | `consensus/raft.py` + `consensus/interface.py` added this session |
+| `docs/report/report.tex` | done, **needs recompile (3 sessions stale)** | M7-3's section, D3's supplement, and this session's M7-4 section all added, none ever rendered |
 | `verification/` | done (M7-1) | unchanged |
 | `docs/STORAGE_ANALYSIS.md` | done (M7-2) | unchanged |
 | `scripts/run_adversarial_robustness.py` | done (M7-3) | unchanged |
-| Results reconfirmation (bench + detection, honest/serialization-on condition) | done | this session — see One-line status |
+| `scripts/run_consensus_comparison.py` | done (M7-4) | new this session — the pBFT/Raft matrix + fault tests |
 
 ## Current numbers
 
-New this session: `RESULTS.md` "Bench reconfirmation — serialization ON" section (six
-`bench/target3-time-serialized` lines, run `20260922T172916Z-22992372`) and the "M4a/M4b —
-reconfirmed byte-reproducible" pointer block. Everything else unchanged since M7-3.
+New this session: `RESULTS.md` "M7-4 — pBFT vs Raft consensus comparison" section, run
+`20260924T045952Z-2eaa456f`. Everything else unchanged since the last session.
 
 ## Next task
 
-**Get a working LaTeX toolchain and compile `docs/report/report.pdf`.** This is now the clear,
-singular next action — nothing else is blocked on anything else. Specifics for whoever picks this
-up: `brew install --cask basictex` is the right cask (small, ~100-110 MB, not full `mactex`'s
-~4 GB) but the default CTAN mirror this environment resolved to
-(`mirrors.in3.sahilister.net`) was too slow twice now, once here at ~23 minutes/55 MB. Try a
-different network, a pinned faster mirror, or a pre-existing install. After installing:
-`cd docs/report && pdflatex report.tex` twice (cross-references), then check every table/figure
-renders — specifically the M7-3 figures and this session's new supplementary subsection — before
-committing `report.pdf`.
+**Get a working LaTeX toolchain and compile `docs/report/report.pdf`.** Unchanged from the last
+two sessions — still the clear, singular next action. `brew install --cask basictex` is the right
+cask (~100-110 MB, not full `mactex`'s ~4 GB) but the default CTAN mirror this environment
+resolves to has been too slow to finish twice now. Try a different network, a pinned faster
+mirror, or a pre-existing install. After installing: `cd docs/report && pdflatex report.tex` twice
+(cross-references), then check every table/figure renders — specifically M7-3's figures, the D3
+supplement, and this session's M7-4 table and section — before committing `report.pdf`.
 
 **After that**, one optional M7 stretch item remains (`docs/ROADMAP.md` M7, not required for the
 deliverable): hybrid blockchain, the paper's own listed future work.
 
 ## Blockers
 
-**No LaTeX toolchain in this environment, twice confirmed.** See Next task above for the specific
-retry information (cask, mirror, time-to-stall). `docker`/`pdflatex`/`xelatex`/`latexmk` all
-absent from `PATH`.
+**No LaTeX toolchain in this environment, three times confirmed.** See Next task above. `docker`/
+`pdflatex`/`xelatex`/`latexmk` all absent from `PATH`.
 
-`data/raw/` is present in this environment already (used this session for `make repro`/`make
-honest`); a genuinely fresh clone still needs `make data` (~56 minutes) first.
+`data/raw/` is present in this environment already; a genuinely fresh clone still needs
+`make data` (~56 minutes) first.
 
 ## Open questions
 
@@ -97,10 +101,10 @@ honest`); a genuinely fresh clone still needs `make data` (~56 minutes) first.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 tested and ruled out address/split leakage; report states the gap as measured-but-unexplained |
-| `docs/report/report.pdf` is stale relative to `report.tex` (2 sessions now) | a reader of the PDF misses §Adversarial Robustness and the D3 supplement | this file states it plainly every session until compiled; do not treat `report.pdf` as current |
-| `make honest` (local) overwrites `table2_honest_mode.csv`'s canonical Ada full-scale KNN row with locally-subsampled numbers | a careless re-run silently downgrades the honest_mode table | now documented here; anyone running `make honest` locally must `git diff` that file afterward and revert if it changed, or regenerate the Ada row |
+| `docs/report/report.pdf` is stale relative to `report.tex` (3 sessions now) | a reader of the PDF misses §Adversarial Robustness, the D3 supplement, and §Consensus Comparison | this file states it plainly every session until compiled; do not treat `report.pdf` as current |
 | Scyther binary not committed (third-party, single-platform) | a fresh clone can't re-run the verification without a manual download | exact release URL + sha256 in `verification/README.md`; the raw output is committed, so the claims don't depend on re-running it |
 | The BC_SigRW/BC_DTBU timing gap is condition-dependent (35-45% off, ~25-27% on) | a reader citing "the gap" without saying which condition is wrong half the time | both figures now in `RESULTS.md`/`docs/EXPERIMENTS.md`/the report supplement, each labelled with its condition |
+| Raft's message-count ratio (~60% of pBFT) is measured only at `n=4`; a reader might extrapolate the O(n)/O(n^2) asymptotic gap and expect a bigger number | over-claiming Raft's advantage at other cluster sizes | `docs/DEVIATIONS.md` DEV-32 and the report both state the ratio is small-`n`-specific, not the asymptotic one |
 
 ---
 

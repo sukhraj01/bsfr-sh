@@ -964,3 +964,85 @@ real) kept for provenance, and the Ada run (all four models at the true 2,916,69
 2700090) that `results/tables/table2_honest_mode.csv` now carries. KNN's full-scale MCC (0.365)
 is meaningfully higher than its subsampled MCC (0.300) — more data helps KNN too, which the
 paper's own evaluation methodology never had the chance to show either way.
+
+### DEV-32 · ADD+FILL · Raft as a comparison consensus protocol, and the `ConsensusCluster` abstraction
+**Paper:** §VII names pBFT with no justification for choosing it over any alternative, and §V-3's
+own defence of that choice is FLAW-5 — a borrowed 51% threshold applied to a protocol whose real
+safety bound is a third. The paper never asks whether its own deployment (four cloud servers the
+operator controls) actually needs Byzantine fault tolerance, or whether a crash-fault-tolerant
+protocol gives the same availability more cheaply.
+
+**Ours (M7-4):** `consensus/raft.py` implements a simplified Raft (Ongaro & Ousterhout) over the
+same four-node cluster, message bus (`consensus.network.P2PCSNetwork`, unchanged) and
+`ClientRequest` submitter-authentication path (`consensus.protocol.check_request_identity`,
+unchanged) as pBFT — differing only in the consensus protocol, which is what makes the M7-4
+comparison a controlled one rather than two unrelated benchmarks. `framework._block_pipeline` was
+made consensus-agnostic via `consensus.interface.ConsensusCluster`, a `Protocol` both
+`pbft.Cluster` and `raft.RaftCluster` satisfy structurally; production phases
+(`phase1_backup`, `phase2_collection`) are untouched and still wired to pBFT only, since the paper
+mandates it there. `docs/report/report.tex` §"Consensus Comparison: pBFT vs.\ Raft" and
+`RESULTS.md` M7-4 carry the full write-up and numbers; this entry records the design decisions and
+scope reductions.
+
+**Scope reductions, and why they don't matter for this comparison** (the same discipline DEV-20
+already established for pBFT's own view-change reduction):
+- **No log compaction, membership changes, or snapshotting.** Cases 1-3 commit at most 15 entries;
+  nothing here ever needs to discard log history or reconfigure a running cluster.
+- **One log entry in flight at a time**, mirroring pBFT's own one-height-in-flight rule (DEV-20
+  item 3) — the fairest basis for comparison is giving both protocols the same discipline
+  everywhere except the thing being compared. This also removes most of real Raft's
+  `nextIndex`-backtracking complexity: with one entry ever in flight, the previous entry is either
+  already committed everywhere or not yet sent.
+- **No retransmission** — the same reduction pBFT already accepted (DEV-20 item 6). A dropped
+  message is never resent; a heartbeat resend or an election timeout is the only recovery.
+- **No signatures in the Raft consensus path**, by design rather than omission —
+  `RequestVote`/`AppendEntries` carry no ECDSA signature at all, unlike pBFT's `VOTE_FIELDS`
+  (DEV-19). This is not a missing feature; it is the mechanism the whole comparison exists to
+  measure (`consensus.pbft.Cluster.signature_ops` vs. `consensus.raft.RaftCluster.signature_ops`,
+  always zero for the latter).
+
+**The client-trust asymmetry is a finding, not an oversight.** `ConsensusCluster` requires a
+`client_confirmation_threshold()`: pBFT's is `f+1` (at least one of that many replicas is honest —
+the same reasoning as `Membership.join_quorum`), because any single pBFT replica might be lying.
+Raft's is `1`: a non-byzantine Raft replica only ever reflects an entry the leader already
+confirmed via a real majority (`RaftCluster.commit_index` only advances past `RaftPolicy.majority`
+acks), so re-deriving that majority client-side would just repeat a check the protocol already
+made. This is exactly the trust model the Byzantine-leader finding below breaks.
+
+**Quantitative finding (measured, `RESULTS.md` M7-4, run `20260924T045952Z-2eaa456f`).** pBFT
+sends a flat 28 messages/committed-block in every case (`O(n^2)` fan-out at fixed `n=4`); Raft
+converges to ~16.8/block (`O(n)` fan-out plus a leader-driven commit-announcement round) — about
+60% of pBFT's count at this small `n`, far short of the asymptotic gap a larger cluster would show.
+Signature operations: pBFT's exactly equal its own message count (one ECDSA op per consensus
+message); Raft's are exactly zero, every cell. **The wall-clock gap (7-11% faster for Raft) is far
+smaller than the message-count gap (~40% fewer messages)** — consistent with DEV-08/DEV-21's
+existing finding that consensus messaging is a small fraction of measured time at zero simulated
+network delay: hybrid encryption and (serialization-on, DEV-30) message encoding dominate, so
+cutting the message count produces a proportionally smaller speedup. The bottleneck this project's
+own numbers already located is confirmed a second, independent way.
+
+**Qualitative finding — the Byzantine leader (measured, same run;
+`tests/unit/test_raft_byzantine.py` pins it as a standing regression test).** A byzantine Raft
+leader sends genuinely different, honestly-signed transaction sets to different followers at one
+log index, each claiming the entry already committed — standard-compliant `AppendEntries` on both
+sides, no forged signature required. Every node "commits" by its own local rule: all four reach
+the same height, but the two sides hold different, individually valid, individually well-linked
+blocks. Neither side's own chain-integrity check (`Chain.verify_integrity`) catches this, because
+both blocks are genuinely well-formed — the check that would catch it is cross-referencing what a
+majority of *other* replicas independently attest to, which is exactly pBFT's `2f+1`
+matching-vote quorum (DEV-10) and exactly what Raft's leader-trust model never does. Crash
+tolerance is symmetric: 1-of-4 silently crashed, both protocols still commit on the remaining
+three (same tolerated failure *count*, `f=1` vs. Raft's majority-of-4, different failure *model*).
+
+**The trade-off, stated precisely, not left implicit.** Raft is faster and sends fewer messages,
+but a single compromised leader corrupts the chain undetectably. Whether that trade-off is
+acceptable depends on whether the deployment's threat model includes active server compromise —
+exactly the question §V-3 never asks, because it substitutes a borrowed 51% figure for an actual
+threat-model argument (FLAW-5). For BSFR-SH specifically, whose own §II threat model includes a
+compromised or malicious cloud server, this is the paper's implicit justification for choosing
+pBFT over the cheaper alternative — but it is a justification the paper never states, which is the
+gap this session closes.
+
+**Impact on reproduction:** none. No paper number is measured differently; this is a new
+comparison the paper never makes, reported alongside the existing pBFT-only Target 3/4 numbers,
+never merged into them.

@@ -72,8 +72,12 @@ __all__ = [
     "decode_message",
     "encode_message",
     "resign",
+    "unwire_block",
+    "unwire_transaction",
     "verify_commit_certificate",
     "verify_prepared_certificate",
+    "wire_block",
+    "wire_transaction",
 ]
 
 
@@ -577,7 +581,7 @@ Message = ClientRequest | Proposal | Prepare | Commit | ViewChange | NewView
 # `Block`, ...), and a generic `Mapping[Any, Value]` has no way to state that without losing the
 # static types `mypy --strict` checks everywhere else in this module. `decode()` raising on
 # malformed bytes is still what actually protects this at runtime.
-def _wire_transaction(tx: Transaction) -> dict[str, Value]:
+def wire_transaction(tx: Transaction) -> dict[str, Value]:
     return dict(tx.to_fields())
 
 
@@ -593,7 +597,7 @@ def _list(value: Value, what: str) -> list[Value]:
     return value
 
 
-def _unwire_transaction(value: Value) -> Transaction:
+def unwire_transaction(value: Value) -> Transaction:
     v = _map(value, "transaction")
     return Transaction(
         tx_id=cast(str, v["tx_id"]),
@@ -606,11 +610,11 @@ def _unwire_transaction(value: Value) -> Transaction:
     )
 
 
-def _wire_block(block: Block) -> dict[str, Value]:
+def wire_block(block: Block) -> dict[str, Value]:
     return {
         "owner_id": block.owner_id,
         "owner_pubkey": block.owner_pubkey,
-        "transactions": [_wire_transaction(t) for t in block.transactions],
+        "transactions": [wire_transaction(t) for t in block.transactions],
         "prev_hash": block.prev_hash,
         "timestamp": block.timestamp,
         "version": block.version,
@@ -619,13 +623,13 @@ def _wire_block(block: Block) -> dict[str, Value]:
     }
 
 
-def _unwire_block(value: Value) -> Block:
+def unwire_block(value: Value) -> Block:
     v = _map(value, "block")
     txs = _list(v["transactions"], "block.transactions")
     return Block(
         owner_id=cast(str, v["owner_id"]),
         owner_pubkey=cast(bytes, v["owner_pubkey"]),
-        transactions=tuple(_unwire_transaction(t) for t in txs),
+        transactions=tuple(unwire_transaction(t) for t in txs),
         prev_hash=cast(bytes, v["prev_hash"]),
         timestamp=cast(float, v["timestamp"]),
         version=cast(int, v["version"]),
@@ -637,7 +641,7 @@ def _unwire_block(value: Value) -> Block:
 def _wire_client_request(request: ClientRequest) -> dict[str, Value]:
     return {
         "chain": request.chain,
-        "transactions": [_wire_transaction(t) for t in request.transactions],
+        "transactions": [wire_transaction(t) for t in request.transactions],
         "timestamp": request.timestamp,
         "submitter_id": request.submitter_id,
         "signature": request.signature,
@@ -649,7 +653,7 @@ def _unwire_client_request(value: Value) -> ClientRequest:
     txs = _list(v["transactions"], "client-request.transactions")
     return ClientRequest(
         chain=cast(str, v["chain"]),
-        transactions=tuple(_unwire_transaction(t) for t in txs),
+        transactions=tuple(unwire_transaction(t) for t in txs),
         timestamp=cast(float, v["timestamp"]),
         submitter_id=cast(str, v["submitter_id"]),
         signature=cast(bytes, v["signature"]),
@@ -706,13 +710,13 @@ def _unwire_commit(value: Value) -> Commit:
 def _wire_proposal(proposal: Proposal) -> dict[str, Value]:
     return {
         "pre_prepare": _wire_vote(proposal.pre_prepare),
-        "block": _wire_block(proposal.block),
+        "block": wire_block(proposal.block),
     }
 
 
 def _unwire_proposal(value: Value) -> Proposal:
     v = _map(value, "proposal")
-    return Proposal(_unwire_pre_prepare(v["pre_prepare"]), _unwire_block(v["block"]))
+    return Proposal(_unwire_pre_prepare(v["pre_prepare"]), unwire_block(v["block"]))
 
 
 def _wire_view_change(vc: ViewChange) -> dict[str, Value]:
@@ -748,7 +752,7 @@ def _wire_prepared_certificate(cert: PreparedCertificate) -> dict[str, Value]:
     return {
         "pre_prepare": _wire_vote(cert.pre_prepare),
         "prepares": [_wire_vote(p) for p in cert.prepares],
-        "block": _wire_block(cert.block),
+        "block": wire_block(cert.block),
     }
 
 
@@ -758,7 +762,7 @@ def _unwire_prepared_certificate(value: Value) -> PreparedCertificate:
     return PreparedCertificate(
         pre_prepare=_unwire_pre_prepare(v["pre_prepare"]),
         prepares=tuple(_unwire_prepare(p) for p in prepares),
-        block=_unwire_block(v["block"]),
+        block=unwire_block(v["block"]),
     )
 
 

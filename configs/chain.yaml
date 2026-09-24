@@ -39,6 +39,14 @@ consensus:
                                   #   the fast, unserialised bus. `bench.harness` turns this on so
                                   #   Figs. 6(a)-(d) pay the real encode/decode cost DEV-30
                                   #   quantified from an estimate instead of assuming it.
+  raft:                           # DECLARED — M7-4/DEV-32. The comparison protocol, not the
+                                  #   paper's own (PAPER §VII names only pBFT). `miner_nodes` above
+                                  #   is reused as Raft's node count; nothing here is re-literalled
+                                  #   in `consensus/raft.py`.
+    election_timeout_min_s: 0.15  # Randomized in [min, max) per node, seeded (CLAUDE.md §4b) —
+    election_timeout_max_s: 0.30  #   the standard Raft device against split votes.
+    heartbeat_interval_s: 0.05    # Must stay well under election_timeout_min_s or a live leader's
+                                  #   own heartbeats can't outrace its followers' timeouts.
 
 block:
   version: 1

@@ -66,6 +66,7 @@ from bsfr_sh.blockchain.transaction import (
     encrypt_signature_record,
 )
 from bsfr_sh.consensus.pbft import Cluster, PBFTPolicy
+from bsfr_sh.consensus.raft import RaftCluster, RaftPolicy
 from bsfr_sh.crypto.ecdsa import PrivateKey, PublicKey, keypair_from_secret, sign
 from bsfr_sh.crypto.hashing import h
 from bsfr_sh.framework import _block_pipeline as pipeline
@@ -119,6 +120,9 @@ class BenchPolicy:
     modelled_delay_s: float
     modelled_delay_sweep_s: tuple[float, ...]
     pbft: PBFTPolicy
+    #: M7-4 — the comparison protocol. Not read by anything before that session; every M6a call
+    #: site keeps passing `pbft_policy=` explicitly and ignores this field.
+    raft: RaftPolicy
 
     @classmethod
     def from_config(cls, bench_config: Config, chain_config: Config) -> BenchPolicy:
@@ -143,6 +147,10 @@ class BenchPolicy:
             # `network.serialize_messages` turns it on for every bench run (D3, closed).
             pbft=replace(
                 PBFTPolicy.from_config(chain_config),
+                serialize_messages=bool(bench_config.get("network.serialize_messages", True)),
+            ),
+            raft=replace(
+                RaftPolicy.from_config(chain_config),
                 serialize_messages=bool(bench_config.get("network.serialize_messages", True)),
             ),
         )
@@ -232,22 +240,42 @@ def _cluster(
     *,
     chain_name: str,
     id_prefix: str,
-    policy: PBFTPolicy,
+    pbft_policy: PBFTPolicy | None = None,
+    raft_policy: RaftPolicy | None = None,
     seed: int,
     submitters: Mapping[str, PublicKey],
-) -> Cluster:
-    """A fresh cluster of `policy.replicas` nodes, keyed from `seed` (CLAUDE.md §4b)."""
-    ids = tuple(f"{id_prefix}_{index}" for index in range(policy.replicas))
-    keys = {rid: keypair_from_secret(seed + index + 1).private for index, rid in enumerate(ids)}
-    genesis = build_genesis(owner_id=ids[0], private_key=keys[ids[0]], timestamp=0.0)
-    return Cluster(
-        chain_name=chain_name,
-        keys=keys,
-        genesis=genesis,
-        policy=policy,
-        seed=seed,
-        submitters=submitters,
-    )
+) -> Cluster | RaftCluster:
+    """A fresh cluster of `policy.replicas` nodes, keyed from `seed` (CLAUDE.md §4b).
+
+    Exactly one of `pbft_policy`/`raft_policy` is given (M7-4) — the same key-derivation and
+    genesis-construction code either way, so a timing difference between the two clusters this
+    builds can never be attributed to how they were set up.
+    """
+    if pbft_policy is not None and raft_policy is None:
+        ids = tuple(f"{id_prefix}_{index}" for index in range(pbft_policy.replicas))
+        keys = {rid: keypair_from_secret(seed + i + 1).private for i, rid in enumerate(ids)}
+        genesis = build_genesis(owner_id=ids[0], private_key=keys[ids[0]], timestamp=0.0)
+        return Cluster(
+            chain_name=chain_name,
+            keys=keys,
+            genesis=genesis,
+            policy=pbft_policy,
+            seed=seed,
+            submitters=submitters,
+        )
+    if raft_policy is not None and pbft_policy is None:
+        ids = tuple(f"{id_prefix}_{index}" for index in range(raft_policy.replicas))
+        keys = {rid: keypair_from_secret(seed + i + 1).private for i, rid in enumerate(ids)}
+        genesis = build_genesis(owner_id=ids[0], private_key=keys[ids[0]], timestamp=0.0)
+        return RaftCluster(
+            chain_name=chain_name,
+            keys=keys,
+            genesis=genesis,
+            policy=raft_policy,
+            seed=seed,
+            submitters=submitters,
+        )
+    raise ValueError("exactly one of pbft_policy/raft_policy must be given")
 
 
 # --------------------------------------------------------------------------------------------
@@ -265,6 +293,10 @@ class RunMeasurement:
     block_seconds: tuple[float, ...]
     index_seconds: float | None
     last_block: Block
+    #: M7-4. Total bus messages / consensus-message ECDSA ops across the whole run — `0` for a
+    #: field never populated by a caller that doesn't pass it (every M6a call site).
+    message_count: int = 0
+    signature_ops: int = 0
 
     @property
     def total_compute_seconds(self) -> float:
@@ -281,16 +313,23 @@ def run_once(
     blocks: int,
     transactions_per_block: int,
     payload_bytes: int,
-    pbft_policy: PBFTPolicy,
+    pbft_policy: PBFTPolicy | None = None,
+    raft_policy: RaftPolicy | None = None,
     seed: int,
     tag: str,
 ) -> RunMeasurement:
     """Build a fresh cluster and commit `blocks` blocks, one `ClientRequest` at a time.
 
     Each block's timer starts before its transactions are built and stops once the pipeline
-    reports it committed (`f+1` replicas holding it — `_block_pipeline._committed`'s rule), so
-    the measured span is exactly `configs/bench.yaml`'s block_construction + consensus + append.
-    Nothing here calls `BackupIndex` inside that loop (DEV-05) — see below.
+    reports it committed (`_block_pipeline._committed`'s rule — `f+1` replicas for pBFT, `1` for
+    Raft, `consensus.interface.ConsensusCluster.client_confirmation_threshold`), so the measured
+    span is exactly `configs/bench.yaml`'s block_construction + consensus + append. Nothing here
+    calls `BackupIndex` inside that loop (DEV-05) — see below.
+
+    Exactly one of `pbft_policy`/`raft_policy` is given (M7-4, DEV-32) — everything else about
+    this function (transaction construction, timing span, index cost) is identical either way,
+    which is what makes the two protocols' numbers comparable rather than measuring two different
+    experiments.
     """
     id_prefix = "CS" if chain_name == BC_DTBU else "HP"
     collector = keypair_from_secret(seed + 90_001)
@@ -298,11 +337,16 @@ def run_once(
     cluster = _cluster(
         chain_name=chain_name,
         id_prefix=id_prefix,
-        policy=pbft_policy,
+        pbft_policy=pbft_policy,
+        raft_policy=raft_policy,
         seed=seed,
         submitters={submitter_id: collector.public},
     )
-    wait_s = pbft_policy.view_change_timeout_s * _WAIT_TIMEOUTS
+    if pbft_policy is not None:
+        wait_s = pbft_policy.view_change_timeout_s * _WAIT_TIMEOUTS
+    else:
+        assert raft_policy is not None
+        wait_s = raft_policy.election_timeout_max_s * _WAIT_TIMEOUTS
 
     block_seconds: list[float] = []
     for block_index in range(blocks):
@@ -343,6 +387,8 @@ def run_once(
         block_seconds=tuple(block_seconds),
         index_seconds=index_seconds,
         last_block=chain.head(),
+        message_count=cluster.network.stats.sent,
+        signature_ops=cluster.signature_ops,
     )
 
 
@@ -426,6 +472,10 @@ class CaseResult:
     totals_seconds: tuple[float, ...]
     marginal_seconds: tuple[float, ...]
     index_seconds: float | None
+    #: M7-4. Empty tuples for every M6a call site that doesn't pass a protocol at all — see
+    #: `median_message_count`/`median_signature_ops`.
+    message_counts: tuple[int, ...] = ()
+    signature_ops_counts: tuple[int, ...] = ()
 
     @property
     def median_total_seconds(self) -> float:
@@ -444,6 +494,14 @@ class CaseResult:
         """DEV-08: derived, never separately measured. `tps = total_tx / total_seconds`."""
         return self.transaction_count / self.median_total_seconds
 
+    @property
+    def median_message_count(self) -> float:
+        return statistics.median(self.message_counts) if self.message_counts else 0.0
+
+    @property
+    def median_signature_ops(self) -> float:
+        return statistics.median(self.signature_ops_counts) if self.signature_ops_counts else 0.0
+
 
 def run_case(
     *,
@@ -452,7 +510,8 @@ def run_case(
     blocks: int,
     transactions_per_block: int,
     payload_bytes: int,
-    pbft_policy: PBFTPolicy,
+    pbft_policy: PBFTPolicy | None = None,
+    raft_policy: RaftPolicy | None = None,
     base_seed: int,
     repeats: int,
     warmup_runs: int,
@@ -460,7 +519,8 @@ def run_case(
     """Warm-up runs discarded, then `repeats` independent runs, aggregated to a median.
 
     Each run gets its own seed (`base_seed + k`) and therefore its own cluster and transactions
-    — repeats measure run-to-run wall-clock spread, not the same computation replayed.
+    — repeats measure run-to-run wall-clock spread, not the same computation replayed. Exactly one
+    of `pbft_policy`/`raft_policy` is given, same rule as `run_once` (M7-4, DEV-32).
     """
     kept: list[RunMeasurement] = []
     for k in range(warmup_runs + repeats):
@@ -470,6 +530,7 @@ def run_case(
             transactions_per_block=transactions_per_block,
             payload_bytes=payload_bytes,
             pbft_policy=pbft_policy,
+            raft_policy=raft_policy,
             seed=base_seed + k,
             tag=f"{case}-{chain_name}-{k}",
         )
@@ -495,6 +556,8 @@ def run_case(
         totals_seconds=totals,
         marginal_seconds=marginal,
         index_seconds=index_seconds,
+        message_counts=tuple(m.message_count for m in kept),
+        signature_ops_counts=tuple(m.signature_ops for m in kept),
     )
 
 
@@ -550,7 +613,7 @@ def verify_modelled_network_formula(
     cluster = _cluster(
         chain_name=chain_name,
         id_prefix=id_prefix,
-        policy=policy,
+        pbft_policy=policy,
         seed=seed,
         submitters={submitter_id: collector.public},
     )

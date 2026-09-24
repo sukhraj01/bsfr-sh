@@ -478,3 +478,47 @@ perturbation. But a median-effort *adaptive* adversary needs only ~32% of the ev
 quarter of ransomware samples are trivially evadable. Figures:
 `results/figures/fig7{a,b,c}_{single_feature_degradation,combined_evasion,adaptive_evasion_histogram}.png`,
 each with a sidecar JSON alongside it.
+
+---
+
+## M7-4 — pBFT vs Raft consensus comparison
+
+`scripts/run_consensus_comparison.py --seed 20260924`: cases 1-3, both chains, both consensus
+protocols, serialization on (same condition as `bench/target3-time-serialized`), 5 repeats/1
+warmup each. Sidecar `results/logs/20260924T045952Z-2eaa456f.json`. `docs/DEVIATIONS.md` DEV-32,
+`docs/report/report.tex` \S "Consensus Comparison: pBFT vs.\ Raft".
+
+```
+2026-09-24 | consensus/m7-4-comparison | pbft BC_DTBU case_1 5blk x 100tx, n=5 | seconds=0.27080 tps=1846.4 messages=140 sig_ops=140 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | raft BC_DTBU case_1 5blk x 100tx, n=5 | seconds=0.24608 tps=2031.8 messages=92 sig_ops=0 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | pbft BC_SigRW case_1 5blk x 100tx, n=5 | seconds=0.33965 tps=1472.1 messages=140 sig_ops=140 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | raft BC_SigRW case_1 5blk x 100tx, n=5 | seconds=0.31417 tps=1591.5 messages=92 sig_ops=0 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | pbft BC_DTBU case_2 10blk x 100tx, n=5 | seconds=0.54898 tps=1821.6 messages=280 sig_ops=280 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | raft BC_DTBU case_2 10blk x 100tx, n=5 | seconds=0.49230 tps=2031.3 messages=172 sig_ops=0 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | pbft BC_SigRW case_2 10blk x 100tx, n=5 | seconds=0.68066 tps=1469.2 messages=280 sig_ops=280 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | raft BC_SigRW case_2 10blk x 100tx, n=5 | seconds=0.63781 tps=1567.9 messages=172 sig_ops=0 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | pbft BC_DTBU case_3 15blk x 100tx, n=5 | seconds=0.84327 tps=1778.8 messages=420 sig_ops=420 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | raft BC_DTBU case_3 15blk x 100tx, n=5 | seconds=0.74997 tps=2000.1 messages=252 sig_ops=0 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | pbft BC_SigRW case_3 15blk x 100tx, n=5 | seconds=1.02303 tps=1466.2 messages=420 sig_ops=420 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+2026-09-24 | consensus/m7-4-comparison | raft BC_SigRW case_3 15blk x 100tx, n=5 | seconds=0.94830 tps=1581.8 messages=252 sig_ops=0 | measured | 20260924T045952Z-2eaa456f | serialization ON, DEV-32
+```
+
+**Messages are flat per block, at two different levels: pBFT 28/block in every case; Raft
+converges to ~16.8/block as leader-election's one-time cost amortises** (`18.4 -> 17.2 -> 16.8`
+across cases 1-3). Raft sends ~60% of pBFT's message count at this `n=4` — real, but far short of
+the O(n)-vs-O(n^2) asymptotic gap a larger cluster would show. **Signature operations: pBFT
+matches its own message count exactly (one ECDSA op per consensus message); Raft is exactly zero
+in every cell** — no signing in the consensus path by design. **Timing gap (7-11%) is much smaller
+than the message-count gap (~40%)**: consistent with DEV-08/DEV-21 — consensus messaging is a
+small fraction of measured wall-clock at zero simulated network delay, so a smaller message count
+buys a proportionally smaller speedup; hybrid encryption and (serialization-on) message encoding
+dominate.
+
+**Qualitative — same run, fixed small scale (3 blocks, 1-of-4 node crashed/byzantine):**
+`crash_tolerance_pbft`/`crash_tolerance_raft`: both protocols commit all 3 blocks on the 3 live
+replicas with 1 node silently crashed from the start (`live_heights` all `3`).
+`raft_byzantine_fork`: a byzantine Raft leader sends genuinely different, honestly-signed
+transaction sets to different followers at one log index; all four nodes reach height 2, but two
+of three followers hold block hash `ebd2c097fd90b599...` and the third holds
+`a6cf98b3bdd0447e...` — a real, undetected fork, each side individually chain-valid. Reproduced as
+a standing regression test, `tests/unit/test_raft_byzantine.py`.

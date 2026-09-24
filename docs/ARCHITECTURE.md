@@ -164,6 +164,20 @@ wall-clock, so M6 reads measured compute and modelled network time separately.
 wrong-signature, stale-view, plus a colluding pair used to pin the `f` bound. Each is a
 `Behaviour` set on a running `Replica`; the protocol code has no knowledge of them.
 
+**`consensus/raft.py` and `consensus/interface.py` (M7-4, DEV-32).** A second consensus protocol,
+built to answer the question FLAW-5 leaves open: does this deployment need Byzantine tolerance, or
+would crash-fault-tolerant Raft do at lower cost? `RaftCluster`/`RaftNode` reuse `network.py`'s bus
+and `protocol.py`'s `ClientRequest`/`check_request_identity` unchanged, differing from pBFT only in
+the consensus messages themselves (`RequestVote`/`AppendEntries`, unsigned by design — the
+mechanism the comparison measures). `interface.ConsensusCluster` is the `Protocol` that lets
+`framework._block_pipeline` drive either cluster without importing either concrete module;
+`chain_name`/`network`/`replicas` are declared as read-only `@property` members there so mypy
+checks them covariantly (a concrete `dict[str, Replica]` never satisfies an invariant
+`Mapping[str, ReplicaLike]` attribute). Production phases stay pBFT-only; only `bench.harness` and
+`scripts/run_consensus_comparison.py` build a `RaftCluster`. Full design, scope reductions (no log
+compaction/membership changes/snapshotting, one entry in flight, no retransmission) and the
+Byzantine-leader finding: `consensus/raft.py`'s module docstring and DEV-32.
+
 ---
 
 ## `honeypot/` — the layer the paper omits (GAP-3)

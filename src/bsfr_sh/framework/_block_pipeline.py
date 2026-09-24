@@ -3,8 +3,14 @@
 docs/ALGORITHMS.md says Alg. 2 lines 3-10 are "structurally identical to Alg. 1 lines 2-10.
 Factor once." This module is that factoring, built before Phase 2 exists so that M3b adds a payload
 builder and nothing else. A phase supplies two things: a **payload builder** that turns one of its
-items into encrypted transactions, and the **`Cluster` of the chain** those transactions go to. The
+items into encrypted transactions, and a **cluster** of the chain those transactions go to. The
 pipeline does the rest:
+
+`cluster` is typed against `consensus.interface.ConsensusCluster`, not a specific protocol module
+(M7-4, DEV-32): `consensus.pbft.Cluster` and `consensus.raft.RaftCluster` both satisfy it, and
+this module never imports either. Production phases (`phase1_backup`, `phase2_collection`) are
+still wired to pBFT only — the paper mandates it — but the boundary this module exposes is what
+lets `bench.harness` run the identical pipeline against Raft for the M7-4 comparison.
 
 | Step | Alg. 1 | Alg. 2 | Here |
 |---|---|---|---|
@@ -39,7 +45,7 @@ from typing import TypeVar
 
 from bsfr_sh.blockchain.chain import Chain
 from bsfr_sh.blockchain.transaction import Transaction
-from bsfr_sh.consensus.pbft import Cluster
+from bsfr_sh.consensus.interface import ConsensusCluster
 from bsfr_sh.crypto.ecdsa import PrivateKey
 from bsfr_sh.util.config import Config
 from bsfr_sh.util.logging import event, get_logger
@@ -123,7 +129,7 @@ def batch(transactions: Sequence[Transaction], size: int) -> tuple[tuple[Transac
 
 
 def run(
-    cluster: Cluster,
+    cluster: ConsensusCluster,
     items: Iterable[T],
     builder: Callable[[T], Sequence[Transaction]],
     *,
@@ -155,7 +161,7 @@ def run(
 
 
 def commit(
-    cluster: Cluster,
+    cluster: ConsensusCluster,
     batches: Sequence[tuple[Transaction, ...]],
     *,
     timestamp: float,
@@ -179,7 +185,7 @@ def commit(
     ]
     network = cluster.network
     deadline = network.now + wait_s
-    tick = cluster.policy.message_delay_s or cluster.policy.view_change_timeout_s
+    tick = cluster.tick_seconds()
     while True:
         cluster.run(until=network.now)
         done = _committed(cluster, request_ids)
@@ -208,8 +214,10 @@ def commit(
     return result
 
 
-def _committed(cluster: Cluster, request_ids: Sequence[bytes]) -> dict[bytes, CommittedRequest]:
-    """Requests that `f+1` replicas hold, at one height, in one block. See the module docstring."""
+def _committed(
+    cluster: ConsensusCluster, request_ids: Sequence[bytes]
+) -> dict[bytes, CommittedRequest]:
+    """Requests enough replicas hold, at one height, in one block. See the module docstring."""
     wanted = set(request_ids)
     holders: dict[tuple[bytes, int, bytes], int] = {}
     sizes: dict[tuple[bytes, int, bytes], int] = {}
@@ -221,7 +229,7 @@ def _committed(cluster: Cluster, request_ids: Sequence[bytes]) -> dict[bytes, Co
                 key = (block.merkle_root, height, block.current_hash)
                 holders[key] = holders.get(key, 0) + 1
                 sizes[key] = block.transaction_count
-    needed = cluster.policy.f + 1
+    needed = cluster.client_confirmation_threshold()
     return {
         key[0]: CommittedRequest(key[0], key[1], key[2], sizes[key])
         for key, count in holders.items()
@@ -229,13 +237,14 @@ def _committed(cluster: Cluster, request_ids: Sequence[bytes]) -> dict[bytes, Co
     }
 
 
-def read_chain(cluster: Cluster) -> Chain:
-    """The longest chain whose head `f+1` replicas agree on: a committed chain to read from.
+def read_chain(cluster: ConsensusCluster) -> Chain:
+    """The longest chain enough replicas agree on the head of: a committed chain to read from.
 
-    Uses the client rule again, so that a reader never takes one replica's word for what the chain
-    holds.
+    Uses the client rule again (`cluster.client_confirmation_threshold()`), so that a reader
+    never blindly takes one replica's word for what the chain holds where the protocol itself
+    would not.
     """
-    needed = cluster.policy.f + 1
+    needed = cluster.client_confirmation_threshold()
     chains = sorted((r.chain for r in cluster.replicas.values()), key=len, reverse=True)
     for candidate in chains:
         height = candidate.height

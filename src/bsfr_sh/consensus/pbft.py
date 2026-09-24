@@ -264,6 +264,15 @@ class Replica:
         self._progress_timer: Timer | None = None
         self._vc_timer: Timer | None = None
         self.rejections: list[Rejection] = []
+        #: ECDSA sign+verify calls on *consensus* messages (pre-prepare/prepare/commit/
+        #: view-change/new-view) — DEV-32's M7-4 comparison against Raft, which signs none of
+        #: its own. Excludes block signing/verification (`blockchain`'s concern, paid by both
+        #: protocols alike) and `ClientRequest` (paid by both, since Raft still authenticates
+        #: submitters the same way — DEV-20 item 5). View-change/new-view verification is not
+        #: instrumented granularly (`consensus.view_change`'s helpers call `.verify()` internally
+        #: without a hook back into this counter); the benchmark's happy-path runs never trigger
+        #: a view change, so this only undercounts a code path the comparison does not measure.
+        self.signature_ops = 0
 
         network.register(replica_id, self.receive)
 
@@ -356,8 +365,10 @@ class Replica:
             reason = RejectReason.OUT_OF_WINDOW
         elif vote.view < self.view or vote.view > self.view + self.policy.log_window:
             reason = RejectReason.WRONG_VIEW
-        elif not vote.verify(key):
-            reason = RejectReason.BAD_SIGNATURE
+        else:
+            self.signature_ops += 1
+            if not vote.verify(key):
+                reason = RejectReason.BAD_SIGNATURE
         if reason is not None:
             self._reject(reason, kind, vote.replica_id, f"view={vote.view} seq={vote.seq}")
             return False
@@ -432,6 +443,7 @@ class Replica:
                 replica_id=self.replica_id,
                 key=self._private_key,
             )
+            self.signature_ops += 1
             slot.prepares[self.replica_id] = prepare
             self._broadcast(prepare)
         self._check_prepared(slot)
@@ -502,6 +514,7 @@ class Replica:
             replica_id=self.replica_id,
             key=self._private_key,
         )
+        self.signature_ops += 1
         slot.commits.setdefault(self.replica_id, commit)
         self._broadcast(commit)
         self._check_committed(slot)
@@ -606,6 +619,7 @@ class Replica:
                 replica_id=self.replica_id,
                 key=self._private_key,
             )
+            self.signature_ops += 1
             proposal = Proposal(pre_prepare, block)
             self._accept_proposal(proposal, validated=True)
             self._broadcast(proposal)
@@ -852,6 +866,19 @@ class Cluster:
 
     def heights(self) -> dict[str, int]:
         return {rid: r.height for rid, r in self.replicas.items()}
+
+    def client_confirmation_threshold(self) -> int:
+        """`f+1` — `consensus.interface.ConsensusCluster`'s client-trust rule for pBFT."""
+        return self.policy.f + 1
+
+    def tick_seconds(self) -> float:
+        """`consensus.interface.ConsensusCluster`'s poll granularity while a request is pending."""
+        return self.policy.message_delay_s or self.policy.view_change_timeout_s
+
+    @property
+    def signature_ops(self) -> int:
+        """Total consensus-message ECDSA operations across every replica — see `Replica`."""
+        return sum(r.signature_ops for r in self.replicas.values())
 
     def __repr__(self) -> str:
         return f"Cluster({self.chain_name}, {self.heights()}, t={self.network.now:.3f})"

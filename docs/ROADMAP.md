@@ -246,6 +246,10 @@ existing baseline convention). Variance is reported and the repeat count follows
       evade with <=5% perturbation), report §Adversarial Robustness, `RESULTS.md` M7-3 (2026-09-22)
 - [x] Storage-cost analysis for on-chain backups (GAP-2) — `docs/STORAGE_ANALYSIS.md`, three
       scenarios, frequency lever, on-chain-hash alternative + ratio (2026-09-19)
+- [x] Consensus comparison, pBFT vs Raft (FLAW-5's unanswered question: is BFT worth its cost for
+      a 4-node operator-controlled deployment?) — `consensus/raft.py`, `consensus.interface`
+      makes `framework._block_pipeline` consensus-agnostic, `docs/DEVIATIONS.md` DEV-32,
+      `RESULTS.md` M7-4, report §"Consensus Comparison: pBFT vs.\ Raft" (2026-09-24)
 - [ ] Async pBFT with realistic network latency
 - [ ] Hybrid blockchain, which the paper lists as its own future work
 
