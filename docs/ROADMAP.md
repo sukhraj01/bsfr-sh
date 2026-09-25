@@ -2,8 +2,8 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — real malware transfer evaluation (M7-7)
-delivered; async pBFT with modelled network latency is the one remaining, not-required item**
+**Current milestone: write-up done; M7 (stretch) — adversarial retraining (M7-8) delivered;
+async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -274,6 +274,17 @@ existing baseline convention). Variance is reported and the repeat count follows
       (clean transfer failure: bal_acc=0.5000, pr_auc below the no-skill baseline — a
       schema-grounding finding, not a generator-calibration one), report §"Real Malware Transfer
       Evaluation" (2026-09-25)
+- [x] Adversarial retraining — does hardening the detector on M7-3's own perturbed positives buy
+      robustness, and at what cost? `detection/adversarial.py` (M7-3's perturbation/curve/adaptive
+      machinery, factored out so M7-3 and M7-8 share one tested implementation; M7-3's own script
+      left untouched), `detection/retraining.py` (`augment_positive_rows`, K=5 perturbed copies
+      per positive training row, no-op at 0% budget so the degenerate case reproduces the
+      original fit exactly), `scripts/m7_8_adversarial_retraining.py`, `RESULTS.md` M7-8
+      (non-monotonic finding: 25% training budget is *worse* than no hardening on both clean
+      accuracy and robustness; 50%/100% budgets trade 8-10pt of clean recall for real robustness,
+      but the mechanism is narrow — the model learns "near the evasion bound" as its own
+      ransomware signature rather than a deeper representation), report §"Adversarial Retraining"
+      (2026-09-25)
 
 ---
 

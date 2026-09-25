@@ -753,3 +753,81 @@ the CIC datasets are gated behind a research-access request, not a scriptable do
 (github.com/urwithajit9/ClaMP) was used instead — real, labelled, openly published for ML
 research, fetched once and committed at `data/external/clamp/` (1.28MB, sha256 in its README) for
 full reproducibility, used for evaluation only per the session's own constraint.
+
+---
+
+## M7-8 — adversarial retraining: does hardening the detector work? (2026-09-25)
+
+`scripts/m7_8_adversarial_retraining.py --seed 20260912`: reuses M7-3's committed-CSV pipeline,
+top-5 features and physical bounds (`detection.adversarial`, factored out of
+`run_adversarial_robustness.py` this session so both experiments share one tested
+implementation — M7-3's own script is left untouched to avoid regression risk on an already-
+published result). Augments the training draw's 717 positive rows with `K=5` perturbed copies
+each (`detection.retraining.augment_positive_rows`), one independent `Uniform(0, budget)` fraction
+per top-5 feature per copy, moved toward that feature's own evasion bound — swept at training
+budgets 0% (degenerate sanity check), 25%, 50%, 100%. The eval corpus (731 rows, 353 malicious)
+is never perturbed at training time; every clean-accuracy number below scores the same untouched
+eval set M7-3 used. Full method and figures: `docs/report/report.tex` §"Adversarial Retraining";
+sidecar `results/logs/20260925T052030Z-31a79c4a.json`.
+
+```
+2026-09-25 | detection/honeypot-adversarial-retraining | original model, clean eval | bal_acc=0.8408 prec=0.8415 rec=0.8272 mcc=0.6822 pr_auc=0.9111 | measured | 20260925T052030Z-31a79c4a | M7-8, cf. M7-3 0.8408
+2026-09-25 | detection/honeypot-adversarial-retraining | original model, adaptive evasion | p10=0.0000 median=0.3213 p90=0.9771 | measured | 20260925T052030Z-31a79c4a | M7-8, reproduces M7-3 exactly
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @0% training budget (degenerate), clean eval, train_n=1467 | bal_acc=0.8408 reproduces_original_exactly=True | measured | 20260925T052030Z-31a79c4a | M7-8, sanity check
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @25% training budget, clean eval, train_n=5052 | bal_acc=0.7803 prec=0.8858 rec=0.6374 mcc=0.5884 pr_auc=0.9094 | measured | 20260925T052030Z-31a79c4a | M7-8, -6.05pt vs. baseline
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @25% training budget, adaptive evasion | p10=0.0000 median=0.2499 p90=0.9510 survivors=1/353 | measured | 20260925T052030Z-31a79c4a | M7-8, median WORSE than original's 0.3213
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @25% training budget, combined evasion at frac=1.0 | bal_acc=0.463 | measured | 20260925T052030Z-31a79c4a | M7-8, below the 0.50 useless-detector line; original floor was 0.570
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @25% training budget, top-5 importance shift | sum_before=0.4553 sum_after=0.4044 | measured | 20260925T052030Z-31a79c4a | M7-8
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @50% training budget, clean eval, train_n=5052 | bal_acc=0.7616 prec=0.8447 rec=0.6317 mcc=0.5444 pr_auc=0.8843 | measured | 20260925T052030Z-31a79c4a | M7-8, -7.92pt vs. baseline
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @50% training budget, adaptive evasion | p10=0.0000 median=0.8825 p90=1.0000 survivors=125/353 | measured | 20260925T052030Z-31a79c4a | M7-8, median far above original's 0.3213
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @50% training budget, combined evasion at frac=1.0 | bal_acc=0.696 | measured | 20260925T052030Z-31a79c4a | M7-8, above original floor 0.570
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @50% training budget, top-5 importance shift | sum_before=0.4553 sum_after=0.2966 | measured | 20260925T052030Z-31a79c4a | M7-8
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @100% training budget, clean eval, train_n=5052 | bal_acc=0.7363 prec=0.8280 rec=0.5864 mcc=0.4979 pr_auc=0.8702 | measured | 20260925T052030Z-31a79c4a | M7-8, -10.45pt vs. baseline
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @100% training budget, adaptive evasion | p10=0.0000 median=1.0000 p90=1.0000 survivors=184/353 | measured | 20260925T052030Z-31a79c4a | M7-8, never flips at the median
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @100% training budget, combined evasion curve | frac=0.0:0.736 frac=0.4:0.877 frac=1.0:0.888 | measured | 20260925T052030Z-31a79c4a | M7-8, monotonically INCREASING with perturbation
+2026-09-25 | detection/honeypot-adversarial-retraining | hardened model @100% training budget, top-5 importance shift | sum_before=0.4553 sum_after=0.2309 | measured | 20260925T052030Z-31a79c4a | M7-8
+```
+
+**The degenerate case reproduces the original model exactly** (`train_n=1467`, unchanged — 0%
+budget adds zero augmentation rows by design, `detection.retraining`'s no-op path — rather than
+5 x 717 exact-duplicate positive rows, which would have changed `RandomForestClassifier`'s
+bootstrap sampling and broken bit-identical reproduction for no informational gain).
+
+**Clean-accuracy cost is real and grows monotonically with training budget**: -6.05pt (25%),
+-7.92pt (50%), -10.45pt (100%), driven almost entirely by falling recall (0.8272 → 0.6374 →
+0.6317 → 0.5864) — the hardened models increasingly refuse to call genuine, unperturbed
+ransomware "ransomware." Precision stays high or improves (0.8415 → 0.886/0.845/0.828): the
+models are not becoming noisier, they are becoming more conservative.
+
+**Robustness is non-monotonic in training budget — the headline finding.** At 25%, the hardened
+model is *worse* than doing nothing: median adaptive perturbation to evade drops from the
+original's 0.3213 to 0.2499, and the combined-evasion curve, unlike the original's floor of
+~0.57, crosses the 0.50 useless-detector line at full perturbation (0.463) — hardening at a
+narrow training budget teaches the model a region (small perturbations) at the cost of the
+region it never saw (large ones). At 50% and 100%, the opposite happens and strongly: median
+adaptive perturbation jumps to 0.8825 and 1.0000, and the combined-evasion curve *rises* with
+perturbation instead of falling (100% budget: 0.736 at 0% eval-time perturbation → 0.888 at
+100%) — the hardened model has learned that values sitting at or near the top-5 features'
+evasion bounds are themselves a strong ransomware signature, because a large fraction of its
+own augmented positive training rows sit exactly there. That mechanism is real robustness
+against *this* attack shape, but it is pattern-matching on the augmentation's own footprint, not
+a deeper representation — untested against any attack that does not resemble "features pushed
+toward their historical evasion bound."
+
+**The failure mode occurs, partially.** Top-5 importance sum falls from 0.4553 to 0.4044 (25%),
+0.2966 (50%), 0.2309 (100%) — a real, budget-proportional redistribution away from the original
+top-5, never collapsing to near-zero. The features gaining importance are consistently
+`directory_breadth`, `entropy_delta` and `key_generation_events` — none perturbed in this
+experiment. This is the session's own test criterion's partial case: not "solved robustness by
+discarding the top-5 entirely," but a real, measured shift of reliance onto features an attacker
+could target next, which this session does not test (out of scope: no new attack round against
+the hardened models' own new top-5).
+
+**Pareto trade-off:** clean balanced accuracy vs. median adaptive perturbation to evade,
+`results/figures/fig9d_pareto_clean_vs_robustness.png`. Not a smooth curve — 25% is dominated by
+the original (worse on both axes); only 50% and 100% trade clean accuracy for robustness in the
+expected direction, and 100%'s gain over 50% (median 1.0 vs 0.8825) is small next to its
+additional clean-recall cost (0.5864 vs 0.6317 recall).
+
+Figures: `results/figures/fig9{a,b,c,d}_{clean_accuracy_cost,combined_degradation_overlay,
+adaptive_evasion_comparison,pareto_clean_vs_robustness}.png`, each with the shared sidecar above.

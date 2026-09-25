@@ -1058,6 +1058,152 @@ features that no attacker can \emph{choose their own value of} at will, could ne
 this question, because it is a question about behavioural features an attacker actually controls.
 Only the framework path this project built makes it a question with a measured answer.
 
+\section{Adversarial Retraining: Does Hardening the Detector Work?}
+\label{sec:m7-8}
+
+\S\ref{sec:adversarial} measured the attack. This section measures a candidate defense: if the
+ensemble is fit on a training draw that already contains perturbed positives, do the fragile
+samples become robust, and what does that cost on clean data? The training draw's 717 positive
+rows are each augmented with $K=5$ perturbed copies, one independent
+$\mathrm{Uniform}(0,\,\mathrm{budget})$ fraction per top-5 feature per copy, moved toward that
+feature's own evasion bound (Table~\ref{tab:top5}) -- negative rows and the eval corpus are never
+touched. Three training budgets are swept -- 25\%, 50\%, 100\% of each feature's evasion range --
+plus a 0\% degenerate case as a pure sanity check. All perturbation and scoring machinery is
+identical to \S\ref{sec:adversarial}'s (`detection.adversarial`, factored out this session so both
+experiments share one tested implementation rather than two copies that could silently drift).
+
+\textbf{The degenerate case reproduces the original model exactly.} At 0\% budget, augmentation is
+a no-op by design (`detection.retraining.augment\_positive\_rows`) rather than five duplicate
+copies of every positive row: duplicating would still change
+\texttt{RandomForestClassifier}'s bootstrap sampling for zero new information, breaking bit-exact
+reproduction. Measured: \texttt{train\_n=1467} (unchanged), \texttt{bal\_acc=0.8408}, identical to
+\S\ref{sec:adversarial}'s baseline to the last recorded digit.
+
+\begin{table}[t]
+\centering
+\caption{Clean-eval cost of adversarial retraining. Baseline: bal.\ acc.\ 0.8408, precision
+0.8415, recall 0.8272, MCC 0.6822.}
+\label{tab:m7-8-cost}
+\footnotesize
+\begin{tabular}{lccccc}
+\hline
+\textbf{Budget} & \textbf{Bal.\ Acc.} & \textbf{$\Delta$} & \textbf{Prec.} & \textbf{Rec.} & \textbf{MCC} \\
+\hline
+25\%  & 0.7803 & $-6.05$pt  & 0.886 & 0.637 & 0.588 \\
+50\%  & 0.7616 & $-7.92$pt  & 0.845 & 0.632 & 0.544 \\
+100\% & 0.7363 & $-10.45$pt & 0.828 & 0.586 & 0.498 \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{The cost is real and grows monotonically with training budget} (Table~\ref{tab:m7-8-cost},
+Figure~\ref{fig:m7-8-cost}), driven almost entirely by falling recall (0.8272 $\to$ 0.586 at
+100\%) rather than rising false positives -- precision stays high throughout. The hardened models
+are not noisier; they are more conservative, increasingly refusing to call genuine, unperturbed
+ransomware "ransomware."
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig9a_clean_accuracy_cost.png}
+\caption{Clean-eval metrics, original vs.\ hardened at each training budget.}
+\label{fig:m7-8-cost}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig9b_combined_degradation_overlay.png}
+\caption{Combined evasion (\S\ref{sec:adversarial}'s attack) against the original model and each
+hardened model.}
+\label{fig:m7-8-overlay}
+\end{figure}
+
+\textbf{Robustness is non-monotonic in training budget -- the headline finding.} At 25\% budget,
+the hardened model is \emph{worse} than doing nothing: median adaptive perturbation to evade falls
+from the original's 0.3213 to 0.2499, and the combined-evasion curve
+(Figure~\ref{fig:m7-8-overlay}) crosses the 0.50 useless-detector line at full perturbation
+(0.463), something the original model's own floor (0.570) never did. A narrow training budget
+teaches the model the small-perturbation region at the cost of the large-perturbation region it
+never saw during training -- hardening that backfires against a stronger attacker than the one it
+was tuned against. At 50\% and 100\% budget the opposite happens, sharply: median adaptive
+perturbation rises to 0.8825 and 1.0000, and the 100\%-budget combined-evasion curve
+\emph{increases} with perturbation instead of falling (0.736 at 0\% eval-time perturbation
+$\to$ 0.888 at 100\%, Table~\ref{tab:m7-8-adaptive}). The mechanism: a large fraction of the
+hardened model's own positive training rows sit at or near the top-5 features' evasion bounds, so
+the model learns "values at the bound" as a strong ransomware signature in its own right. That is
+genuine, measured robustness against \S\ref{sec:adversarial}'s specific attack shape -- but it is
+pattern-matching on the augmentation's own footprint, not a deeper representation, and is untested
+against any attack that does not resemble "features pushed toward their historical evasion
+bound."
+
+\begin{table}[t]
+\centering
+\caption{Adaptive evasion: minimum $L_\infty$ perturbation to flip, original vs.\ hardened.}
+\label{tab:m7-8-adaptive}
+\footnotesize
+\begin{tabular}{lccc}
+\hline
+\textbf{Model} & \textbf{p10} & \textbf{median} & \textbf{p90} \\
+\hline
+original (\S\ref{sec:adversarial}) & 0.000 & 0.321 & 0.977 \\
+hardened @25\% & 0.000 & 0.250 & 0.951 \\
+hardened @50\% & 0.000 & 0.883 & 1.000 \\
+hardened @100\% & 0.000 & 1.000 & 1.000 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig9c_adaptive_evasion_comparison.png}
+\caption{p10/median/p90 minimum perturbation to evade, original vs.\ each hardened budget.}
+\label{fig:m7-8-adaptive}
+\end{figure}
+
+\textbf{The "throws away signal" failure mode occurs, partially.} The session's own test
+criterion: does the hardened model solve robustness by driving top-5 importance to near zero
+rather than learning a robust representation? Top-5 importance sum falls from 0.4553 (original)
+to 0.4044 (25\%), 0.2966 (50\%), 0.2309 (100\%) -- a real, budget-proportional redistribution,
+never collapsing to near zero. The features consistently gaining importance --
+\texttt{directory\_breadth}, \texttt{entropy\_delta}, \texttt{key\_generation\_events} -- are none
+of them perturbed in this experiment. This is the partial case the test anticipated: not
+"solved robustness by discarding the top-5 entirely," but a real, measured shift of reliance onto
+features an attacker could target next, which a follow-up session would need a new perturbation
+round against the hardened models' own new top-5 to test.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig9d_pareto_clean_vs_robustness.png}
+\caption{Clean balanced accuracy vs.\ median adaptive perturbation to evade -- the deployment
+trade-off, one point per training budget.}
+\label{fig:m7-8-pareto}
+\end{figure}
+
+\textbf{The Pareto trade-off is not a smooth curve.} Figure~\ref{fig:m7-8-pareto}: 25\% budget is
+strictly dominated by the original model (worse clean accuracy \emph{and} worse robustness); only
+50\% and 100\% trade clean accuracy for robustness in the direction a defender would want, and
+100\%'s marginal robustness gain over 50\% (median 1.000 vs.\ 0.883) is small next to its
+additional clean-recall cost (0.586 vs.\ 0.632 recall) -- 50\% budget is the more defensible
+operating point of the three tested, not 100\%.
+
+\textbf{Conclusion: adversarial retraining is a real but narrow, expensive defense.} At a
+well-chosen budget it measurably hardens the detector against \S\ref{sec:adversarial}'s specific
+attack -- median evasion effort rises from needing a third of the evasion range to needing nearly
+all of it. But every budget that helps costs 8-10 points of clean balanced accuracy, driven by
+recall, meaning a hardened deployment would silently miss more real, unperturbed ransomware in
+exchange for resisting an adversary sophisticated enough to know the top-5 features and their
+physical bounds. And the mechanism behind the gain -- learning that near-bound feature values are
+themselves suspicious -- is exactly the kind of narrow, augmentation-shaped pattern that a
+differently-shaped attack (partial perturbation of a \emph{different} feature subset, or of the
+newly-important \texttt{directory\_breadth}/\texttt{entropy\_delta}/\texttt{key\_generation\_events})
+was never tested against and has no particular reason to survive. Whether this trade-off is worth
+taking is a deployment decision this project can inform but not make: it depends on whether an
+operator weighs a sophisticated feature-space adversary more heavily than routine, unperturbed
+ransomware, which this framework's own honeypot corpus (DEV-27) was built to represent as the
+common case. The more durable fix implied by both \S\ref{sec:adversarial} and this section is
+architectural, not just training a wider draw -- ensemble diversity over feature subsets, or a
+loss that penalises reliance on any single small feature group, neither of which this session's
+scope covers.
+
 \section{Real Malware Transfer Evaluation}
 \label{sec:m7-7}
 
