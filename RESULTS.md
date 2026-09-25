@@ -922,3 +922,66 @@ Detector: Architecture or Features?".
 
 Figures: `results/figures/fig10{c,d,e,f}_mlp_vs_rf_{clean_accuracy,combined_degradation,
 retraining_adaptive,importance_shift}.png`, sidecar `results/logs/20260925T105552Z-00a2132a.json`.
+
+## M7-11 — honeypot data poisoning: measuring M7-9's Gap 1 (2026-09-26)
+
+`scripts/m7_11_honeypot_poisoning.py --seed 20260912`, run_id `20260925T193933Z-3d53aee9`.
+Three strategies (label flipping, feature poisoning, anchor-point injection) x five budgets
+(1/5/10/20/50% of the 717 ransomware training rows) against the committed corpus (CSV path,
+sanity-checked at **0.8408**, not the chain-path 0.8422 the session brief names — DEV-27/DEV-37),
+plus a 100%-budget label-flip cell and one real permanence demonstration (a poisoned record
+committed to `BC_SigRW` through actual pBFT consensus).
+
+```
+2026-09-26 | detection/honeypot-m7-11-poisoning | unpoisoned baseline, clean eval | bal_acc=0.8408 prec=0.8415 rec=0.8272 mcc=0.6822 pr_auc=0.9111 | measured | 20260925T193933Z-3d53aee9 | M7-11, cf. M7-3 0.8408
+2026-09-26 | detection/honeypot-m7-11-poisoning | label_flip @1% budget, n_poisoned=7 | bal_acc=0.8259 delta=-0.0149 prec=0.8229 rec=0.8159 mcc=0.6520 pr_auc=0.9051 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | label_flip @5% budget, n_poisoned=36 | bal_acc=0.8277 delta=-0.0131 prec=0.8455 rec=0.7904 mcc=0.6582 pr_auc=0.9004 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | label_flip @10% budget, n_poisoned=72 | bal_acc=0.8279 delta=-0.0129 prec=0.8413 rec=0.7960 mcc=0.6579 pr_auc=0.8983 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | label_flip @20% budget, n_poisoned=143 | bal_acc=0.7908 delta=-0.0500 prec=0.8344 rec=0.7139 mcc=0.5902 pr_auc=0.8771 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | label_flip @50% budget, n_poisoned=358 | bal_acc=0.6680 delta=-0.1729 prec=0.8545 rec=0.3994 mcc=0.4016 pr_auc=0.8483 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | label_flip @100% budget, n_poisoned=717 | bal_acc=0.5000 prec=0.0000 rec=0.0000 mcc=0.0000 pr_auc=0.4829 | measured | 20260925T193933Z-3d53aee9 | M7-11, TESTS: zero positive training rows left, no classifier fittable past "always benign"
+2026-09-26 | detection/honeypot-m7-11-poisoning | feature_poison @1% budget, n_poisoned=7 | bal_acc=0.8342 delta=-0.0066 prec=0.8295 rec=0.8272 mcc=0.6685 pr_auc=0.9107 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | feature_poison @5% budget, n_poisoned=36 | bal_acc=0.8350 delta=-0.0059 prec=0.8152 rec=0.8499 mcc=0.6696 pr_auc=0.9029 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | feature_poison @10% budget, n_poisoned=72 | bal_acc=0.8396 delta=-0.0012 prec=0.8100 rec=0.8697 mcc=0.6793 pr_auc=0.9088 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | feature_poison @20% budget, n_poisoned=143 | bal_acc=0.8261 delta=-0.0148 prec=0.7718 rec=0.9008 mcc=0.6571 pr_auc=0.9011 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | feature_poison @50% budget, n_poisoned=358 | bal_acc=0.8378 delta=-0.0030 prec=0.7920 rec=0.8952 mcc=0.6781 pr_auc=0.9084 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | anchor_point_injection @1% budget, n_poisoned=7 | bal_acc=0.8464 delta=+0.0056 prec=0.8453 rec=0.8357 mcc=0.6931 pr_auc=0.9133 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | anchor_point_injection @5% budget, n_poisoned=36 | bal_acc=0.8438 delta=+0.0029 prec=0.8405 rec=0.8357 mcc=0.6877 pr_auc=0.9148 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | anchor_point_injection @10% budget, n_poisoned=72 | bal_acc=0.8468 delta=+0.0059 prec=0.8375 rec=0.8470 mcc=0.6934 pr_auc=0.9143 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | anchor_point_injection @20% budget, n_poisoned=143 | bal_acc=0.8415 delta=+0.0007 prec=0.8283 rec=0.8470 mcc=0.6827 pr_auc=0.9142 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-poisoning | anchor_point_injection @50% budget, n_poisoned=358 | bal_acc=0.8284 delta=-0.0125 prec=0.8043 rec=0.8499 mcc=0.6565 pr_auc=0.9108 | measured | 20260925T193933Z-3d53aee9 | M7-11
+2026-09-26 | detection/honeypot-m7-11-permanence | one poisoned record (real "RW" trace, label flipped to "benign") committed to BC_SigRW via real pBFT | committed_cleanly=True chain_height_after=1 has_delete_or_rollback_method=False | measured | 20260925T193933Z-3d53aee9 | M7-11, Gap 1
+```
+
+**Label flipping is the most damaging strategy, monotonically, and collapses the detector
+entirely at full budget** — -1.5pt at 1% budget widening to -17.3pt at 50%, then to exactly
+`bal_acc=0.5000` at 100% (the training set has zero positive rows left; no classifier can be
+fit past "always benign," which scores 0.50 on a balanced eval set by construction, not by
+running a model). This matches the session brief's own prediction — the simplest attack is the
+one most likely to succeed.
+
+**Feature poisoning is mild and roughly budget-insensitive** (-0.3 to -1.5pt across the whole
+1-50% range, non-monotonic). Duplicating real benign feature vectors under the ransomware label
+dilutes `AProf` without teaching it anything structurally new — the injected rows are, feature-
+wise, indistinguishable from rows already in the benign class, so their effect on the fitted
+profile is small regardless of how many are added.
+
+**Anchor-point injection — the strategy the brief called "most sophisticated" — is the *least*
+damaging at low-to-medium budget, and briefly improves accuracy.** +0.6pt at 1% budget, still
++0.1pt at 20%, only turning negative at 50% (-1.3pt). Points near the inter-class midpoint,
+labelled benign, act as a mild regulariser at low budget — they sharpen rather than blur the
+region `NProf`/`AProf` disagree on — before enough of them accumulate to actually shift the
+boundary the way the attack intends. The "most sophisticated" attack, measured, is also the
+*least effective* one across most of the tested budget range.
+
+**Permanence, measured directly:** the poisoned record (a real ransomware-behaviour trace,
+attested by `CS_l`, committed with `label="benign"`) passed every one of `Chain.check_append`'s
+five checks (prev_hash linkage, Merkle root, hash uniqueness, ECDSA signature, timestamp skew —
+none inspect payload semantic content) and committed in one block through real pBFT consensus.
+`Chain`'s full public method list (`append`, `check_append`, `create_genesis`, `adopt_genesis`,
+`draft_next`, plus read-only accessors) contains no delete, remove, rollback, revert, truncate,
+or undo method — a code-level fact, not an inference. Full discussion: `docs/DEVIATIONS.md`
+DEV-37, `docs/THREAT_MODEL.md` Gap 1 (updated), report §"Honeypot Data Poisoning".
+
+Figures: `results/figures/fig11a_poisoning_degradation.png`, sidecar
+`results/logs/20260925T193933Z-3d53aee9.json`.

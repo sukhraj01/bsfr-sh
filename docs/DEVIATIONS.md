@@ -1448,3 +1448,121 @@ Tests: `tests/unit/test_mlp_model.py` (the MLP wiring into the shared profile/de
 `tests/unit/test_m7_10b_neural_detector.py` (end-to-end against the committed corpus — RF baseline
 reproduction, MLP zero-perturbation degenerate case, MLP zero-training-budget degenerate case,
 eval-set-never-perturbed).
+
+### DEV-37 · ADD · Honeypot data poisoning: measuring M7-9's Gap 1, and blockchain immutability
+### working against the defender (M7-11)
+
+**Paper:** n/a — the paper never considers that Algorithm 2's data source could itself be
+adversarial; this is the extension M7-9's threat model named as Gap 1 without measuring it.
+
+**Problem:** a Tier-2 adversary who controls the honeypot's collection process can feed false
+training data into `Sig_RW`/`FT_RW`. Once committed to `BC_SigRW` through real pBFT consensus,
+the chain's own immutability guarantee — the paper's central selling point — certifies that
+false data as *tamper-proof*, not as *false*. Chain integrity certifies a record was written as
+submitted; it says nothing about whether what was submitted was true. This entry measures both
+halves: how much three poisoning strategies degrade the detector, and (once, through real
+consensus, not simulated) that the chain genuinely offers no way back.
+
+**Three strategies (`detection.poisoning`), each a pure array transform on the training draw,
+same posture as `detection.retraining.augment_positive_rows` (M7-8) — never touching the eval
+set, `budget<=0.0` a true no-op so the degenerate case reproduces the unpoisoned fit exactly.
+Budget is a fraction of the training set's ransomware row count throughout, so a budget is
+comparable across strategies:**
+- **(a) label flipping** — relabel `budget` fraction of real ransomware training rows as benign.
+  Features untouched; the "benign" contribution is a real ransomware trace under the wrong label.
+- **(b) feature poisoning** — inject synthetic rows labelled ransomware whose features are
+  resampled (with replacement) from real benign training rows.
+- **(c) anchor-point injection** — inject rows interpolated at the midpoint between the benign
+  and ransomware per-feature centroids (small jitter so no two are identical), labelled benign —
+  teaching the model that even the region right at the class boundary is benign, which pushes the
+  effective decision boundary toward the ransomware centroid without fabricating an obviously
+  wrong feature vector or flipping any real label.
+
+**Measured on the committed corpus** (`scripts/m7_11_honeypot_poisoning.py --seed 20260912`,
+`RESULTS.md` M7-11, `results/logs/20260925T193933Z-3d53aee9.json`), sanity-checked against the
+CSV-path baseline **0.8408** — not the chain-path 0.8422 the session brief names. Same DEV-27
+substitution every M7-x experiment against the committed corpus makes: `corpus.write_corpus`
+rounds to 6 significant figures, the chain path does not, and the two are not bit-identical.
+
+**Finding 1 — the three strategies rank in the *opposite* order the brief predicted.** Label
+flipping (called "simplest, most likely to succeed") is indeed the most damaging, and
+monotonically so: -1.5pt balanced accuracy at 1% budget, -17.3pt at 50%, and exactly
+`bal_acc=0.5000` at 100% — at full budget the training set has zero positive rows left, so no
+classifier can be fit past "always benign," which scores 0.50 on a balanced eval set by
+construction, not by any model actually running. Feature poisoning (injecting fabricated
+"ransomware" rows with real benign features) is mild and roughly budget-insensitive throughout
+(-0.3 to -1.5pt): duplicating real benign feature vectors under the wrong label dilutes `AProf`
+without teaching it anything structurally new, since the injected rows are feature-wise
+indistinguishable from rows already in the benign class. **Anchor-point injection — the brief's
+own "most sophisticated" strategy — is the *least* damaging at low-to-medium budget, and briefly
+*improves* accuracy** (+0.6pt at 1%, still +0.1pt at 20%, only turning negative at 50%, -1.3pt):
+points at the inter-class midpoint, labelled benign, act as a mild regulariser at low budget
+rather than the intended boundary-shift, before enough of them accumulate to actually move it.
+Sophistication of the *attack's design* and its *measured effectiveness* are not the same axis —
+the crudest attack (mislabel real data) beat the most carefully engineered one across most of the
+tested budget range.
+
+**Finding 2 — the permanence argument, demonstrated once, for real, not simulated.**
+`demonstrate_permanence()` builds one real malicious `CleanSample` (via the same
+`honeypot.collector`/`honeypot.preprocess` path every other honeypot record in this project uses),
+signs and attests it normally (`honeypot.signatures.build`), then constructs its
+`SignatureRecordPayload` with `label="benign"` instead of the sample's true `"RW"` — the label-
+flipping attack, applied concretely to one record — and commits it through
+`framework.phase2_collection`'s own pipeline (unchanged) to a real `BC_SigRW` `Cluster` running
+actual pBFT consensus (not a mock). **It committed in one block, cleanly, on the first attempt.**
+Reading `blockchain.chain.Chain`'s full public method list confirms the paper's Algorithm 2 has
+no counter-move: `append`, `check_append`, `create_genesis`, `adopt_genesis`, `draft_next`, and a
+set of read-only accessors (`head`, `block_at`, `block_by_hash`, `contains`, `verify_block`,
+`verify_integrity`, `height`) — **no delete, remove, rollback, revert, truncate, or undo method
+anywhere.** This is a code-level fact about a class already in the repository, not new code
+written to demonstrate the gap; `Chain` was never going to grow a fifth checked item here (OUT OF
+SCOPE: no changes to the chain).
+
+**Finding 3 — the pre-commit validation gap is exactly as wide as `Chain.check_append`'s own
+five checks, and none of them are semantic.** The poisoned record passed prev_hash linkage,
+Merkle root recomputation, hash uniqueness, ECDSA signature verification, and timestamp-skew
+tolerance — every one of them structural or cryptographic, none of them inspecting
+`SignatureRecordPayload.features` or `.label` for plausibility. A correctly formatted,
+correctly signed poisoned sample passes every existing validation check because nothing in
+Algorithm 1-5 was ever asked to check semantic content, and this project's implementation does
+not accidentally add that check either — the session's own TESTS section named this as the
+alternative, more surprising finding ("if validation catches it, that's a finding worth
+reporting"); it did not.
+
+**Finding 4 — post-commit detection is a real gap, and also a named-but-unbuilt defense.** Honest
+nodes could in principle maintain their own running feature distributions and flag statistical
+outliers in new contributions (something closer to the anchor-point strategy's own signature
+would likely be detectable this way, since it visibly clusters near the class boundary — label
+flipping, by contrast, looks like a perfectly ordinary ransomware-labelled row from the feature
+side alone, since its features are real). This project does not build such a mechanism: it would
+require cross-node agreement on what "normal" looks like in a 22-dimensional feature space, which
+is a research problem in its own right, and building it would be a defense contribution beyond
+this session's critique-only scope (OUT OF SCOPE).
+
+**Finding 5 — hybrid anchoring (M7-5, DEV-33) does not help, because it answers a different
+question.** Anchoring verifies that already-committed `BC_SigRW` data has not been tampered with
+*after* commitment — it is an integrity guarantee over time. Poisoning is not post-commit
+tampering; it is a *validly signed, validly consensus-approved commitment* by an authorized
+node in the first place. The anchor chain faithfully, correctly records the poisoned block
+exactly as submitted — anchoring cannot and does not distinguish a legitimate record from a
+false one an authorized party chose to submit, because that distinction is validity, not
+integrity, and the anchor's guarantee has only ever been the latter (`docs/THREAT_MODEL.md`
+Trust Assumption 2, DEV-33's own "not a closed Tier-3 solution" caveat).
+
+**This is not a BSFR-SH-specific bug.** Any system that (a) trains an ML model on data drawn
+from a source it does not fully trust, and (b) commits that data to storage designed to be
+tamper-evident and append-only, faces the same structural tension: the storage layer's integrity
+guarantee and the training data's trustworthiness are orthogonal properties, and strengthening
+the first (more replicas, stronger consensus, longer chains) does nothing to strengthen the
+second. Blockchain-backed ML training pipelines inherit this tension by construction, not by
+implementation mistake — it is the same "chain integrity is not chain validity" distinction this
+project's own threat model (`docs/THREAT_MODEL.md`) already needed for a different claim.
+
+**Impact on reproduction:** none — new evaluation, no paper target touched, no code in
+`detection/`, `honeypot/`, or `blockchain/` changed (OUT OF SCOPE).
+Figures: `results/figures/fig11a_poisoning_degradation.png`.
+Tests: `tests/unit/test_detection_poisoning.py` (18 tests: no-op at zero budget, row-count and
+label-distribution correctness per strategy, determinism, originals never mutated),
+`tests/unit/test_m7_11_honeypot_poisoning.py` (end-to-end against the committed corpus — CSV-path
+baseline reproduction, zero-budget degenerate case per strategy, expected row counts/label
+distributions, eval set never perturbed, 100%-budget label-flip leaves zero positive rows).

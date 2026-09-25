@@ -4,46 +4,43 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-25 · **Milestone:** M7 stretch — M7-10 (neural detector + EMBER
-transfer) fully done · **Sessions completed:** 26
+**Last updated:** 2026-09-26 · **Milestone:** M7 stretch — M7-11 (honeypot data poisoning)
+done · **Sessions completed:** 27
 
 ---
 
 ## One-line status
 
-M7-10 answered both open questions it set out to: M7-8's memorisation failure mode is not
-tree-specific (an MLP shows it earlier and more broadly than RF), and a richer static dataset
-(EMBER, 6/22 features mapped vs. ClaMP's 3/22) still transfers at exactly chance on the hard
-decision, though its continuous score is no longer anti-correlated with truth the way ClaMP's was.
+M7-11 measured M7-9's Gap 1 (honeypot poisoning) end to end: a budget sweep of three poisoning
+strategies against the committed detector corpus, and one real pBFT-committed poisoned record
+demonstrating that `BC_SigRW`'s immutability makes the poison permanent, not detectable.
 
-- **`detection/mlp_model.py`**: a declared-hyperparameter MLP, returned as a single-entry `models`
-  mapping so `detection/profiles`, `detector`, `adversarial`, `retraining` all consume it with
-  zero code change. Unhardened, the MLP is *more* robust to M7-3's attack than RF (median adaptive
-  evasion 0.4866 vs. 0.3213). Every hardened MLP (25/50/100% budget) shows M7-8's bound-
-  memorisation signature — RF only showed it at 100% — and the MLP never reproduces RF's
-  25%-budget backfire. Measured locally (45s, CLAUDE.md §6's local-ML allowance).
-- **`honeypot/ember_mapping.py`**: EMBER's raw PE data (byte histogram, per-section entropy,
-  permission flags, import table — verified against `elastic/ember`'s actual source) grounds 6/22
-  `FT_RW` features vs. ClaMP's 3/22 (M7-7). Scored on all 200,000 rows of EMBER's labelled test
-  split against the identical fitted ensemble: `bal_acc=0.5000` (same as ClaMP), but
-  `pr_auc=0.6301` sits above the 0.50 no-skill line where ClaMP's 0.4612 sat below its 0.5225 line
-  — richer mapping improves the discarded continuous score without moving the hard decision.
-- **Ada infrastructure saga, resolved:** `files.pythonhosted.org` was unusable via normal `pip
-  install` for most of the session; a `pip download --no-deps`-only wheelhouse cache (built once,
-  reused, no further network calls) got a working venv built. That venv's scikit-learn (1.5.2, one
-  minor behind the 1.9.1 reference) produces a 0.0055 sanity-check drift (0.8353 vs. 0.8408),
-  accepted and documented (DEV-35) rather than chased further — doesn't change the qualitative
-  finding. Full timeline: `sessions/2026-09-25-06-*.md` Findings.
-- `docs/DEVIATIONS.md` DEV-35 (EMBER mapping + transfer result), DEV-36 (MLP architecture +
-  permutation-importance methodology). `RESULTS.md` "M7-10" (both parts, all numbers measured).
-  Report: new §"Neural vs. Tree-Based Detector", extended §"Real Malware Transfer Evaluation"
-  with the EMBER table/figures/KS comparison.
-- **A concurrent session** (M7-9, formal threat model, commit `8756dab`) landed mid-session;
-  reconciled cleanly. Its session file is complete (contrary to what an earlier read of this
-  session suggested before `8756dab` landed) — no action needed.
+- **`detection/poisoning.py`** (new): three pure array transforms on the training draw — label
+  flipping (relabel real ransomware rows benign), feature poisoning (inject fake-ransomware rows
+  with real benign features), anchor-point injection (inject boundary-midpoint rows labelled
+  benign) — same no-op-at-zero-budget convention as `retraining.augment_positive_rows` (M7-8).
+- **Finding: the strategies rank opposite to what "sophistication" would predict.** Label
+  flipping (called simplest) is the only monotonic, most damaging strategy: 0.8408 → 0.6680 at
+  50% budget → exactly 0.5000 at 100% (zero positive training rows left; no classifier fittable
+  past "always benign"). Feature poisoning is mild and budget-insensitive. Anchor-point injection
+  (called most sophisticated) is *least* damaging at low/medium budget and briefly *improves*
+  accuracy, only turning negative at 50%.
+- **Permanence, demonstrated once, for real, not simulated:** one poisoned
+  `SignatureRecordPayload` (a genuine ransomware trace, `label="benign"`) committed cleanly
+  through actual pBFT consensus to a real `BC_SigRW` cluster on the first attempt.
+  `blockchain.chain.Chain`'s full public method list has no delete/remove/rollback/revert/
+  truncate/undo method — a code-level fact, no new code written. All five of
+  `Chain.check_append`'s checks are structural/cryptographic; none inspect payload semantic
+  content, and the poisoned record passed every one.
+- Post-commit detection (would need cross-node feature-space agreement) and hybrid-anchoring
+  interaction (integrity vs. validity — anchoring can't help, poisoning is a validly-approved
+  commitment) are both stated as gaps, per OUT OF SCOPE — no defense built, no chain code changed.
+- `docs/DEVIATIONS.md` DEV-37. `docs/THREAT_MODEL.md` Gap 1 updated with the measured results
+  (was an unmeasured claim from M7-9). `RESULTS.md` "M7-11". Report: new §"Honeypot Data
+  Poisoning" after §Threat Model, cross-referenced from the Gap 1 paragraph there.
 
-`make test` (1591 passed: 16 EMBER-mapping + 4 MLP-wiring + 4 M7-10b end-to-end, new this
-milestone) and `make lint` (ruff + mypy on `src`/`tests`) both green. Report recompiles clean.
+`make test` (1625 passed: 18 poisoning-primitive + 7 M7-11 end-to-end, new this session) and
+`make lint` (ruff + mypy on `src`/`tests`) both green. Report recompiles clean.
 
 ---
 
@@ -51,20 +48,18 @@ milestone) and `make lint` (ruff + mypy on `src`/`tests`) both green. Report rec
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | `detection/mlp_model.py`, `honeypot/ember_mapping.py` added this milestone |
-| `docs/report/report.pdf` | done, current | recompiled (`tectonic`), new §"Neural vs. Tree-Based Detector" + §m7-7 EMBER extension |
-| `docs/THREAT_MODEL.md` | done (M7-9) | unchanged this session |
-| `scripts/m7_10b_neural_detector.py` | done | ~45s local run |
-| `scripts/m7_10a_ember_transfer.py` | done | ~107s on Ada, run_id `20260925T160711Z-62498d7b` |
-| Everything else (M7-1 through M7-9's own deliverables) | done | unchanged |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | `detection/poisoning.py` added this session |
+| `docs/report/report.pdf` | done, current | recompiled (`tectonic`), new §"Honeypot Data Poisoning" |
+| `docs/THREAT_MODEL.md` | done | Gap 1 updated with M7-11's measured results |
+| `scripts/m7_11_honeypot_poisoning.py` | done | ~6s local run (sweep) + one real pBFT commit, run_id `20260925T193933Z-3d53aee9` |
+| Everything else (M7-1 through M7-10's own deliverables) | done | unchanged |
 
 ## Current numbers
 
-`RESULTS.md` "M7-10". Part B (run `20260925T105552Z-00a2132a`): MLP clean bal_acc 0.8237 (vs. RF
-0.8408); MLP adaptive-evasion median 0.4866 unhardened, jumps to 1.0000 at every hardened budget
-(no RF-style 25% backfire). Part A (run `20260925T160711Z-62498d7b`): EMBER transfer bal_acc
-0.5000, precision 0.6667, recall 0.00002, mcc 0.0013, pr_auc 0.6301 (n=200,000); synthetic sanity
-check 0.8353 (0.0055 below the 0.8408 reference — sklearn-version drift, DEV-35).
+`RESULTS.md` "M7-11", run `20260925T193933Z-3d53aee9`. Baseline bal_acc 0.8408. Label-flip @50%
+0.6680 (Δ-0.1729), @100% 0.5000 exactly. Feature-poison range 0.8261-0.8396 (Δ-0.003 to -0.015).
+Anchor-injection range 0.8284-0.8468 (Δ+0.006 to -0.013, only strategy with positive deltas).
+Permanence: `committed_cleanly=True`, `chain_height_after=1`, `has_delete_or_rollback_method=False`.
 
 ## Next task
 
@@ -74,9 +69,7 @@ M7-6. If continued: async pBFT with modelled network latency is the one remainin
 
 ## Blockers
 
-None. (Ada's `wheelhouse/` cache from this session — `~/bsfr-sh/wheelhouse/` — makes any future
-Ada venv rebuild instant/offline if it's still needed; worth knowing about even though nothing is
-currently blocked on it.)
+None.
 
 `data/raw/` is present in this environment already; a genuinely fresh clone still needs
 `make data` (~56 minutes) first.
@@ -98,9 +91,10 @@ currently blocked on it.)
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 tested eight hypotheses, narrowed the gap to 1.51pt; report states the residual as measured-and-bounded |
-| M7-7's/M7-10a's bal_acc=0.5000 could be misread as "the framework doesn't work" rather than a schema-grounding finding | undersells the synthetic-corpus result and the framework's design | DEV-34/DEV-35 and the report state explicitly this is a static-vs-dynamic grounding finding, and note the PR-AUC nuance (EMBER's score is informative even though the hard decision isn't) |
-| M7-8's 25%-budget "hardening backfires" and M7-10b's "MLP shows it at every budget" could be read as "adversarial retraining/neural nets don't work" | undersells the real robustness gain measured at 50/100% (both models) and the MLP's genuine pre-hardening robustness edge | `RESULTS.md`/report state both effects explicitly, side by side with the budgets that do help |
-| Two Claude Code sessions ran on this repo concurrently during M7-10 (M7-9, M7-10); nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content the way `docs/ROADMAP.md` briefly did mid-session | no fix implemented — flagging as a standing risk; re-read a file immediately before writing to it if a long gap (e.g. a slow remote job) occurred since it was first read |
+| M7-7's/M7-10a's bal_acc=0.5000 could be misread as "the framework doesn't work" rather than a schema-grounding finding | undersells the synthetic-corpus result and the framework's design | DEV-34/DEV-35 and the report state explicitly this is a static-vs-dynamic grounding finding, and note the PR-AUC nuance |
+| M7-8's/M7-10b's hardening-backfire findings could be read as "adversarial retraining/neural nets don't work" | undersells the real robustness gain measured at other budgets | `RESULTS.md`/report state both effects explicitly, side by side with the budgets that do help |
+| M7-11's "anchor-point injection improves accuracy at low budget" could be read as "poisoning is safe" rather than "this specific attack is weak at this specific budget range against this specific detector" | undersells that label flipping (the simplest attack) is severely damaging, and that anchor injection does turn negative at 50% | `RESULTS.md`/report/DEV-37 lead with label flipping's monotonic collapse before noting anchor injection's low-budget anomaly, and state the permanence finding (which holds regardless of strategy effectiveness) as the headline result, not the degradation numbers alone |
+| Two Claude Code sessions ran on this repo concurrently during M7-10 (M7-9, M7-10); nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — flagging as a standing risk; re-read a file immediately before writing to it if a long gap occurred since it was first read |
 
 ---
 

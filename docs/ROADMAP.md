@@ -2,8 +2,8 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — neural detector + EMBER transfer (M7-10)
-delivered; async pBFT with modelled network latency is the one remaining, not-required item**
+**Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11) delivered;
+async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -316,6 +316,23 @@ existing baseline convention). Variance is reported and the repeat count follows
       reference 1.9.1) produces a 0.0055 sanity-check drift (0.8353 vs.\ 0.8408), documented as
       version-dependent, not a bug (DEV-35). `scripts/m7_10a_ember_transfer.py`, `RESULTS.md`
       M7-10, report §"Real Malware Transfer Evaluation" extension (2026-09-25)
+- [x] Honeypot data poisoning — measures M7-9's Gap 1 (a Tier-2 adversary poisons `BC_SigRW`
+      through legitimate consensus; chain immutability then makes the poison permanent, not
+      detectable). Three strategies (`detection/poisoning.py`, DEV-37: label flipping, feature
+      poisoning, anchor-point injection) x five budgets (1-50% of ransomware training rows) —
+      finding: label flipping is the most damaging and only monotonic strategy (bal_acc 0.8408 →
+      0.6680 at 50% → exactly 0.5000 at 100%); feature poisoning is mild and budget-insensitive;
+      anchor-point injection, billed the "most sophisticated," is the *least* damaging at
+      low/medium budget and briefly *improves* accuracy — sophistication of attack design and
+      measured effectiveness are not the same axis. Permanence demonstrated once, for real: one
+      poisoned record (a genuine ransomware trace, relabelled benign) committed cleanly through
+      actual pBFT consensus to a real `BC_SigRW` cluster; `blockchain.chain.Chain`'s full method
+      list has no delete/remove/rollback/revert/truncate/undo method (code-level fact, no new
+      code). Pre-commit validation checks are all structural/cryptographic, none semantic — the
+      poisoned record passed every one. Post-commit detection and hybrid-anchoring interaction
+      both stated as gaps, not built/fixed (OUT OF SCOPE: no defense implementation, no changes
+      to the chain). `scripts/m7_11_honeypot_poisoning.py`, `RESULTS.md` M7-11,
+      `docs/THREAT_MODEL.md` Gap 1 updated, report §"Honeypot Data Poisoning" (2026-09-26)
 
 ---
 

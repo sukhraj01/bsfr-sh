@@ -258,15 +258,59 @@ mentions adversarial ML cannot be faulted for failing against it, but a deployme
 What this threat model exposes as **not covered** by anything measured above. These are findings,
 not tickets — no fix is proposed or implied.
 
-**Gap 1 — Data poisoning of the honeypot (Tier 2, partially adjacent).** A Tier-2 adversary who
-controls the honeypot's own collection process (not necessarily one of the four `CS_l` nodes —
-the honeypot is a separate role, `HP_RW`) could feed false training data into `Sig_RW`/`FT_RW`.
-Once committed to `BC_SigRW`, that false data is **immutable and tamper-evident** — which makes
-the poisoning *permanent and hard to retract*, not detectable. Chain integrity certifies that a
-record was written as submitted; it says nothing about whether what was submitted was true. No
-extension in this project addresses this — M7-7 (DEV-34) tests whether the honeypot's *design*
-generalises to real data (a different question, "is the schema representative"), not whether a
-compromised honeypot could inject false records (this question, "is the pipeline poisonable").
+**Gap 1 — Data poisoning of the honeypot (Tier 2, partially adjacent). Measured, M7-11.** A
+Tier-2 adversary who controls the honeypot's own collection process (not necessarily one of the
+four `CS_l` nodes — the honeypot is a separate role, `HP_RW`) could feed false training data into
+`Sig_RW`/`FT_RW`. Once committed to `BC_SigRW`, that false data is **immutable and tamper-evident**
+— which makes the poisoning *permanent and hard to retract*, not detectable. Chain integrity
+certifies that a record was written as submitted; it says nothing about whether what was
+submitted was true. M7-7 (DEV-34) tests a different question — whether the honeypot's *design*
+generalises to real data ("is the schema representative") — not this one ("is the pipeline
+poisonable"). M7-11 measures this one directly, both halves:
+
+*Degradation.* Three strategies (label flipping, feature poisoning, anchor-point injection) x
+five budgets (1-50% of ransomware training rows), against the committed corpus
+(`scripts/m7_11_honeypot_poisoning.py`, `RESULTS.md` M7-11, DEV-37). Label flipping (relabel real
+ransomware rows as benign) is the most damaging and the only one that is monotonic: -1.5pt
+balanced accuracy at 1% budget, -17.3pt at 50%, collapsing to exactly `bal_acc=0.5000` at 100%
+budget (zero positive training rows left; no classifier fittable past "always benign"). Feature
+poisoning (fabricated "ransomware" rows with real benign features) is mild and roughly
+budget-insensitive (-0.3 to -1.5pt). Anchor-point injection — labelled the "most sophisticated"
+strategy going in — is the *least* damaging at low-to-medium budget and briefly *improves*
+accuracy (+0.6pt at 1%, only turning negative at 50%, -1.3pt): a designed attack's sophistication
+and its measured effectiveness are not the same axis.
+
+*Permanence.* Demonstrated once, for real: one poisoned `SignatureRecordPayload` (a genuine
+ransomware trace, `label` set to `"benign"`) committed cleanly, in one block, through actual
+pBFT consensus to a real `BC_SigRW` cluster, on the first attempt. `blockchain.chain.Chain`'s
+full public method list has no delete, remove, rollback, revert, truncate, or undo method — a
+code-level fact about a class already in the repository (DEV-37), confirming Algorithm 2's own
+gap: it appends, nothing removes.
+
+*Pre-commit validation.* The poisoned record passed all five of `Chain.check_append`'s checks
+(prev_hash linkage, Merkle root, hash uniqueness, ECDSA signature, timestamp skew) — every one
+structural or cryptographic, none semantic. A correctly formatted, correctly signed poisoned
+sample passes every existing validation check.
+
+*Post-commit detection.* Not built, and named as a real gap rather than fixed (OUT OF SCOPE for
+M7-11): honest nodes independently maintaining feature distributions and flagging statistical
+outliers in new contributions could in principle catch anchor-point-style poisoning (it visibly
+clusters near the class boundary) but not label flipping (its features are real, only the label
+lies) — and the mechanism itself would need cross-node feature-space agreement, a research
+problem this project does not attempt to solve.
+
+*Hybrid anchoring (M7-5) does not help.* Anchoring verifies integrity of already-committed data
+over time; poisoning is a validly signed, validly consensus-approved commitment in the first
+place, not post-commit tampering. The anchor faithfully records the poisoned block exactly as
+submitted — it cannot distinguish a legitimate record from a false one an authorized party chose
+to submit, because that distinction is validity, not integrity (§3, Trust Assumption 2).
+
+*Not BSFR-SH-specific.* Any system that trains a model on data from a source it does not fully
+trust, and commits that data to tamper-evident append-only storage, faces the same tension: the
+storage layer's integrity guarantee and the training data's trustworthiness are orthogonal, and
+strengthening the first does nothing to strengthen the second. This is the same "chain integrity
+is not chain validity" distinction this document needed for the row above (`Sig_RW`/`FT_RW`'s
+own integrity-vs-truth caveat) — Gap 1 is that distinction's sharpest consequence, not a new one.
 
 **Gap 2 — Insider threat at the registration authority (no tier; an operator-process claim).**
 §V-2 claims credentials are deleted post-registration, defeating a privileged insider or a
