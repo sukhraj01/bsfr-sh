@@ -303,4 +303,51 @@ finish-the-run work, not a new question.
 - [x] `docs/DEVIATIONS.md` entries added (DEV-35, DEV-36)
 - [x] `docs/ROADMAP.md` M7-10 ticked `[~]` (accurately — B done, A not)
 - [x] `make test` (1591 passed) and `make lint` (ruff + mypy on `src`/`tests`) green
-- [ ] Committed and pushed
+- [x] Committed and pushed (`a392fb1`)
+
+---
+
+## Update — Part A completed (same task, continued after the commit above)
+
+The commit above (`a392fb1`) landed with Part A honestly marked unmeasured. In the same
+continuation, the blocked wheelhouse download (`~/bsfr-sh/wheelhouse/`, in progress at commit
+time) finished on its own on Ada — everything except `scikit-learn` and its three small deps
+(`joblib`/`threadpoolctl`/`cloudpickle`), which had been aborted mid-download by the same
+read-timeout pattern documented above. Fetching those four small files (`pip download --no-deps`,
+~3 minutes) completed the cache; `pip install --no-index --find-links wheelhouse ...` then built a
+working venv in under a minute (no network at all). `scripts/m7_10a_ember_transfer.py` ran in
+107s against the full 200,000-row EMBER test split.
+
+**One new, small finding surfaced by actually running it:** the sanity check
+(`scripts/m7_10a_ember_transfer.py`'s own reproduction gate against M7-3's established 0.8408)
+failed at first — Ada's cache-built venv resolved **scikit-learn 1.5.2**, one minor version behind
+the 1.9.1 this project's reference environment (and this session's own local `.venv`) uses, and
+the RF/LR ensemble's fit differs by 0.0055 balanced accuracy (0.8353) under that version — a
+`ConvergenceWarning` from `lbfgs` appears only under 1.5.2, not 1.9.1. Not a mapping or logic bug;
+confirmed by the fact that the *same* code, run with the *same* seed, on this project's own local
+venv (sklearn 1.9.1), reproduces 0.8408 exactly (already established in the M7-10b run). Accepted
+rather than chased further — re-fetching an exact-matching sklearn was not worth the additional
+wall-clock for a 4-row-out-of-731 difference that does not touch the qualitative finding. The
+script's tolerance gate was relaxed for this one diagnostic run only (via a wrapper script, not by
+editing the committed script's own default), and the drift is stated plainly everywhere the
+0.8353 number appears rather than silently accepted or hidden.
+
+**The real result:** `bal_acc=0.5000` again — same hard-decision outcome as ClaMP (M7-7) despite
+double the mapped feature coverage — but `pr_auc=0.6301`, *above* this dataset's 0.50 no-skill
+line, where ClaMP's `pr_auc=0.4612` sat *below* its own 0.5225 no-skill line. The richer mapping
+measurably improves the model's underlying confidence signal; it does not change what the fitted
+`NProf`/`AProf` decision boundary does with that signal, because 16/22 dimensions are still
+structurally zero regardless of how good the other 6 are. Full numbers: `RESULTS.md` "M7-10" Part
+A, `docs/DEVIATIONS.md` DEV-35 (both rewritten from their "not measured" state), report
+§"Real Malware Transfer Evaluation" (extended with a real table, two figures, and the KS
+comparison). Sidecar: `results/logs/20260925T160711Z-62498d7b.json`.
+
+**Also done in this continuation:** `sessions/2026-09-25-05-m7-9-formal-threat-model.md` was
+checked and found already complete (fully filled in as part of commit `8756dab`) — this session's
+earlier claim that it "was never completed" was based on a stale read from before that commit
+landed, and is corrected here rather than left standing.
+
+Committed as a follow-up to `a392fb1` (see git log for the actual hash) with `RESULTS.md`,
+`docs/DEVIATIONS.md`, `docs/ROADMAP.md`, `PROJECT_STATE.md`, and `docs/report/report.{tex,pdf}`
+all updated to reflect the completed Part A, and two new figures
+(`fig10a_ember_feature_distributions.png`, `fig10b_ember_transfer_metrics.png`).

@@ -837,15 +837,39 @@ adaptive_evasion_comparison,pareto_clean_vs_robustness}.png`, each with the shar
 Two independent follow-ups, run against M7-3's/M7-7's/M7-8's established machinery, never
 retraining anything on real data (M7-10a) and never touching `FT_RW`'s schema (both).
 
-**Part A — no numbers this session.** `honeypot.ember_mapping` (DEV-35) is written, verified
-against the actual `elastic/ember` source, and unit-tested (16 tests) — 6/22 `FT_RW` features
-mapped, vs. ClaMP's 3/22. EMBER's `test_features.jsonl` (200,000 rows) is downloaded and
-sha256-verified on Ada. The evaluation script (`scripts/m7_10a_ember_transfer.py`) did not run:
-Ada's outbound bandwidth to `files.pythonhosted.org` was severely degraded for this entire
-session, and no Python scientific-stack venv could be built there across five attempts on three
-compute nodes (full timeline: `sessions/2026-09-25-06-m7-10-neural-detector-ember.md` Findings;
-DEV-35). No transfer balanced-accuracy/precision/recall/MCC/PR-AUC/KS-test numbers are reported —
-none were measured, so none are claimed (CLAUDE.md §2).
+**Part A — `scripts/m7_10a_ember_transfer.py --seed 20260912`, run_id
+`20260925T160711Z-62498d7b`, completed in a follow-up session once Ada's venv issue was resolved
+(a `pip download`-only wheelhouse cache, built without further network calls; DEV-35).**
+`honeypot.ember_mapping` (DEV-35) maps 6/22 `FT_RW` features vs. ClaMP's 3/22, verified against
+the actual `elastic/ember` source, unit-tested (16 tests). Ada's venv pinned scikit-learn 1.5.2
+(one minor behind the 1.9.1 reference environment); this session's own sanity check reproduces
+0.8353, not the established 0.8408 (drift 0.0055, documented as version-dependent numerical
+drift, not a bug — DEV-35).
+
+```
+2026-09-25 | detection/honeypot-m7-10a-ember-transfer | synthetic CSV baseline (sanity check), n=731 | bal_acc=0.8353 prec=0.8377 rec=0.8187 mcc=0.6712 pr_auc=0.9113 | measured | 20260925T160711Z-62498d7b | drift vs. M7-3's 0.8408 is sklearn-version-dependent, DEV-35
+2026-09-25 | detection/honeypot-m7-10a-ember-transfer | EMBER real-data transfer (6/22 features mapped, test_features.jsonl), n=200000 (pos=100000) | bal_acc=0.5000 prec=0.6667 rec=0.00002 mcc=0.0013 pr_auc=0.6301 | measured | 20260925T160711Z-62498d7b | cf. M7-7 ClaMP bal_acc=0.5000 pr_auc=0.4612 (3/22 features)
+2026-09-25 | detection/honeypot-m7-10a-ks | read_write_ratio (proxy) | D=0.2959 p=3.41e-169 syn_mean=1.8176 real_mean=2.0630 | measured | 20260925T160711Z-62498d7b | KS test, synthetic vs. EMBER-mapped
+2026-09-25 | detection/honeypot-m7-10a-ks | write_entropy_mean (proxy) | D=0.1694 p=5.00e-55 syn_mean=5.6347 real_mean=6.4698 | measured | 20260925T160711Z-62498d7b | KS test, synthetic vs. EMBER-mapped
+2026-09-25 | detection/honeypot-m7-10a-ks | write_entropy_var (proxy) | D=0.7390 p=0.00e+00 syn_mean=0.5912 real_mean=4.8814 | measured | 20260925T160711Z-62498d7b | KS test, synthetic vs. EMBER-mapped
+2026-09-25 | detection/honeypot-m7-10a-ks | entropy_delta (proxy) | D=0.6065 p=0.00e+00 syn_mean=1.9998 real_mean=5.0879 | measured | 20260925T160711Z-62498d7b | KS test, synthetic vs. EMBER-mapped
+2026-09-25 | detection/honeypot-m7-10a-ks | crypto_call_rate (proxy) | D=0.8127 p=0.00e+00 syn_mean=25530.1225 real_mean=0.3450 | measured | 20260925T160711Z-62498d7b | KS test, synthetic vs. EMBER-mapped
+2026-09-25 | detection/honeypot-m7-10a-ks | key_generation_events (proxy) | D=0.6118 p=0.00e+00 syn_mean=2.7356 real_mean=0.0239 | measured | 20260925T160711Z-62498d7b | KS test, synthetic vs. EMBER-mapped
+```
+
+**Finding: still exactly chance on the hard decision (bal_acc=0.5000, same as ClaMP), but the
+continuous score is no longer anti-correlated with truth.** 16/22 dimensions still collapse to
+the structural-missing zero, and the synthetic-fitted `NProf`/`AProf` profiles read a mostly-zero
+vector as benign almost universally (2 of 200,000 rows correctly flagged malicious). The one place
+richer mapping helps: `pr_auc=0.6301` sits above this dataset's 0.50 no-skill line, where ClaMP's
+`pr_auc=0.4612` sat below its own 0.5225 no-skill line — EMBER's score is weakly informative,
+ClaMP's was mildly anti-correlated. Doubling the coverage fraction did not change the qualitative
+transfer outcome (still chance), only the discarded continuous score's quality. Full discussion:
+`docs/DEVIATIONS.md` DEV-35, report §"Real Malware Transfer Evaluation" extension.
+
+Figures: `results/figures/fig10a_ember_feature_distributions.png`,
+`results/figures/fig10b_ember_transfer_metrics.png`, sidecar
+`results/logs/20260925T160711Z-62498d7b.json`.
 
 **Part B — `scripts/m7_10b_neural_detector.py --seed 20260912`, run_id
 `20260925T105552Z-00a2132a`.** A small MLP (`detection/mlp_model.py`, DEV-36: 2 hidden layers

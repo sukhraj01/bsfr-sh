@@ -2,9 +2,8 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — neural detector (M7-10b) delivered, EMBER
-transfer (M7-10a) mapped/downloaded but not yet scored (Ada network outage); async pBFT with
-modelled network latency is the other remaining, not-required item**
+**Current milestone: write-up done; M7 (stretch) — neural detector + EMBER transfer (M7-10)
+delivered; async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -296,20 +295,27 @@ existing baseline convention). Variance is reported and the repeat count follows
       (credential deletion is unimplemented/unverifiable; DoS-resistance has a measured liveness
       gap at f=1+1 lagging honest replica, DEV-20); a sixth attack surface (adversarial ML) exists
       that isn't a §V claim at all. Documentation only — no code, no new tests (2026-09-25)
-- [~] Neural detector + EMBER transfer evaluation — (B) done: a small MLP (`detection/
-      mlp_model.py`, DEV-36) plugged into the same NProf/AProf machinery as a single-model
-      ensemble, run through M7-3's exact perturbation sweep and M7-8's exact retraining protocol
-      — finding: the MLP shows M7-8's bound-memorisation failure mode at *every* hardening budget
-      tested (not just 100% as for RF), and never reproduces RF's 25%-budget backfire, pointing at
-      the feature space/augmentation strategy rather than tree-ensemble architecture as the root
-      cause. `scripts/m7_10b_neural_detector.py`, `RESULTS.md` M7-10, report §"Neural vs.\
-      Tree-Based Detector" (2026-09-25). (A) mapping done, evaluation not run: EMBER's raw PE
-      features (byte histogram, per-section entropy, section r/w/x flags, import table) mapped
-      onto `FT_RW` (`honeypot/ember_mapping.py`, 6/22 features grounded vs.\ ClaMP's 3/22, DEV-35,
-      16 passing unit tests), EMBER downloaded and sha256-verified on Ada — but `scripts/
-      m7_10a_ember_transfer.py` itself did not run this session: sustained severe network
-      degradation on Ada blocked building a Python venv there across five attempts (DEV-35,
-      session file). Next session: the data is already on Ada; the script is ready to run.
+- [x] Neural detector + EMBER transfer evaluation — (B) a small MLP (`detection/mlp_model.py`,
+      DEV-36) plugged into the same NProf/AProf machinery as a single-model ensemble, run through
+      M7-3's exact perturbation sweep and M7-8's exact retraining protocol — finding: the MLP
+      shows M7-8's bound-memorisation failure mode at *every* hardening budget tested (not just
+      100% as for RF), and never reproduces RF's 25%-budget backfire, pointing at the feature
+      space/augmentation strategy rather than tree-ensemble architecture as the root cause.
+      `scripts/m7_10b_neural_detector.py`, `RESULTS.md` M7-10, report §"Neural vs.\ Tree-Based
+      Detector" (2026-09-25). (A) EMBER's raw PE features (byte histogram, per-section entropy,
+      section r/w/x flags, import table) mapped onto `FT_RW` (`honeypot/ember_mapping.py`, 6/22
+      features grounded vs.\ ClaMP's 3/22, DEV-35, 16 passing unit tests) and scored against the
+      identical fitted ensemble on all 200,000 rows of EMBER's labelled test split — finding: the
+      hard decision is still exactly chance (bal_acc=0.5000, same as ClaMP), but the continuous
+      score is no longer anti-correlated with truth (pr_auc=0.6301, above the 0.50 no-skill line,
+      vs.\ ClaMP's 0.4612, below its 0.5225 line) — richer static grounding improves the model's
+      confidence signal without moving the threshold decision it is discarded into. Ada's initial
+      network degradation (this session's first attempt) was worked around with a `pip
+      download`-only wheelhouse cache, built once and reused for the actual scoring run in a
+      follow-up session; the scikit-learn version that resulted (1.5.2, one minor behind the
+      reference 1.9.1) produces a 0.0055 sanity-check drift (0.8353 vs.\ 0.8408), documented as
+      version-dependent, not a bug (DEV-35). `scripts/m7_10a_ember_transfer.py`, `RESULTS.md`
+      M7-10, report §"Real Malware Transfer Evaluation" extension (2026-09-25)
 
 ---
 

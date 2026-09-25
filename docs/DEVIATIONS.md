@@ -1307,30 +1307,72 @@ connection, a registry write, or a kill-chain stage — these are not properties
 dataset can approach asymptotically; they require execution, which no static dataset by
 construction ever performs.
 
-**Transfer evaluation status: mapping complete and unit-tested (16 tests,
-`tests/unit/test_honeypot_ember_mapping.py`); the scoring run itself (`scripts/
-m7_10a_ember_transfer.py` against the extracted `test_features.jsonl`) did not complete this
-session.** Ada's shared cluster (`ada.iiit.ac.in`) experienced sustained, severe outbound-bandwidth
-degradation to `files.pythonhosted.org` for the duration of this session — every attempt to
-install the Python scientific stack (`numpy`/`scikit-learn`/`pandas`/`matplotlib`/`scipy`) into a
-fresh venv stalled indefinitely on the first multi-megabyte wheel, across five separate `sbatch`
-submissions on three different compute nodes, with and without extended `pip` retry/timeout
-settings, with and without a progress bar, downloading via `pip install`, `pip download`, and
-direct `curl`. The EMBER *data* itself (a 1.6GB download, then a single-member `tar` extraction to
-1.87GB) succeeded — slowly, but it completed and was sha256-verified — so this is specifically a
-"many small connections to PyPI's CDN" failure mode, not a general network outage. See
-`sessions/2026-09-25-06-m7-10-neural-detector-ember.md` Findings for the full timeline. `scripts/
-m7_10a_ember_transfer.py` is written, and its inner logic (fitting, sanity-checking against
-M7-3's 0.8408, scoring, KS-testing) is exercised indirectly by the mapping's own unit tests and by
-Part B's identical fit/sanity-check/score pattern (`m7_10b`, run successfully) — only the actual
-EMBER-scored numbers are outstanding. Next session: `data/external/ember/test_features.jsonl`
-already exists on Ada (`~/bsfr-sh/data/external/ember/`); once a venv can be built there (or the
-file is transferred somewhere with one), `python scripts/m7_10a_ember_transfer.py` completes in
-under a minute.
+**Transfer evaluation ran in a follow-up session, after this one's Ada infrastructure struggle
+was resolved.** `scripts/m7_10a_ember_transfer.py --seed 20260912`, run_id
+`20260925T160711Z-62498d7b`, against the full 200,000-row `test_features.jsonl`, sha256-verified
+(`data/external/ember/README.md`). Ada's venv, built entirely from a `pip download`-only
+wheelhouse cache (no further network calls once cached — the fix for the bandwidth issue this
+DEV entry originally documented), pinned **scikit-learn 1.5.2**, one minor line behind the
+reference environment's 1.9.1 (the same environment that established 0.8408). This session's own
+synthetic-CSV sanity check reproduces to **0.8353, not 0.8408** (drift 0.0055, ~4 of 731 eval
+rows) — version-dependent numerical drift in `RandomForestClassifier`/`LogisticRegression`
+internals (a `ConvergenceWarning` from `lbfgs` appears only under 1.5.2), not a mapping or logic
+bug. Accepted and documented rather than chased further: re-fetching an exact-matching sklearn on
+Ada's still-slow network was not judged worth the wall-clock for a fit this close, and the
+qualitative transfer finding below does not turn on 0.55 points of baseline drift.
 
-**Impact on reproduction:** none — new evaluation, no paper target touched, and no number is
-claimed here that was not measured (the mapping/coverage numbers above are; the transfer score is
-explicitly marked not yet measured, not approximated).
+**Result: still exactly chance, and the richer mapping does not move the hard decision — but the
+continuous score is no longer actively anti-correlated with the label, unlike ClaMP's.**
+
+```
+bal_acc=0.5000  precision=0.6667  recall=0.00002  mcc=0.0013  pr_auc=0.6301
+```
+
+(`n`=200,000, class-balanced 50/50.) `bal_acc=0.500005` is, again, not a rounding coincidence: the
+fitted profiles place all but 3 of 200,000 rows on the *NProf* (benign) side regardless of true
+label — 2 of those 3 flagged rows are true positives (precision 0.6667), but that is 2 out of
+100,000 actual malicious rows found (recall 0.00002). **The one place EMBER's richer mapping
+visibly helps is the continuous score, not the hard call:** `pr_auc=0.6301` sits comfortably
+*above* this dataset's 0.50 no-skill line, where ClaMP's `pr_auc=0.4612` sat *below* its own
+0.5225 no-skill line (M7-7, DEV-34) — EMBER's ensemble score is weakly but genuinely informative,
+ClaMP's was mildly anti-correlated with truth. The mechanism the hard decision fails on is
+unchanged from ClaMP: 16 of 22 dimensions collapse to the structural-missing zero
+(`missing_mask` constant across all 200,000 rows, confirmed in the sidecar), and the fitted
+`NProf`/`AProf` profiles — built on the synthetic corpus where 16/22 features are populated —
+read a mostly-zero vector as closer to benign almost universally, regardless of the 6 real
+dimensions' own signal. **Doubling the coverage fraction (3/22 → 6/22) did not change the
+qualitative transfer outcome; it only improved the (still discarded, by the hard-decision
+boundary) continuous score.**
+
+**Distribution comparison, the 6 mapped features (two-sample KS, synthetic corpus vs.
+EMBER-mapped):**
+
+```
+read_write_ratio:      D=0.2959 p=3.4e-169  (synthetic mean 1.82, real mean 2.06)
+write_entropy_mean:    D=0.1694 p=5.0e-55   (synthetic mean 5.63, real mean 6.47)
+write_entropy_var:     D=0.7390 p<1e-300    (synthetic mean 0.59, real mean 4.88)
+entropy_delta:         D=0.6065 p<1e-300    (synthetic mean 2.00, real mean 5.09)
+crypto_call_rate:      D=0.8127 p<1e-300    (synthetic mean 25530.12, real mean 0.35)
+key_generation_events: D=0.6118 p<1e-300    (synthetic mean 2.74, real mean 0.02)
+```
+
+All six diverge significantly, more sharply than ClaMP's three (DEV-34's largest statistic was
+0.4884). Two features stand out for why: `crypto_call_rate`'s synthetic mean (25,530 — the
+generator's own calls-per-second units) is not remotely the same scale as EMBER's raw import
+*count* (mean 0.35) — the PROXY note on that feature (a rate approximated by a count) understates
+just how different the two numeric ranges are; a reader comparing the raw means without that
+context would wrongly conclude EMBER's PE files almost never touch crypto APIs, when the real
+statement is narrower: the *units* don't match, only the *presence* of a crypto-keyword import is
+comparable across the two. `read_write_ratio` is the one mapped feature whose two-sample gap is
+comparatively small (D=0.30, closest to the entropy features' KS statistics under ClaMP) —
+consistent with it being a structural PE-section property in both the synthetic generator's own
+draws and EMBER's real files, rather than a value invented for one and absent from the other.
+
+**Impact on reproduction:** none — new evaluation, no paper target touched, and every number above
+was measured (`results/logs/20260925T160711Z-62498d7b.json`), including the 0.8353-not-0.8408
+sanity-check drift, stated rather than hidden.
+Figures: `results/figures/fig10a_ember_feature_distributions.png`,
+`results/figures/fig10b_ember_transfer_metrics.png`.
 Tests: `tests/unit/test_honeypot_ember_mapping.py` (16 tests: every feature has a decision, the
 six mapped features compute what they claim, missing slots are zero-and-flagged, source-field
 validation, mapping-summary totals).
