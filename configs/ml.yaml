@@ -102,3 +102,25 @@ profiles:
   # Alg. 3 line 3 — NProf / AProf as fitted class-conditional descriptions (ARCHITECTURE §detection)
   normal_profile_label: NProf
   attack_profile_label: AProf
+
+# DECLARED, M7-10. A single-model neural alternative to Table II's four algorithms
+# (`detection.mlp_model`, kept out of `models:`/`build_models()` above so it never becomes a
+# fifth silent entrant into a table the paper defines as four). Plugged into the same NProf/AProf
+# profile machinery as `models={"mlp": ...}` (`detection.profiles.build`), so `detection/
+# detector.py`, `detection/adversarial.py` and `detection/retraining.py` need no code change to
+# run it. sklearn.MLPClassifier has no dropout/batch-norm layers; `alpha` (L2) and
+# `early_stopping` are the standard sklearn substitutes for the M7-10 brief's "dropout, batch
+# norm" (docs/DEVIATIONS.md DEV-36). Declared once, never tuned to beat the Table II ensemble —
+# same "declared defaults" posture as every other model in this project.
+mlp_detector:
+  enabled: true
+  hidden_layer_sizes: [32, 16]
+  activation: relu
+  solver: adam
+  alpha: 0.001                    # L2 regularization -- sklearn's stand-in for dropout
+  batch_size: auto
+  learning_rate_init: 0.001
+  max_iter: 500
+  early_stopping: true             # holds out validation_fraction of training data each fit
+  validation_fraction: 0.1
+  n_iter_no_change: 20

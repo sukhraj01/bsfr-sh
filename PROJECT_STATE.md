@@ -4,41 +4,44 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-25 · **Milestone:** M7 stretch — eight of nine items done; report
-compiled and current · **Sessions completed:** 25
+**Last updated:** 2026-09-25 · **Milestone:** M7 stretch — M7-10b (neural detector) done;
+M7-10a (EMBER transfer) mapped and data-ready, scoring run outstanding · **Sessions completed:** 26
 
 ---
 
 ## One-line status
 
-This session (M7-9) is documentation only: constructed the threat model the paper's §V never
-states, mapping every security-relevant result this project has produced (Scyther, pBFT threshold
-analysis, Raft comparison, hybrid anchoring, adversarial attack/defense) onto four adversary tiers
-by capability, and replaced §V's five paragraphs of prose with a coverage matrix.
+This session (M7-10) answered M7-8's open question (is the adversarial-retraining memorisation
+failure mode tree-specific?) with a clean "no" — an MLP shows it earlier and more broadly than
+RF — and mapped EMBER onto `FT_RW` at double ClaMP's coverage (6/22 vs. 3/22), but could not
+finish EMBER's own scoring run: Ada's network to `files.pythonhosted.org` was unusable for most
+of the session.
 
-- **`docs/THREAT_MODEL.md`** (new): standalone reference — assets (with the chain + property that
-  protects each), four adversary tiers (external network attacker / one compromised server f=1 /
-  two compromised servers f=2 / adversarial ML evasion), five explicit trust assumptions, a
-  coverage matrix (§V claim → tier → method → result → limitation), a four-item gap analysis
-  (honeypot data poisoning, registration-authority insider threat, consensus DoS, backup-chain
-  side channels). No solutions proposed — gaps are findings, not tickets.
-- **`docs/report/report.tex`** new §"Threat Model" (before §Conclusion): shorter version, focused
-  on the coverage-matrix table and the gap analysis. Recompiled with `tectonic`; fixed two LaTeX
-  issues while building the table (backtick-quoted code spans instead of `\texttt{}`; one table
-  cell holding an essay-length sentence in a non-wrapping `c` column caused a 144pt overfull hbox
-  — both fixed, `tectonic` now clean of new warnings).
-- **The finding: 3 of 5 §V claims hold at their defensible tier, 2 have measured gaps the paper
-  doesn't acknowledge, and a 6th attack surface isn't a §V claim at all.** (1) session protocol —
-  fully verified (Scyther, M7-1). (3) pBFT — Sybil and f=1 verified, but the "51%" framing is
-  wrong (FLAW-5); f=2 demonstrably forks the chain. (5) chain isolation — verified structurally,
-  unconditionally. (2) credential deletion — never implemented, nothing to check it against. (4)
-  DoS-resistance — has a measured liveness gap (DEV-20: one lagging honest replica + one Byzantine
-  stalls the chain at n=4). Adversarial ML (M7-3/M7-8) isn't a §V claim at all — GAP-6's clearest
-  consequence.
-- No code changed. `docs/ROADMAP.md` M7-9 ticked.
+- **`detection/mlp_model.py`** (new): a declared-hyperparameter MLP, returned as a single-entry
+  `models` mapping so `detection/profiles`, `detector`, `adversarial`, `retraining` all consume it
+  with zero code change. **Finding:** unhardened, the MLP is *more* robust to M7-3's attack than
+  RF (median adaptive evasion 0.4866 vs. 0.3213). But every hardened MLP (25/50/100% budget)
+  shows M7-8's bound-memorisation signature (combined-degradation curve *rising* with
+  perturbation) — RF only showed this at 100%. The MLP never reproduces RF's 25%-budget backfire.
+  Conclusion: the failure mode is in the feature space/augmentation strategy, not tree ensembles.
+- **`honeypot/ember_mapping.py`** (new): EMBER's raw PE data (byte histogram, per-section entropy,
+  section permission flags, import table — verified against `elastic/ember`'s actual source, not
+  assumed) grounds 6/22 `FT_RW` features vs. ClaMP's 3/22 (M7-7). EMBER downloaded and
+  sha256-verified on Ada (`data/external/ember/test_features.jsonl`, 200,000 rows). **The scoring
+  run itself did not complete** — see Blockers.
+- Part B measured on this project's own dev machine (45s, CLAUDE.md §6's local-ML allowance), not
+  Ada — see session file Findings for why.
+- `docs/DEVIATIONS.md` DEV-35 (EMBER mapping), DEV-36 (MLP architecture + permutation-importance
+  methodology). `RESULTS.md` "M7-10". Report: new §"Neural vs. Tree-Based Detector", extension to
+  §"Real Malware Transfer Evaluation" noting EMBER's mapping/coverage without transfer numbers.
+- **A concurrent session** (M7-9, formal threat model) committed to this repo mid-session
+  (`8756dab`) — reconciled cleanly (one duplicate `docs/ROADMAP.md` bullet caught and removed).
+  Its own session file was never completed (`sessions/2026-09-25-05-*.md` is still the empty
+  template) — not this session's scope to fix, flagged here so it isn't lost.
 
-`make test` (1547 tests, unchanged) and `make lint` (ruff + mypy) both green — confirms nothing
-broke, since this session touched no `src/`.
+`make test` (1591 passed, 44 new: 16 EMBER-mapping + 4 MLP-wiring + 4 M7-10b end-to-end, plus
+whatever M7-9 or other concurrent sessions added) and `make lint` (ruff + mypy on `src`/`tests`,
+the only paths either target checks) both green.
 
 ---
 
@@ -46,36 +49,46 @@ broke, since this session touched no `src/`.
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session (M7-9 is docs-only) |
-| `docs/THREAT_MODEL.md` | done (M7-9) | new — standalone reference, cross-referenced from the report |
-| `docs/report/report.pdf` | done, current | recompiled this session (`tectonic`), new §"Threat Model" |
-| `verification/` | done (M7-1) | unchanged |
-| `docs/STORAGE_ANALYSIS.md` | done (M7-2) | unchanged |
-| `scripts/run_adversarial_robustness.py` | done (M7-3) | unchanged |
-| `scripts/run_consensus_comparison.py` | done (M7-4) | unchanged |
-| `scripts/run_hybrid_benchmark.py` | done (M7-5) | unchanged |
-| `scripts/m7_6_gap_closure.py` | done (M7-6) | unchanged |
-| `scripts/m7_7_real_malware_transfer.py` | done (M7-7) | unchanged |
-| `scripts/m7_8_adversarial_retraining.py` | done (M7-8) | unchanged |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | `detection/mlp_model.py`, `honeypot/ember_mapping.py` added this session |
+| `docs/report/report.pdf` | done, current | recompiled this session (`tectonic`), new §"Neural vs. Tree-Based Detector" + §m7-7 extension |
+| `docs/THREAT_MODEL.md` | done (M7-9, concurrent commit `8756dab`) | unchanged this session |
+| `scripts/m7_10b_neural_detector.py` | done (M7-10b) | new this session, ~45s local run |
+| `scripts/m7_10a_ember_transfer.py` | **written, untested against real data** | mapping it calls is unit-tested; the script itself needs a working Python env on Ada (or the extracted EMBER file transferred elsewhere) to actually run |
+| Everything else (M7-1 through M7-9's own deliverables) | done | unchanged this session |
 
 ## Current numbers
 
-None new — M7-9 is a synthesis of existing measurements, no new experiments. Every number in
-`docs/THREAT_MODEL.md` and the report's new §"Threat Model" cites an existing `RESULTS.md` line,
-test name, or `verification/` claim (M7-1/M7-3/M7-4/M7-5/M7-7/M7-8).
+New this session: `RESULTS.md` "M7-10", run_id `20260925T105552Z-00a2132a`. MLP clean bal_acc
+0.8237 (vs. RF 0.8408); MLP adaptive-evasion median 0.4866 unhardened, jumps to 1.0000 at every
+hardened budget (no RF-style 25% backfire). EMBER: 6/22 features mapped (coverage measured); no
+transfer bal_acc/precision/recall/MCC/PR-AUC/KS numbers (not measured this session).
 
 ## Next task
 
-None forced — M7 is optional stretch work and the core deliverable was complete before M7-6
-through M7-9. If continued: async pBFT with modelled network latency is the one remaining
-`docs/ROADMAP.md` M7 item. `docs/THREAT_MODEL.md`'s own gap analysis names four uncovered attack
-surfaces (honeypot data poisoning, registration-authority insider threat, consensus DoS, backup-
-chain side channels) as candidate future sessions — none forced, all explicitly out of scope for
-the session that found them.
+**Finish M7-10a.** `data/external/ember/test_features.jsonl` already exists on Ada
+(`~/bsfr-sh/data/external/ember/`, sha256-verified, 200,000 rows) and `scripts/
+m7_10a_ember_transfer.py` is written and ready. What's missing is a working Python env: build
+`~/bsfr-sh/.venv` on Ada (retry `ada_setup_venv3.sbatch`/similar, or check
+`~/bsfr-sh/wheelhouse/` for a partially-downloaded set of wheels from this session's last attempt
+and `pip install --no-index --find-links wheelhouse ...` from those) and run the script — under a
+minute once the env exists. If Ada's network is still bad, an alternative is transferring just
+`test_features.jsonl` (1.87GB) somewhere with a working `numpy`/`sklearn`/`pandas`/`scipy`/
+`matplotlib` already installed (this project's own `.venv` qualifies) and running the script there
+with `EMBER_TEST_JSONL` pointed at the transferred file.
+
+Otherwise: async pBFT with modelled network latency is the one remaining optional
+`docs/ROADMAP.md` M7 item. Not forced — M7 is stretch work.
 
 ## Blockers
 
-None.
+**M7-10a's scoring run is blocked on Ada's outbound network to `files.pythonhosted.org`**, which
+was severely degraded for this entire session (small files: fine, 40-480kB/s; any wheel over
+~10MB: hung indefinitely across 5 attempts on 3 compute nodes). Not a code blocker — `scripts/
+m7_10a_ember_transfer.py` and its mapping are both ready and tested. A `pip download`-only
+workaround (no `install`, no dependency-resolution round-trips) succeeded on `numpy` after ~5
+failed `install` attempts; whether that generalises to the rest of the stack was not confirmed by
+session end (see `sessions/2026-09-25-06-*.md` Findings for the full timeline and
+`~/bsfr-sh/wheelhouse/` on Ada for whatever it managed to fetch).
 
 `data/raw/` is present in this environment already; a genuinely fresh clone still needs
 `make data` (~56 minutes) first.
@@ -96,13 +109,10 @@ None.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 tested eight hypotheses total and narrowed (not closed) the gap to 1.51pt; report states the residual as measured-and-bounded, not unexplained without qualifier |
-| Scyther binary not committed (third-party, single-platform) | a fresh clone can't re-run the verification without a manual download | exact release URL + sha256 in `verification/README.md`; the raw output is committed, so the claims don't depend on re-running it |
-| The BC_SigRW/BC_DTBU timing gap is condition-dependent (35-45% off, ~25-27% on) | a reader citing "the gap" without saying which condition is wrong half the time | both figures now in `RESULTS.md`/`docs/EXPERIMENTS.md`/the report supplement, each labelled with its condition |
-| Raft's message-count ratio (~60% of pBFT) is measured only at `n=4`; a reader might extrapolate the O(n)/O(n^2) asymptotic gap and expect a bigger number | over-claiming Raft's advantage at other cluster sizes | `docs/DEVIATIONS.md` DEV-32 and the report both state the ratio is small-`n`-specific, not the asymptotic one |
-| M7-7's bal_acc=0.5000 could be misread as "the framework doesn't work" rather than "19/22 features have no static analogue" | undersells the synthetic-corpus result (0.8422) and the framework's actual design | DEV-34 and the report state explicitly that this is a schema dynamic-vs-static grounding finding, not a generator-calibration failure, before giving the number |
-| M7-8's 25%-budget "hardening backfires" result could be misread as "adversarial retraining doesn't work" rather than "a narrow training budget generalises worse than a wide one" | undersells the real robustness gain measured at 50%/100% | report and `RESULTS.md` state the non-monotonicity explicitly and lead with it, rather than averaging budgets into one number |
-| `docs/THREAT_MODEL.md`'s anchor-chain trust assumption (Tier 3's only detection mechanism) is itself simulated, single-authority, and untested against a compromised anchor authority | a reader could mistake hybrid anchoring for a closed Tier-3 solution rather than a partial, unverified one | stated plainly in both the Tier 3 writeup and Trust Assumption 2, cross-referencing DEV-33's own "not real Ethereum or Bitcoin" caveat |
+| The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 tested eight hypotheses, narrowed the gap to 1.51pt; report states the residual as measured-and-bounded |
+| M7-7's bal_acc=0.5000 / M7-10a's unmeasured transfer could both be misread as "the framework doesn't work" rather than schema-grounding findings | undersells the synthetic-corpus result and the framework's design | DEV-34/DEV-35 and the report state explicitly this is a static-vs-dynamic grounding finding, and for M7-10a specifically, that the transfer number is *unmeasured*, not zero or bad |
+| M7-8's 25%-budget "hardening backfires" and M7-10b's "MLP shows it at every budget" could be read as "adversarial retraining/neural nets don't work" | undersells the real robustness gain measured at 50/100% (both models) and the MLP's genuine pre-hardening robustness edge | `RESULTS.md`/report state both effects explicitly, side by side with the budgets that do help |
+| Two Claude Code sessions ran on this repo concurrently this session (M7-9, M7-10); nothing currently prevents this from happening again and landing an unreconciled conflict | a future concurrent session's edits could silently clobber or duplicate content the way this session's `docs/ROADMAP.md` draft briefly did | no fix implemented — flagging here as a standing risk; each session should re-read a file immediately before writing to it if a long gap (e.g. a slow remote job) occurred since it was first read |
 
 ---
 

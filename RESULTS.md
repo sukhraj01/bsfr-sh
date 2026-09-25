@@ -831,3 +831,70 @@ additional clean-recall cost (0.5864 vs 0.6317 recall).
 
 Figures: `results/figures/fig9{a,b,c,d}_{clean_accuracy_cost,combined_degradation_overlay,
 adaptive_evasion_comparison,pareto_clean_vs_robustness}.png`, each with the shared sidecar above.
+
+## M7-10 — neural detector vs. tree ensemble, and EMBER transfer (2026-09-25)
+
+Two independent follow-ups, run against M7-3's/M7-7's/M7-8's established machinery, never
+retraining anything on real data (M7-10a) and never touching `FT_RW`'s schema (both).
+
+**Part A — no numbers this session.** `honeypot.ember_mapping` (DEV-35) is written, verified
+against the actual `elastic/ember` source, and unit-tested (16 tests) — 6/22 `FT_RW` features
+mapped, vs. ClaMP's 3/22. EMBER's `test_features.jsonl` (200,000 rows) is downloaded and
+sha256-verified on Ada. The evaluation script (`scripts/m7_10a_ember_transfer.py`) did not run:
+Ada's outbound bandwidth to `files.pythonhosted.org` was severely degraded for this entire
+session, and no Python scientific-stack venv could be built there across five attempts on three
+compute nodes (full timeline: `sessions/2026-09-25-06-m7-10-neural-detector-ember.md` Findings;
+DEV-35). No transfer balanced-accuracy/precision/recall/MCC/PR-AUC/KS-test numbers are reported —
+none were measured, so none are claimed (CLAUDE.md §2).
+
+**Part B — `scripts/m7_10b_neural_detector.py --seed 20260912`, run_id
+`20260925T105552Z-00a2132a`.** A small MLP (`detection/mlp_model.py`, DEV-36: 2 hidden layers
+32/16, ReLU, `adam`, `alpha=0.001`, early stopping) plugged into the same `NProf`/`AProf`
+machinery as a single-model ensemble, run through M7-3's exact top-5/bounds perturbation sweep and
+M7-8's exact retraining protocol, RF refit fresh in the same run for a like-for-like comparison.
+**Measured on this project's own dev machine (Darwin/arm64), not Ada** — Part B's compute (MLP
+fit on 1467 rows, permutation-importance sweep) completes in ~45s wall time, well inside
+CLAUDE.md §6's local-dev-box allowance for subsampled ML; Ada was reserved for Part A, which
+genuinely needs its storage/quota. Host/environment recorded in the sidecar as usual.
+
+```
+2026-09-25 | detection/honeypot-m7-10b-neural | rf original, clean eval | bal_acc=0.8408 prec=0.8415 rec=0.8272 mcc=0.6822 pr_auc=0.9111 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-3
+2026-09-25 | detection/honeypot-m7-10b-neural | rf original, adaptive evasion | p10=0.0000 median=0.3213 p90=0.9771 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-3
+2026-09-25 | detection/honeypot-m7-10b-neural | rf original, top-5 permutation importance sum | sum=0.1170 | measured | 20260925T105552Z-00a2132a | M7-10b, NOT comparable to M7-8's Gini-based 0.4553 (different scale, DEV-36)
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @25%, clean eval | bal_acc=0.7803 prec=0.8858 rec=0.6374 mcc=0.5884 pr_auc=0.9094 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-8
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @25%, adaptive evasion | p10=0.0000 median=0.2499 p90=0.9510 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-8's backfire
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @25%, top-5 permutation importance sum | sum=0.1535 | measured | 20260925T105552Z-00a2132a | M7-10b, RISES vs. original (0.1170) -- consistent with the 25% backfire
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @50%, clean eval | bal_acc=0.7616 prec=0.8447 rec=0.6317 mcc=0.5444 pr_auc=0.8843 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-8
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @50%, adaptive evasion | p10=0.0000 median=0.8825 p90=1.0000 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-8
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @50%, top-5 permutation importance sum | sum=0.0818 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @100%, clean eval | bal_acc=0.7363 prec=0.8280 rec=0.5864 mcc=0.4979 pr_auc=0.8702 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-8
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @100%, adaptive evasion | p10=0.0000 median=1.0000 p90=1.0000 | measured | 20260925T105552Z-00a2132a | M7-10b, reproduces M7-8
+2026-09-25 | detection/honeypot-m7-10b-neural | rf hardened @100%, top-5 permutation importance sum | sum=0.0177 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp original, clean eval | bal_acc=0.8237 prec=0.8094 rec=0.8300 mcc=0.6471 pr_auc=0.8925 | measured | 20260925T105552Z-00a2132a | M7-10b, -1.71pt bal_acc vs. RF
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp original, adaptive evasion | p10=0.0000 median=0.4866 p90=1.0000 | measured | 20260925T105552Z-00a2132a | M7-10b, MORE robust than RF unhardened (0.3213)
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp original, top-5 permutation importance sum | sum=0.0971 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @25%, clean eval | bal_acc=0.8284 prec=0.8043 rec=0.8499 mcc=0.6565 pr_auc=0.8839 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @25%, adaptive evasion | p10=0.0000 median=1.0000 p90=1.0000 | measured | 20260925T105552Z-00a2132a | M7-10b, NO backfire (contrast with RF's 25% -> 0.2499)
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @25%, combined curve | frac=0.0:0.828 frac=1.0:0.877 | measured | 20260925T105552Z-00a2132a | M7-10b, RISES from the smallest budget -- RF only showed this at 100%
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @25%, top-5 permutation importance sum | sum=0.0328 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @50%, clean eval | bal_acc=0.8102 prec=0.7923 rec=0.8215 mcc=0.6201 pr_auc=0.8700 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @50%, adaptive evasion | p10=0.0000 median=1.0000 p90=1.0000 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @50%, top-5 permutation importance sum | sum=0.0251 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @100%, clean eval | bal_acc=0.7704 prec=0.7784 rec=0.7365 mcc=0.5425 pr_auc=0.8438 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @100%, adaptive evasion | p10=0.0000 median=1.0000 p90=1.0000 | measured | 20260925T105552Z-00a2132a | M7-10b
+2026-09-25 | detection/honeypot-m7-10b-neural | mlp hardened @100%, top-5 permutation importance sum | sum=0.0219 | measured | 20260925T105552Z-00a2132a | M7-10b
+```
+
+**The finding: the MLP shows M7-8's bound-memorisation failure mode earlier and more completely
+than RF, not less.** Every one of the MLP's three hardened combined-degradation curves rises
+monotonically with perturbation (25%: 0.828→0.877; 50%: 0.810→0.897; 100%: 0.770→0.896) — the
+signature M7-8 found only at RF's 100% budget, here present at every budget, including the
+smallest. The MLP never reproduces RF's 25%-budget backfire. Before any hardening, the MLP is
+*more* robust than RF (median adaptive evasion 0.4866 vs. 0.3213) — a real architectural
+difference (smooth decision boundary vs. axis-aligned splits) — but that advantage does not
+survive adversarial retraining; if anything the higher-capacity model adopts the memorisation
+shortcut faster. Full discussion: `docs/DEVIATIONS.md` DEV-36, report §"Neural vs. Tree-Based
+Detector: Architecture or Features?".
+
+Figures: `results/figures/fig10{c,d,e,f}_mlp_vs_rf_{clean_accuracy,combined_degradation,
+retraining_adaptive,importance_shift}.png`, sidecar `results/logs/20260925T105552Z-00a2132a.json`.

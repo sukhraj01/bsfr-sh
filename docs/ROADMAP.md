@@ -2,8 +2,9 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — formal threat model (M7-9) delivered;
-async pBFT with modelled network latency is the one remaining, not-required item**
+**Current milestone: write-up done; M7 (stretch) — neural detector (M7-10b) delivered, EMBER
+transfer (M7-10a) mapped/downloaded but not yet scored (Ada network outage); async pBFT with
+modelled network latency is the other remaining, not-required item**
 
 ---
 
@@ -295,6 +296,20 @@ existing baseline convention). Variance is reported and the repeat count follows
       (credential deletion is unimplemented/unverifiable; DoS-resistance has a measured liveness
       gap at f=1+1 lagging honest replica, DEV-20); a sixth attack surface (adversarial ML) exists
       that isn't a §V claim at all. Documentation only — no code, no new tests (2026-09-25)
+- [~] Neural detector + EMBER transfer evaluation — (B) done: a small MLP (`detection/
+      mlp_model.py`, DEV-36) plugged into the same NProf/AProf machinery as a single-model
+      ensemble, run through M7-3's exact perturbation sweep and M7-8's exact retraining protocol
+      — finding: the MLP shows M7-8's bound-memorisation failure mode at *every* hardening budget
+      tested (not just 100% as for RF), and never reproduces RF's 25%-budget backfire, pointing at
+      the feature space/augmentation strategy rather than tree-ensemble architecture as the root
+      cause. `scripts/m7_10b_neural_detector.py`, `RESULTS.md` M7-10, report §"Neural vs.\
+      Tree-Based Detector" (2026-09-25). (A) mapping done, evaluation not run: EMBER's raw PE
+      features (byte histogram, per-section entropy, section r/w/x flags, import table) mapped
+      onto `FT_RW` (`honeypot/ember_mapping.py`, 6/22 features grounded vs.\ ClaMP's 3/22, DEV-35,
+      16 passing unit tests), EMBER downloaded and sha256-verified on Ada — but `scripts/
+      m7_10a_ember_transfer.py` itself did not run this session: sustained severe network
+      degradation on Ada blocked building a Python venv there across five attempts (DEV-35,
+      session file). Next session: the data is already on Ada; the script is ready to run.
 
 ---
 

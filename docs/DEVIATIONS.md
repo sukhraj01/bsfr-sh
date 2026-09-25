@@ -1244,3 +1244,165 @@ Figures: `results/figures/fig8a_entropy_distributions.png`,
 `results/logs/20260925T041117Z-672f7572.json`. Tests: `tests/unit/test_honeypot_external_mapping.py`
 (the mapping table, deterministic and total), `tests/unit/test_honeypot_distribution_compare.py`
 (the KS wrapper).
+
+### DEV-35 · ADD · EMBER mapping: a richer static dataset grounds 6/22 features vs. ClaMP's 3/22
+### (M7-10a)
+
+**Paper:** n/a — same as DEV-34, this is about testing `FT_RW`'s real-world grounding, not the
+paper's design.
+
+**Problem:** M7-7 (DEV-34) mapped ClaMP's fixed header floats onto `FT_RW` and found only the
+entropy group (3/22 features) had any real correspondence — a dataset that never executes a
+sample cannot ground the other six behavioural groups. The open question M7-7 could not answer
+with ClaMP alone: does a *richer* static dataset close any of that gap, or is entropy-only
+inherent to staticness itself, independent of how much raw data the source provides?
+
+**Dataset.** EMBER2018 (feature version 2, `github.com/elastic/ember`,
+`ember_dataset_2018_2.tar.bz2`) — raw LIEF-extracted features (not the pre-vectorized form) for
+~1.1M real Windows PE files, fetched and extracted on Ada (`data/external/ember/README.md`: sha256
+verified against the upstream repository's published checksum). Only `test_features.jsonl`
+(200,000 fully-labelled rows) was extracted — the ~900K-row train split is never read, both
+because M7-10a is evaluation-only (same posture as M7-7) and because it does not fit inside this
+cluster account's storage allocation alongside the account's other projects.
+
+**The mapping (`honeypot.ember_mapping`) grounds 6 of 22 features, double ClaMP's 3.** Verified
+line-by-line against the actual `elastic/ember` `features.py` source before writing any mapping
+code (not assumed from documentation) — `histogram` is confirmed a raw, un-normalised 256-bin
+byte-value count; `section.sections[i]` confirmed to carry `entropy` and `props` (permission
+flags) directly; `imports` confirmed `{dll_name: [function_names]}`.
+
+| Group | Features | Mapped (proxy) | Missing |
+|---|---|---|---|
+| entropy | 3 | **3** | 0 |
+| crypto_api | 3 | **2** | 1 |
+| filesystem | 5 | **1** | 4 |
+| process, network, persistence, kill_chain | 11 | 0 | 11 |
+| **Total** | **22** | **6** | **16** |
+
+Every mapped feature is a `PROXY`, never `DIRECT` — EMBER's raw data is richer than ClaMP's, but
+it is still static, so nothing here claims to observe the real thing:
+- `write_entropy_mean` — Shannon entropy computed directly from the whole-file 256-bin byte
+  histogram (unambiguous; EMBER's alternative `byteentropy` 2D histogram was considered and
+  rejected because its axis packing was not verified against source in this session, and a
+  silently-transposed 256-value array would produce a wrong-but-plausible-looking number).
+- `write_entropy_var` / `entropy_delta` — population variance / max-minus-min spread across
+  *every* section EMBER reports (typically 4-8 per file) rather than ClaMP's fixed two-point
+  `{E_text, E_data}` — a materially richer spread estimate of the same underlying quantity.
+- `crypto_call_rate` / `key_generation_events` — keyword/exact-name matches against the full
+  per-DLL import table; both are explicitly *counts standing in for rates/events*, since a static
+  import table has no time axis and nothing guarantees an imported function is ever called.
+- `read_write_ratio` — the brief's own suggestion: read-only vs. writable section counts from
+  `props`. Flagged as the weakest of the six — a structural PE property, not observed I/O.
+- `crypto_ngram_novelty` and `directory_breadth` remain `MISSING`: EMBER's imports carry no call
+  *order* (an n-gram needs a sequence, not a set) and no section count is a directory count —
+  both proxies considered and rejected for the same reason M7-7 rejected `NumberOfSections`,
+  rather than silently forced.
+
+**The coverage fraction is itself the finding, and it is informative either way (session brief).**
+6/22 vs. 3/22 confirms the *direction* the brief predicted — richer static features do ground more
+of `FT_RW` — but the shape of the gap is unchanged: every execution-time group (process, network,
+persistence, kill-chain, 11/22 features) stays at zero regardless of how much static metadata is
+available, because no PE-header/import/section field can observe a process spawn, a network
+connection, a registry write, or a kill-chain stage — these are not properties a richer static
+dataset can approach asymptotically; they require execution, which no static dataset by
+construction ever performs.
+
+**Transfer evaluation status: mapping complete and unit-tested (16 tests,
+`tests/unit/test_honeypot_ember_mapping.py`); the scoring run itself (`scripts/
+m7_10a_ember_transfer.py` against the extracted `test_features.jsonl`) did not complete this
+session.** Ada's shared cluster (`ada.iiit.ac.in`) experienced sustained, severe outbound-bandwidth
+degradation to `files.pythonhosted.org` for the duration of this session — every attempt to
+install the Python scientific stack (`numpy`/`scikit-learn`/`pandas`/`matplotlib`/`scipy`) into a
+fresh venv stalled indefinitely on the first multi-megabyte wheel, across five separate `sbatch`
+submissions on three different compute nodes, with and without extended `pip` retry/timeout
+settings, with and without a progress bar, downloading via `pip install`, `pip download`, and
+direct `curl`. The EMBER *data* itself (a 1.6GB download, then a single-member `tar` extraction to
+1.87GB) succeeded — slowly, but it completed and was sha256-verified — so this is specifically a
+"many small connections to PyPI's CDN" failure mode, not a general network outage. See
+`sessions/2026-09-25-06-m7-10-neural-detector-ember.md` Findings for the full timeline. `scripts/
+m7_10a_ember_transfer.py` is written, and its inner logic (fitting, sanity-checking against
+M7-3's 0.8408, scoring, KS-testing) is exercised indirectly by the mapping's own unit tests and by
+Part B's identical fit/sanity-check/score pattern (`m7_10b`, run successfully) — only the actual
+EMBER-scored numbers are outstanding. Next session: `data/external/ember/test_features.jsonl`
+already exists on Ada (`~/bsfr-sh/data/external/ember/`); once a venv can be built there (or the
+file is transferred somewhere with one), `python scripts/m7_10a_ember_transfer.py` completes in
+under a minute.
+
+**Impact on reproduction:** none — new evaluation, no paper target touched, and no number is
+claimed here that was not measured (the mapping/coverage numbers above are; the transfer score is
+explicitly marked not yet measured, not approximated).
+Tests: `tests/unit/test_honeypot_ember_mapping.py` (16 tests: every feature has a decision, the
+six mapped features compute what they claim, missing slots are zero-and-flagged, source-field
+validation, mapping-summary totals).
+
+### DEV-36 · ADD · MLP detector architecture, and permutation importance replacing Gini for
+### the RF-vs-MLP comparison (M7-10b)
+
+**Paper:** n/a — Table II names only the paper's four algorithms (random forest, logistic
+regression, decision tree, KNN); an MLP is our own addition to test whether M7-8's adversarial-
+retraining failure mode is a tree-ensemble-specific artefact.
+
+**Problem:** M7-8 found that adversarially retraining the Random-Forest-led ensemble hardens it
+against M7-3's attack at 50%/100% training budget, but by learning "values near the evasion
+bound" as its own signature — the 100%-budget model's combined-evasion curve *rises* with
+perturbation. Whether that is a property of tree ensembles' axis-aligned splits, or of the
+22-feature space and augmentation strategy independent of architecture, was untested.
+
+**Decision (a): the MLP is a single-model `models={"mlp": ...}` mapping into the existing
+`NProf`/`AProf` machinery, not a fork of `detection/`.** `detection.profiles.ensemble_score`
+already averages `predict_proba` across whatever is in the `models` mapping it is given; with one
+entry, that average is just the model's own score. `detection.mlp_model.train_mlp` returns
+`{"mlp": <fitted MLPClassifier>}` in the exact shape `detection.models.train_all` returns for the
+four-model ensemble, so `detection/detector.py`, `detection/adversarial.py` and
+`detection/retraining.py` all run against it completely unchanged — the same "reuse, don't fork"
+posture M7-3/M7-7/M7-8 established. Kept as its own module (`detection/mlp_model.py`), not folded
+into `detection/models.py`, because `models.MODEL_NAMES` is Table II's exact four algorithms
+(CLAUDE.md §7); an MLP must never become a silent fifth entrant into that table.
+
+**Decision (b): declared architecture (`configs/ml.yaml` `mlp_detector:`), never tuned to beat
+RF.** Two hidden layers (32, 16 units), ReLU, `adam`, `alpha=0.001` L2 regularisation,
+`early_stopping=True` (10% validation split, 20-epoch patience), `max_iter=500`. scikit-learn's
+`MLPClassifier` implements neither dropout nor batch normalisation, so `alpha` (L2) and
+`early_stopping` are the declared stand-ins the session brief's "dropout, batch norm" maps onto in
+this framework — recorded here rather than silently substituted. sklearn was used rather than
+PyTorch (the brief's stated fallback for "finer control over adversarial training") because the
+sklearn result was informative enough on its own — see the finding below — to not require it this
+session; a PyTorch follow-up remains open (`PROJECT_STATE.md`).
+
+**Decision (c): permutation importance replaces Gini importance for the RF-vs-MLP feature-
+reliance comparison.** M7-8 read `RandomForestClassifier.feature_importances_` (Gini importance,
+normalised to sum to 1 across all features) to check whether the top-5's combined importance
+collapsed under hardening. `MLPClassifier` has no such attribute, and Gini importance is
+intrinsically tied to how a tree partitions its input space — there is no equivalent quantity for
+a distributed neural representation to inherit. `scripts/m7_10b_neural_detector.py`'s
+`permutation_importance_top5` instead shuffles one feature column at a time across the eval set
+and measures the drop in the *actual fitted detector's* balanced accuracy
+(`detection.adversarial.ensemble_predict` — the same NProf/AProf decision every other number in
+this project's detection results uses, not a proxy model's raw `.predict()`). This is an absolute
+scale (balanced-accuracy points lost), not Gini's sum-to-1 scale, so **M7-8's RF top-5 sums
+(0.4553 → 0.2309) are not directly comparable to this session's RF permutation-importance sums
+(0.1170 → 0.0177)** even though both describe the same fitted models at the same budgets — a
+reader comparing the two numbers across sessions without reading this paragraph would draw a
+false conclusion about the magnitude of the shift. Recomputing RF's own numbers by permutation
+importance in the same run as the MLP's is what makes the two models comparable at all.
+
+**Finding: the memorisation failure mode is not tree-specific — if anything, the MLP shows it
+earlier and more completely.** Full numbers in `RESULTS.md` "M7-10" and the report's
+"Neural vs. Tree-Based Detector" section. Summary: unhardened, the MLP is *more* robust than RF to
+§adversarial's attack (median adaptive evasion 0.4866 vs. 0.3213) — a real architectural
+difference, a smooth decision boundary needs a larger combined push to cross than RF's
+axis-aligned splits. But every one of the MLP's three hardened combined-degradation curves
+(25%/50%/100% budget) *rises* monotonically with perturbation — the same signature M7-8 found only
+at RF's 100% budget, here present at every budget tested — and the MLP never reproduces RF's
+25%-budget backfire (RF's median evasion effort *drops* below baseline at 25% before recovering;
+the MLP's never dips). A higher-capacity, continuously-weighted model does not avoid the
+augmentation-boundary-memorisation failure mode; it engages that shortcut faster than an ensemble
+of trees does. This points at the training procedure (augmenting positives toward a bounded region
+of a fixed, low-dimensional feature space) and the feature space itself as the root cause, not the
+tree-ensemble architecture M7-8 tested it on.
+
+**Impact on reproduction:** none — new evaluation, no paper target touched.
+Tests: `tests/unit/test_mlp_model.py` (the MLP wiring into the shared profile/detector machinery),
+`tests/unit/test_m7_10b_neural_detector.py` (end-to-end against the committed corpus — RF baseline
+reproduction, MLP zero-perturbation degenerate case, MLP zero-training-budget degenerate case,
+eval-set-never-perturbed).

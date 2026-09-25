@@ -17,6 +17,13 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
+# EMBER (M7-10a) — too large to commit (1.87GB extracted test split, 1.6GB archive); README.md
+# and the mapping code make the evaluation reproducible without the data itself.
+data/external/ember/*.jsonl
+data/external/ember/*.tar.bz2
+data/external/ember/sha256.txt
+data/external/ember/*.log
+
 # Run artefacts. Tables and figures are committed deliberately once they are `measured`;
 # scratch logs from local iteration are not.
 results/logs/*.tmp

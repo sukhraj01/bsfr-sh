@@ -1334,6 +1334,170 @@ not specifically ransomware. The transfer gap measured here is therefore a state
 our generator's approximation reaches when most of its feature space cannot be exercised at all,
 not a general claim about honeypot-based ransomware detection.
 
+\textbf{A richer static dataset: EMBER, mapped but not yet scored.} EMBER2018
+(\texttt{github.com/elastic/ember}) exposes far richer raw PE data than ClaMP -- a 256-bin
+whole-file byte histogram, every section's own entropy and read/write/execute flags, and a full
+per-DLL import table -- and \texttt{honeypot.ember\_mapping} (DEV-35) grounds 6 of 22 $FT_{RW}$
+features against it (entropy 3/3, crypto\_api 2/3, filesystem 1/5), double ClaMP's 3/22, verified
+line-by-line against the \texttt{elastic/ember} extractor source rather than assumed. The dataset
+was downloaded and sha256-verified on Ada, and the mapping is unit-tested (16 tests) -- but the
+scoring run itself did not complete this session: Ada's outbound bandwidth to
+\texttt{files.pythonhosted.org} was severely degraded throughout, and no Python scientific-stack
+environment could be built there across five attempts on three compute nodes. No transfer balanced
+accuracy, precision, recall, MCC, PR-AUC, or KS-test numbers are reported here, because none were
+measured (CLAUDE.md's ``never claim a number we did not measure'' -- DEV-35 has the full timeline
+and is the load-bearing record of what is and is not established). The one question this section
+\emph{can} answer without the scoring run: does a richer static source close the schema's
+dynamic-vs-static gap noted above? No -- 11 of 22 features (process, network, persistence,
+kill-chain) stay unmapped regardless of dataset richness, because no PE-header, import, or section
+field can observe a process spawn, a network connection, or a kill-chain stage; those require
+execution, which is what makes a dataset dynamic in the first place. A richer \emph{static} source
+narrows the gap (6/22 vs.\ 3/22) without changing its shape.
+
+\section{Neural vs.\ Tree-Based Detector: Architecture or Features?}
+\label{sec:m7-10b}
+
+\textbf{The open question.} \S\ref{sec:m7-8} found that adversarially retraining the Random-Forest
+ensemble hardens it against \S\ref{sec:adversarial}'s attack at 50\%/100\% training budget, but by
+learning ``values near the evasion bound'' as its own signature -- the 100\%-budget model's
+combined-evasion curve \emph{rises} with perturbation rather than falling. Is that failure mode a
+property of tree ensembles' axis-aligned splits specifically, or of the 22-feature space and
+augmentation strategy, independent of model architecture? This section runs the identical protocol
+-- same top-5 features and evasion bounds (\S\ref{sec:adversarial}'s \texttt{FEATURE\_BOUNDS},
+reused verbatim, never re-derived from the new model), same training budgets -- against a small
+MLP (\texttt{detection.mlp\_model}, DEV-36: two hidden layers of 32/16 units, ReLU, \texttt{adam},
+\texttt{alpha}=0.001 L2 regularisation and early stopping standing in for dropout/batch-norm,
+which scikit-learn's \texttt{MLPClassifier} does not implement) plugged into the identical
+\emph{NProf}/\emph{AProf} profile machinery as a single-model ensemble, so every downstream
+mechanism (\texttt{detection/detector.py}, \texttt{detection/adversarial.py},
+\texttt{detection/retraining.py}) runs unchanged. Feature importance is compared by permutation
+(shuffle one feature at a time against the fitted detector's own decision, measure the
+balanced-accuracy drop) rather than Gini importance, since an MLP has no
+\texttt{.feature\_importances\_} attribute -- this is an absolute, not normalised-to-1, scale, so
+\S\ref{sec:m7-8}'s Gini-based top-5 sums (0.4553 original, falling to 0.2309 at 100\%) are not
+directly comparable to this section's permutation-based numbers even for the same RF model,
+recomputed here for a like-for-like comparison against the MLP.
+
+\begin{table}[t]
+\centering
+\caption{Clean accuracy, RF ensemble vs.\ MLP, on the untouched eval corpus.}
+\label{tab:m7-10b-clean}
+\footnotesize
+\begin{tabular}{lccccc}
+\hline
+\textbf{Model} & \textbf{Bal.\ Acc.} & \textbf{Prec.} & \textbf{Rec.} & \textbf{MCC} & \textbf{PR-AUC} \\
+\hline
+RF ensemble (\S\ref{sec:adversarial}) & 0.8408 & 0.8415 & 0.8272 & 0.6822 & 0.9111 \\
+MLP                                    & 0.8237 & 0.8094 & 0.8300 & 0.6471 & 0.8925 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig10c_mlp_vs_rf_clean_accuracy.png}
+\caption{Clean-eval accuracy, RF ensemble vs.\ MLP.}
+\label{fig:m7-10b-clean}
+\end{figure}
+
+\textbf{Clean accuracy: comparable, MLP slightly behind.} Table~\ref{tab:m7-10b-clean}: the MLP
+trails the four-model ensemble by 1.7 points of balanced accuracy on unperturbed data -- a small
+corpus (1467 training rows) and only 22 engineered features leave little for a higher-capacity
+model to exploit that a forest of trees does not already capture, consistent with the session
+brief's stated expectation that trees are often competitive on tabular data at this scale.
+
+\textbf{Before any hardening, the MLP is already more robust to \S\ref{sec:adversarial}'s attack.}
+Unperturbed, the MLP's median adaptive-evasion perturbation is 0.4866, against the RF ensemble's
+0.3213 -- a real architectural difference, not a training-budget effect: a smooth, distributed
+decision boundary requires a larger combined push across all five top features to cross than a
+forest of axis-aligned splits does. Both models' un-hardened combined-degradation curves
+(Figure~\ref{fig:m7-10b-degrade}) fall smoothly with perturbation in the ordinary way (RF:
+0.841$\to$0.570; MLP: 0.824$\to$0.497) -- neither shows the rising-curve memorisation signature
+before retraining.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig10d_mlp_vs_rf_combined_degradation.png}
+\caption{Combined evasion, RF vs.\ MLP, no hardening.}
+\label{fig:m7-10b-degrade}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Adaptive evasion (median) by training budget, RF vs.\ MLP. RF's own numbers reproduce
+\S\ref{sec:m7-8} (Table~\ref{tab:m7-8-adaptive}); the MLP's 25\% row is the headline contrast.}
+\label{tab:m7-10b-adaptive}
+\footnotesize
+\begin{tabular}{lcc}
+\hline
+\textbf{Budget} & \textbf{RF median} & \textbf{MLP median} \\
+\hline
+original & 0.3213 & 0.4866 \\
+25\%     & 0.2499 (\emph{worse}) & 1.0000 \\
+50\%     & 0.8825 & 1.0000 \\
+100\%    & 1.0000 & 1.0000 \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{The headline result: the MLP shows \S\ref{sec:m7-8}'s memorisation failure mode earlier
+and more completely than RF, not less.} Every one of the MLP's three hardened combined-degradation
+curves \emph{rises} monotonically with perturbation -- 25\% budget: 0.828$\to$0.877; 50\%:
+0.810$\to$0.897; 100\%: 0.770$\to$0.896 (Figure~\ref{fig:m7-10b-degrade}) -- the same signature
+\S\ref{sec:m7-8} found only at RF's 100\% budget, here present at every budget tested, including
+the smallest. Correspondingly, the MLP's median adaptive-evasion perturbation jumps straight to
+1.0000 at 25\% and stays there (Table~\ref{tab:m7-10b-adaptive}), and critically, \textbf{the MLP
+never reproduces RF's 25\%-budget backfire}: RF's median evasion effort at 25\% \emph{drops} below
+its own un-hardened baseline (0.3213 $\to$ 0.2499) before recovering at higher budgets; the MLP's
+never dips at all. A higher-capacity, continuously-weighted model does not avoid the
+augmentation-boundary-memorisation failure mode \S\ref{sec:m7-8} identified -- it engages that
+shortcut faster and more uniformly than an ensemble of axis-aligned trees does.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig10e_mlp_vs_rf_retraining_adaptive.png}
+\caption{p10/median/p90 adaptive evasion by training budget, RF vs.\ MLP.}
+\label{fig:m7-10b-retrain-adaptive}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig10f_mlp_vs_rf_importance_shift.png}
+\caption{Top-5 permutation-importance sum by training budget, RF vs.\ MLP.}
+\label{fig:m7-10b-importance}
+\end{figure}
+
+\textbf{Feature-importance shift: both models redistribute away from the top-5, on different
+schedules.} By permutation importance (Figure~\ref{fig:m7-10b-importance}), the MLP's top-5
+reliance falls monotonically and sharply with training budget -- 0.0971 (original) $\to$ 0.0328
+(25\%) $\to$ 0.0251 (50\%) $\to$ 0.0219 (100\%), a 77\% reduction end to end. RF's own
+permutation-importance numbers (distinct from \S\ref{sec:m7-8}'s Gini-based figures) are
+\emph{non}-monotonic: 0.1170 (original) $\to$ 0.1535 (25\%, a rise) $\to$ 0.0818 (50\%) $\to$
+0.0177 (100\%). The 25\%-budget rise is consistent with, and helps explain, RF's 25\%-budget
+backfire: by this measure the narrowly-hardened RF model becomes \emph{more}, not less, reliant on
+the attacked features at exactly the budget where it is also most fragile -- a different failure
+signature from the MLP's, which sheds top-5 reliance steadily from the first budget onward without
+ever becoming more concentrated on it. Neither model solves robustness by discarding the top-5
+entirely (no value approaches zero), matching \S\ref{sec:m7-8}'s "partial, not total" finding for
+RF and extending it to the MLP.
+
+\textbf{Conclusion: the fragility is in the features and the augmentation strategy, not the tree
+structure.} If \S\ref{sec:m7-8}'s memorisation failure mode were a tree-ensemble-specific
+artefact of axis-aligned splits, a distributed neural representation should have shown a
+qualitatively different, more robust response to the same augmentation. It shows the opposite: the
+MLP adopts the rising-curve memorisation signature at every budget tested, including the 25\%
+budget where RF instead backfires by a different mechanism. Both failure modes -- RF's narrow-band
+backfire and both models' bound-memorisation at wider budgets -- point to the same root cause: a
+training procedure that augments positives toward a bounded region of a fixed, low-dimensional
+feature space gives \emph{any} sufficiently flexible model a shortcut (‘‘near the bound’’ or
+``far from the original distribution'') that is easier to learn than the underlying behavioural
+signal the features were designed to carry. The MLP's one genuine architectural advantage measured
+here is orthogonal to hardening: before any retraining, its smoother decision boundary is already
+harder to evade with small perturbations than RF's (0.4866 vs.\ 0.3213 median). The fix implied by
+this section is the same one \S\ref{sec:m7-8} already named -- diversifying what the augmentation
+teaches, or constraining reliance on any single small feature subset -- rather than a change of
+model family.
+
 \section{Consensus Comparison: pBFT vs.\ Raft}
 \label{sec:m7-4}
 
