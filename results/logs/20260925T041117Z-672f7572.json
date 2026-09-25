@@ -1,0 +1,306 @@
+{
+  "config_hash": "c72fe37a143deffa0b60734fad3bb2599a05f651819f96c340eb669c9fe8b2b7",
+  "config_hash_scheme": 2,
+  "figures": [
+    "results/figures/fig8a_entropy_distributions.png",
+    "results/figures/fig8b_transfer_metrics.png"
+  ],
+  "git_rev": "2053c14",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "ks_tests": [
+    {
+      "feature": "files_touched_per_s",
+      "kind": "missing",
+      "ks_statistic": 0.9499545040946314,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 8.78426523978617
+    },
+    {
+      "feature": "read_write_ratio",
+      "kind": "missing",
+      "ks_statistic": 0.9686078252957234,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 1.817594151956324
+    },
+    {
+      "feature": "rename_rate_per_s",
+      "kind": "missing",
+      "ks_statistic": 0.9686078252957234,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 3.1622148087365787
+    },
+    {
+      "feature": "extension_change_rate",
+      "kind": "missing",
+      "ks_statistic": 0.9686078252957234,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 0.38268892461883525
+    },
+    {
+      "feature": "directory_breadth",
+      "kind": "missing",
+      "ks_statistic": 0.9686078252957234,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 100.00268463148316
+    },
+    {
+      "feature": "write_entropy_mean",
+      "kind": "proxy",
+      "ks_statistic": 0.19686785578933214,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 6.903961520278584e-53,
+      "real_mean": 6.364756139897016,
+      "synthetic_mean": 5.63473300500455
+    },
+    {
+      "feature": "write_entropy_var",
+      "kind": "proxy",
+      "ks_statistic": 0.4883565411934423,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 4.63e-321,
+      "real_mean": 3.5217255313239466,
+      "synthetic_mean": 0.5912329420382165
+    },
+    {
+      "feature": "entropy_delta",
+      "kind": "proxy",
+      "ks_statistic": 0.2853859467427202,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 1.721470308748667e-111,
+      "real_mean": 2.9964006322026546,
+      "synthetic_mean": 1.9997903843949043
+    },
+    {
+      "feature": "crypto_call_rate",
+      "kind": "missing",
+      "ks_statistic": 0.8976342129208371,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 25530.122544775113
+    },
+    {
+      "feature": "key_generation_events",
+      "kind": "missing",
+      "ks_statistic": 0.6310282074613285,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 2.27e-321,
+      "real_mean": 0.0,
+      "synthetic_mean": 2.7356398180163786
+    },
+    {
+      "feature": "crypto_ngram_novelty",
+      "kind": "missing",
+      "ks_statistic": 0.8976342129208371,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 0.42164713607370335
+    },
+    {
+      "feature": "child_process_spawns",
+      "kind": "missing",
+      "ks_statistic": 0.7679708826205641,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 2.114759989535942
+    },
+    {
+      "feature": "injection_attempts",
+      "kind": "missing",
+      "ks_statistic": 0.40855323020928114,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 9.536609861271617e-232,
+      "real_mean": 0.0,
+      "synthetic_mean": 0.637440704276615
+    },
+    {
+      "feature": "privilege_escalation_attempts",
+      "kind": "missing",
+      "ks_statistic": 0.3762511373976342,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 1.1913356266652925e-195,
+      "real_mean": 0.0,
+      "synthetic_mean": 0.6017977051865332
+    },
+    {
+      "feature": "c2_beacon_count",
+      "kind": "missing",
+      "ks_statistic": 0.7989080982711556,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 5.440894093721565
+    },
+    {
+      "feature": "dns_entropy",
+      "kind": "missing",
+      "ks_statistic": 0.87852593266606,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 2.460014397543221
+    },
+    {
+      "feature": "outbound_burst_rate",
+      "kind": "missing",
+      "ks_statistic": 0.87852593266606,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 2.693836249135578
+    },
+    {
+      "feature": "autostart_writes",
+      "kind": "missing",
+      "ks_statistic": 0.5363967242948134,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 3.85e-321,
+      "real_mean": 0.0,
+      "synthetic_mean": 1.085806651501365
+    },
+    {
+      "feature": "shadow_copy_deletions",
+      "kind": "missing",
+      "ks_statistic": 0.5523202911737943,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 3.587e-321,
+      "real_mean": 0.0,
+      "synthetic_mean": 1.2020764613284807
+    },
+    {
+      "feature": "backup_path_accesses",
+      "kind": "missing",
+      "ks_statistic": 0.7793448589626933,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 3.348798655141038
+    },
+    {
+      "feature": "observed_stages",
+      "kind": "missing",
+      "ks_statistic": 1.0,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 3.3630573248407645
+    },
+    {
+      "feature": "stage_dwell_mean_s",
+      "kind": "missing",
+      "ks_statistic": 1.0,
+      "n_real": 5210,
+      "n_synthetic": 2198,
+      "p_value": 0.0,
+      "real_mean": 0.0,
+      "synthetic_mean": 388.4526934121929
+    }
+  ],
+  "mapping_summary": {
+    "crypto_api": {
+      "direct": 0,
+      "missing": 3,
+      "n_features": 3,
+      "proxy": 0
+    },
+    "entropy": {
+      "direct": 0,
+      "missing": 0,
+      "n_features": 3,
+      "proxy": 3
+    },
+    "filesystem": {
+      "direct": 0,
+      "missing": 5,
+      "n_features": 5,
+      "proxy": 0
+    },
+    "kill_chain": {
+      "direct": 0,
+      "missing": 2,
+      "n_features": 2,
+      "proxy": 0
+    },
+    "network": {
+      "direct": 0,
+      "missing": 3,
+      "n_features": 3,
+      "proxy": 0
+    },
+    "persistence": {
+      "direct": 0,
+      "missing": 3,
+      "n_features": 3,
+      "proxy": 0
+    },
+    "process": {
+      "direct": 0,
+      "missing": 3,
+      "n_features": 3,
+      "proxy": 0
+    }
+  },
+  "purpose": "M7-7 \u2014 real malware transfer evaluation of the honeypot detector",
+  "real_missing_mask": 4194079,
+  "real_transfer": {
+    "balanced_accuracy": 0.5,
+    "mcc": 0.0,
+    "n": 5210,
+    "n_positive": 2722,
+    "pr_auc": 0.46117177819468963,
+    "precision": 0.0,
+    "recall": 0.0
+  },
+  "run_id": "20260925T041117Z-672f7572",
+  "seed": 20260912,
+  "synthetic_csv_baseline": {
+    "balanced_accuracy": 0.8408464109597253,
+    "mcc": 0.6821684412447128,
+    "n": 731,
+    "n_positive": 353,
+    "pr_auc": 0.9110693406779685,
+    "precision": 0.8414985590778098,
+    "recall": 0.8271954674220963
+  },
+  "wall_seconds": 1.617741207999643
+}

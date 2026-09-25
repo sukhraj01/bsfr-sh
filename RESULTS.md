@@ -702,3 +702,54 @@ tightened, evidenced bound**: the gap narrows from "3.58 points, unexplained" to
 unexplained after eight tested hypotheses, with resample-strategy leakage (oversampling under a
 non-grouped split) identified as the largest single contributor found." `docs/DEVIATIONS.md`
 DEV-06 amended accordingly.
+
+## M7-7 — real malware transfer evaluation of the honeypot detector (2026-09-25)
+
+`scripts/m7_7_real_malware_transfer.py --seed 20260912`: fits the ensemble once on the committed
+synthetic corpus (never retrained below), scores it on ClaMP — 5210 real Windows PE files' static
+header features, 2722 malicious / 2488 benign, mapped onto `FT_RW`'s 22-feature schema
+(`honeypot.external_mapping`, `docs/DEVIATIONS.md` DEV-34). Full method, mapping table and figures
+in DEV-34 and `docs/report/report.tex` §"Real Malware Transfer Evaluation"; sidecar
+`results/logs/20260925T041117Z-672f7572.json`.
+
+```
+2026-09-25 | detection/honeypot-m7-7-transfer | synthetic CSV baseline (sanity check), n=731 | bal_acc=0.8408 prec=0.8415 rec=0.8272 mcc=0.6822 pr_auc=0.9111 | measured | 20260925T041117Z-672f7572 | reproduces M7-3's 0.8408, confirms the fit is not corrupted
+2026-09-25 | detection/honeypot-m7-7-transfer | ClaMP real-data transfer, n=5210 (pos=2722) | bal_acc=0.5000 prec=0.0000 rec=0.0000 mcc=0.0000 pr_auc=0.4612 | measured | 20260925T041117Z-672f7572 | 19/22 features missing under the mapping (static PE data, no dynamic behaviour)
+2026-09-25 | detection/honeypot-m7-7-ks | write_entropy_mean (proxy) | D=0.1969 p=6.90e-53 syn_mean=5.6347 real_mean=6.3648 | measured | 20260925T041117Z-672f7572 | KS test, synthetic corpus vs. ClaMP-mapped
+2026-09-25 | detection/honeypot-m7-7-ks | write_entropy_var (proxy) | D=0.4884 p=4.63e-321 syn_mean=0.5912 real_mean=3.5217 | measured | 20260925T041117Z-672f7572 | KS test, synthetic corpus vs. ClaMP-mapped
+2026-09-25 | detection/honeypot-m7-7-ks | entropy_delta (proxy) | D=0.2854 p=1.72e-111 syn_mean=1.9998 real_mean=2.9964 | measured | 20260925T041117Z-672f7572 | KS test, synthetic corpus vs. ClaMP-mapped
+```
+
+**The sanity check passed exactly** (0.8408, matching M7-3's established CSV-path number to four
+decimal places), so the mapping/scoring code below it is trustworthy. **The transfer result is a
+clean, complete failure to generalise, not a partial degradation**: `bal_acc=0.5000` exactly means
+the ensemble predicted *every* one of the 5210 real rows as benign, malicious and benign alike.
+`pr_auc=0.4612` is below this dataset's no-skill baseline (class prevalence 0.5225) — the
+continuous score is mildly anti-correlated with the true label on this mapped data, not merely
+uninformative. Mechanism: 19 of 22 `FT_RW` dimensions have no analogue in ClaMP's static PE-header
+data (filesystem I/O, crypto API calls, process spawns, network beacons, persistence writes and
+kill-chain progress are all execution-time observables) and are zeroed under the mapping's own
+missing-value convention; only the entropy group (3/22 features) carries real, mapped signal.
+**Read as a schema-grounding finding, not a generator-calibration failure**: no real dataset that
+never executed a sample could ground the other six feature groups, whatever the synthetic
+generator's own distributions looked like.
+
+**Distribution comparison** (two-sample KS, synthetic corpus vs. ClaMP-mapped, the only 3 features
+with a real analogue — the remaining 19 are a constant `0.0` under the mapping and a KS test
+against a constant characterises the mapping, not the generator): all three mapped features
+diverge significantly (`D` from 0.20 to 0.49, `p` far below any conventional threshold). Read
+cautiously: ClaMP's entropy readings are whole-file/per-section entropy of arbitrary real PE
+binaries, while the synthetic features model entropy of write operations during a specific
+kill-chain episode tuned to DEV-27's 0.85 Bayes-ceiling difficulty budget — different measurement
+modalities compared on the closest available real analogue, not the same observable. ~8-9% of the
+synthetic corpus's `write_entropy_mean` values are the generator's own missing-value zero-fill,
+which inflates the low end of the synthetic histogram and modestly affects, but does not create,
+the measured divergence (`results/figures/fig8a_entropy_distributions.png`).
+
+**Dataset substitution, recorded plainly:** the session brief named EMBER, CIC-MalMem-2022/
+CICMalDroid-2020 and MalwareBazaar in priority order. EMBER's feature dataset is a ~2.4GB archive
+against this sandbox's measured ~40.6KB/s throughput (~17-hour projected download, infeasible);
+the CIC datasets are gated behind a research-access request, not a scriptable download. ClaMP
+(github.com/urwithajit9/ClaMP) was used instead — real, labelled, openly published for ML
+research, fetched once and committed at `data/external/clamp/` (1.28MB, sha256 in its README) for
+full reproducibility, used for evaluation only per the session's own constraint.

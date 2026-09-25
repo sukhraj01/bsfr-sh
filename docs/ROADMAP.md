@@ -2,8 +2,8 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — hybrid blockchain (M7-5) delivered; async pBFT
-with modelled network latency is the one remaining, not-required item**
+**Current milestone: write-up done; M7 (stretch) — real malware transfer evaluation (M7-7)
+delivered; async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -266,6 +266,14 @@ existing baseline convention). Variance is reported and the repeat count follows
       chain), `framework/hybrid_pipeline.py` (the framework-layer wiring), `docs/DEVIATIONS.md`
       DEV-33, `RESULTS.md` M7-5 (anchor frequency 1/5/10 sweep: overhead at or below measurement
       noise, anchor chain ~1 KB/anchor), report §"Hybrid Blockchain" (2026-09-25)
+- [x] Real malware transfer evaluation — does the honeypot detector (fit once on the synthetic
+      corpus, never retrained) generalise to real data? `honeypot/external_mapping.py` (`FT_RW`
+      mapped from ClaMP's real PE-header features: only the entropy group, 3/22 features, has any
+      analogue in static data), `honeypot/distribution_compare.py` (per-feature KS test),
+      `scripts/m7_7_real_malware_transfer.py`, `docs/DEVIATIONS.md` DEV-34, `RESULTS.md` M7-7
+      (clean transfer failure: bal_acc=0.5000, pr_auc below the no-skill baseline — a
+      schema-grounding finding, not a generator-calibration one), report §"Real Malware Transfer
+      Evaluation" (2026-09-25)
 
 ---
 

@@ -1058,6 +1058,136 @@ features that no attacker can \emph{choose their own value of} at will, could ne
 this question, because it is a question about behavioural features an attacker actually controls.
 Only the framework path this project built makes it a question with a measured answer.
 
+\section{Real Malware Transfer Evaluation}
+\label{sec:m7-7}
+
+\textbf{Why real-data evaluation matters.} M4b's 0.8422 balanced accuracy
+(\S\ref{sec:honeypot-eval}) is the detection ensemble scored on \texttt{honeypot.collector}'s own
+synthetic corpus -- the same session designed the generator and fit the classifier against it, so
+that number measures the generator-detector \emph{pair}, not whether the detector would recognise
+anything the generator did not anticipate. This section asks the question synthetic-only
+evaluation cannot answer: does the detector transfer to real behavioural features it has never
+seen, from programs it was not designed around? The detector used below is the identical fitted
+ensemble -- same seed, same committed corpus, never retrained.
+
+\textbf{Dataset.} The session brief named EMBER, CIC-MalMem-2022/CICMalDroid-2020 and
+MalwareBazaar, in that order. EMBER's actual feature dataset is a $\sim$2.4GB archive; this
+sandbox's measured throughput on a small test fetch ($\sim$40.6KB/s) projects a $\sim$17-hour
+download, infeasible in one session. The CIC datasets are gated behind a research-access request
+form, not a scriptable download. Used instead: \textbf{ClaMP} (Classification of Malware with PE
+headers, \texttt{github.com/urwithajit9/ClaMP}) -- 5210 real Windows PE files' static
+header-derived structural features, 2722 malicious and 2488 benign, openly published for exactly
+this kind of ML research use. Fetched once and committed at \texttt{data/external/clamp/} (1.28MB,
+sha256 recorded in its README) for full reproducibility, and used for \textbf{evaluation only}: it
+never fits or tunes anything in \texttt{honeypot/} or \texttt{detection/}.
+
+\textbf{The mapping table is itself the first finding.} $FT_{RW}$ (\S\ref{sec:honeypot}) is a
+\emph{dynamic behavioural} schema -- what a monitor observes a running program \emph{do}. ClaMP is
+\emph{static} -- header fields read off a file that is never executed. Table~\ref{tab:m77-mapping}
+shows what that mismatch produces: only the entropy group (3 of 22 features) has any real
+correspondence at all, because entropy is one of the few observables measurable both statically (a
+file's own byte distribution) and dynamically (the byte distribution of what a process writes).
+The other six groups -- filesystem, crypto API, process, network, persistence, kill-chain -- have
+\textbf{no} analogue in a dataset that never ran the sample, and are marked missing, handled
+exactly as \texttt{honeypot.features.build()} already handles an unobserved sensor: value $0.0$,
+\texttt{missing\_mask} bit set.
+
+\begin{table}[t]
+\centering
+\caption{$FT_{RW}$ features mapped from ClaMP, by group. 19 of 22 features have no analogue in a
+static PE-header dataset.}
+\label{tab:m77-mapping}
+\footnotesize
+\begin{tabular}{lccc}
+\hline
+\textbf{Group} & \textbf{Features} & \textbf{Mapped (direct/proxy)} & \textbf{Missing} \\
+\hline
+entropy & 3 & 3 & 0 \\
+filesystem & 5 & 0 & 5 \\
+crypto\_api & 3 & 0 & 3 \\
+process & 3 & 0 & 3 \\
+network & 3 & 0 & 3 \\
+persistence & 3 & 0 & 3 \\
+kill\_chain & 2 & 0 & 2 \\
+\hline
+\textbf{Total} & \textbf{22} & \textbf{3} & \textbf{19} \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Transfer result: not a partial degradation, a clean failure, and mildly worse than
+chance.} Before touching ClaMP, the script reproduces the established CSV-path baseline exactly
+(0.8408, \S\ref{sec:adversarial}'s sanity condition) as a check that the mapping code has not
+corrupted the fitted ensemble. Scored on all 5210 mapped ClaMP rows:
+$\mathrm{bal\_acc}=0.5000$, $\mathrm{precision}=0.0000$, $\mathrm{recall}=0.0000$,
+$\mathrm{mcc}=0.0000$, $\mathrm{pr\_auc}=0.4612$ (Figure~\ref{fig:m77-metrics}).
+$\mathrm{bal\_acc}=0.5000$ exactly is not a rounding coincidence: the ensemble predicts
+\emph{every} row, malicious and benign alike, as benign. More strikingly, $\mathrm{pr\_auc}=0.4612$
+sits \emph{below} this dataset's no-skill baseline (class prevalence $2722/5210=0.5225$) -- the
+continuous ensemble score is mildly anti-correlated with the true label here, not merely
+uninformative. The mechanism is legible: with 86\% of the feature space collapsed to a mapping
+artifact of zero, there is essentially nothing left for the profiles fitted on the synthetic
+corpus to discriminate on beyond three entropy features, and a mostly-zero vector apparently reads
+as closer to $NProf$ than $AProf$ under those fitted distributions. \textbf{This is a finding
+about the schema's dynamic-vs-static mismatch with the most tractable available real dataset, not
+evidence that the synthetic generator's own difficulty calibration is wrong} (DEV-27's 0.85
+Bayes-optimal ceiling) -- no dataset that never executed a sample could ground the other six
+feature groups, whatever the generator's own distributions looked like.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig8b_transfer_metrics.png}
+\caption{Synthetic CSV-path baseline vs.\ ClaMP real-data transfer, same fitted ensemble.}
+\label{fig:m77-metrics}
+\end{figure}
+
+\textbf{Distribution comparison: which synthetic features match reality.} Two-sample
+Kolmogorov-Smirnov, synthetic corpus vs.\ ClaMP-mapped, for the 3 features with a real analogue
+(Figure~\ref{fig:m77-dist}) -- the other 19 are a constant $0.0$ under the mapping, and a KS test
+against a constant characterises the mapping, not the generator, so it is not reported as a
+distributional claim:
+
+\begin{center}
+\scriptsize
+\begin{tabular}{lccc}
+\hline
+\textbf{Feature} & \textbf{$D$} & \textbf{$p$} & \textbf{syn.\ / real mean} \\
+\hline
+\texttt{write\_entropy\_mean} & 0.197 & $6.9\times10^{-53}$ & 5.63 / 6.36 \\
+\texttt{write\_entropy\_var} & 0.488 & $<10^{-300}$ & 0.59 / 3.52 \\
+\texttt{entropy\_delta} & 0.285 & $1.7\times10^{-111}$ & 2.00 / 3.00 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig8a_entropy_distributions.png}
+\caption{Synthetic vs.\ real (ClaMP-mapped) distributions, the 3 mapped entropy features.}
+\label{fig:m77-dist}
+\end{figure}
+
+All three diverge significantly. Read cautiously, not as "the generator is wrong": ClaMP's entropy
+readings are whole-file and per-section entropy of arbitrary real PE binaries -- many of them
+large, compiled, resource-laden files with high baseline entropy regardless of malice -- while the
+synthetic features model entropy of write operations during a specific kill-chain episode, tuned
+to a 0.85 Bayes-ceiling difficulty budget for a deliberately hard classification problem. These are
+different measurement modalities compared on the closest available real analogue, not the same
+observable measured twice. One further caveat: $\sim$8--9\% of the synthetic corpus's
+\texttt{write\_entropy\_mean} values are the generator's own missing-value zero-fill, visibly
+inflating the low end of the synthetic histogram in Figure~\ref{fig:m77-dist} and modestly
+affecting, but not creating, the measured divergence.
+
+\textbf{Limitations.} The mapping is necessarily imperfect: static header fields are the closest
+real analogue available for entropy, and no real analogue exists at all for six of seven feature
+groups, so the effective comparison the detector faces is far narrower than the 22-dimensional
+space it was fit on. ClaMP's own labelling process (VirusTotal-report-based, per its own
+documentation) may differ in criteria and era from the ransomware-specific threat model
+$FT_{RW}$'s kill-chain groups were designed around -- ClaMP's malicious class is general malware,
+not specifically ransomware. The transfer gap measured here is therefore a statement about how far
+our generator's approximation reaches when most of its feature space cannot be exercised at all,
+not a general claim about honeypot-based ransomware detection.
+
 \section{Consensus Comparison: pBFT vs.\ Raft}
 \label{sec:m7-4}
 

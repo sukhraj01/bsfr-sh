@@ -22,6 +22,10 @@ dependencies = [
     "numpy>=1.26",
     "matplotlib>=3.8",
     "pyyaml>=6.0",
+    # Already an indirect dependency of scikit-learn; declared directly starting M7-7, which is
+    # the first code to import it itself (`scipy.stats.ks_2samp`, synthetic-vs-real distribution
+    # comparison) rather than relying on scikit-learn's own use of it.
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]
@@ -133,4 +137,11 @@ ignore_missing_imports = true
 # `bench.ecdsa_backends.bench_pure_python`, which annotates every value crossing back into ours.
 [[tool.mypy.overrides]]
 module = ["ecdsa.*"]
+ignore_missing_imports = true
+
+# Added in M7-7, when honeypot/distribution_compare.py started calling scipy.stats.ks_2samp.
+# Same shape as the overrides above: scipy ships no bundled type stubs for mypy to read, and the
+# untyped region stops at that module's own return type annotations.
+[[tool.mypy.overrides]]
+module = ["scipy.*"]
 ignore_missing_imports = true
