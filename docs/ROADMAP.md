@@ -2,7 +2,7 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — adversarial retraining (M7-8) delivered;
+**Current milestone: write-up done; M7 (stretch) — formal threat model (M7-9) delivered;
 async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
@@ -285,6 +285,16 @@ existing baseline convention). Variance is reported and the repeat count follows
       but the mechanism is narrow — the model learns "near the evasion bound" as its own
       ransomware signature rather than a deeper representation), report §"Adversarial Retraining"
       (2026-09-25)
+- [x] Formal threat model — the argument §V never makes: what adversary each claim defends
+      against. `docs/THREAT_MODEL.md` (assets, four adversary tiers by capability, five trust
+      assumptions, a coverage matrix mapping every §V claim to tier/method/result/limitation, a
+      gap analysis of four uncovered attack surfaces), report §"Threat Model" (matrix + gaps only,
+      before §Conclusion). Finding: 3 of 5 §V claims hold at their defensible tier (session
+      protocol fully, pBFT partially — Sybil/f=1 yes, the "51%" framing is FLAW-5's own finding —
+      chain isolation unconditionally); 2 have measured gaps the paper doesn't acknowledge
+      (credential deletion is unimplemented/unverifiable; DoS-resistance has a measured liveness
+      gap at f=1+1 lagging honest replica, DEV-20); a sixth attack surface (adversarial ML) exists
+      that isn't a §V claim at all. Documentation only — no code, no new tests (2026-09-25)
 
 ---
 

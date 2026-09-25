@@ -1612,6 +1612,105 @@ possible for any of them without a relationship with the private chain's operato
 property \S IV-A's trade-off was missing; deciding who should exercise it is a policy question
 this report does not answer.
 
+\section{Threat Model}
+\label{sec:threat-model}
+
+\S V states five security properties as informal prose and never once says, for any of them,
+\emph{what an adversary can do} before the property is claimed to hold. GAP-6 names the direct
+consequence -- no formal model, no protocol-verification tool -- and FLAW-5 (\S\ref{sec:flaw5})
+names a deeper one: without a stated adversary capability, \S V-3 borrows a 51\% proof-of-work
+threshold to defend a protocol (pBFT) whose real safety bound is a third, because nothing in the
+paper's argument structure distinguishes a hash-power adversary from an identity-controlling one.
+\S II is a ransomware taxonomy (four types, a seven-stage kill chain), not an adversary-capability
+model -- it says what ransomware \emph{is}, never what a network attacker, a compromised operator,
+or an adversarial machine-learning attacker can \emph{do}. This section constructs the threat
+model the paper omits -- four adversary tiers by capability, not by which paper section mentions
+them -- and maps every security-relevant result this project has produced (Scyther verification,
+\S\ref{sec:adversarial}--\ref{sec:m7-8}'s attack/defense pair, \S\ref{sec:m7-4}'s pBFT/Raft
+finding, \S\ref{sec:hybrid}'s anchoring) onto it. Full version, with the reasoning behind every
+cell: \texttt{docs/THREAT\_MODEL.md}.
+
+\begin{table*}[t]
+\centering
+\caption{Coverage matrix: \S V's five claims, mapped onto the adversary tier(s) they actually
+address, our verification method, and the result. Tier 1 = external network attacker (Dolev-Yao).
+Tier 2 = one compromised cloud server ($f{=}1$). Tier 3 = two compromised, possibly colluding,
+cloud servers ($f{=}2$). Tier 4 = adversarial ML evasion (no node compromised).}
+\label{tab:threat-coverage}
+\footnotesize
+\begin{tabular}{p{3.2cm}p{1.1cm}p{3.7cm}p{3.0cm}p{3.8cm}}
+\hline
+\textbf{\S V claim (paraphrased)} & \textbf{Tier} & \textbf{Method} & \textbf{Result} & \textbf{Known limitation} \\
+\hline
+(1) Session keys/mutual auth defeat replay, MITM, impersonation &
+1 &
+Scyther (M7-1), symbolic verification &
+\textbf{VERIFIED} -- secrecy, mutual auth, impersonation resistance, bounded + unbounded &
+Within-window replay outside Scyther's scope (\texttt{test\_\allowbreak session\_\allowbreak replay.py} instead); perfect-crypto abstraction \\
+(2) Credentials deleted post-registration defeat insider/stolen-verifier &
+insider &
+none -- no registration-authority module exists &
+\textbf{UNVERIFIED / NOT IMPLEMENTED} &
+Nothing to check the claim against \\
+(3) pBFT resists 51\% attacks/selfish mining; Sybil handled &
+2, 3 &
+\texttt{test\_\allowbreak pbft\_\allowbreak byzantine.py} ($f{=}1$/$f{=}2$), Sybil test &
+\textbf{MIXED}: Sybil \textbf{VERIFIED}; $f{=}1$ \textbf{VERIFIED}; ``51\%'' framing \textbf{WRONG} (FLAW-5) -- $f{=}2$ (50\%) \textbf{FORKS} &
+``Selfish mining'' has no pBFT analogue \\
+(4) Blockchain immutability resists DoS, manipulation, leakage &
+1--3 &
+Chain hash-linking + quorum (manip.); view-change analysis (DoS, untested by paper); hybrid encryption (leakage) &
+\textbf{MIXED}: manipulation \textbf{VERIFIED}, Tier 1-2; DoS has a \textbf{MEASURED GAP}; leakage \textbf{PARTIAL} (payload encrypted, metadata not) &
+DoS-resistance never tested by the paper itself \\
+(5) Two chains isolate detection from recovery &
+n/a &
+\texttt{test\_\allowbreak chains\_\allowbreak independent.py} (12 tests) &
+\textbf{VERIFIED}, structurally &
+None identified \\
+\emph{(new, not in the paper)} Feature-space evasion resistance &
+4 &
+M7-3 (attack), M7-8 (defense) &
+\textbf{MEASURED}: 25\% of samples trivially evadable; defense real but narrow, non-monotonic in training budget &
+Does not exist as a \S V claim at all \\
+\hline
+\end{tabular}
+\end{table*}
+
+\textbf{Three of the paper's five properties hold at their defensible tier: (1) fully, (3)
+partially (Sybil and $f{=}1$, not the ``51\%'' framing), (5) unconditionally.} Two have measured
+limitations the paper does not acknowledge: \textbf{(2) was never implemented}, so it is
+unverified rather than disproven -- there is no registration-authority module in this codebase to
+test it against; \textbf{(4) is true for manipulation but has a demonstrated DoS gap} the paper
+never tests for (DEV-20's reduced view change: one lagging honest replica plus one Byzantine
+replica stalls the chain at $n{=}4$, demonstrated in \texttt{test\_pbft\_byzantine.py}). The
+sixth row is not a \S V claim at all -- the clearest
+form GAP-6's ``no formal model'' takes: a threat model that never mentions adversarial ML cannot
+be faulted for failing against it, but a deployment relying on \S V's five properties alone would
+have no way to know that attack surface existed, since Algorithm 3 (\S IV-C) assumes $FT_{RW}$ is
+simply observed and never adversarially shaped.
+
+\textbf{Gaps the matrix surfaces, stated as findings, not fixed here.} \textit{Data poisoning of
+the honeypot} (Tier 2-adjacent): a compromised honeypot could feed false records into $Sig_{RW}$/
+$FT_{RW}$; once committed, $BC_{SigRW}$'s immutability makes the poisoning \emph{permanent and
+tamper-evident, not detectable} -- chain integrity certifies a record was written as submitted,
+never that what was submitted was true. \textit{Insider threat at the registration authority}: \S
+V-2's deletion claim is unverifiable from outside the deleting party and nothing in this project
+implements the registration flow to test it against. \textit{Denial of service against consensus}
+(Tier 2, measured, not closed): Raft (\S\ref{sec:m7-4}) is faster when honest but is
+\emph{worse} under exactly this adversary -- it loses safety, not just liveness, to a single
+Byzantine leader -- so it is a different, worse trade-off, not an available fix.
+\textit{Side-channel leakage from the encrypted backup chain} (Tier 1-adjacent): transaction sizes
+and timing on $BC_{DTBU}$ are not encrypted, and an external network observer can infer backup
+frequency and rough data volume without decrypting anything, a structural property of committing
+variable-sized encrypted blobs to a chain whose block headers are, by the hybrid design's own
+premise (\S\ref{sec:hybrid}), meant to be externally visible.
+
+The paper argues five security properties without stating what adversary each defends against. We
+constructed the threat model the paper omits and mapped our verification results onto it. Three
+properties hold at their stated tier. Two have measured limitations the paper does not
+acknowledge, and a sixth attack surface -- adversarial ML -- exists that the paper's own
+vocabulary has no way to name.
+
 \section{Conclusion}
 
 We built a complete, from-scratch implementation of BSFR-SH's five algorithms, both of its

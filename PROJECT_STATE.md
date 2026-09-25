@@ -4,46 +4,41 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-25 · **Milestone:** M7 stretch — seven of eight items done; report
-compiled and current · **Sessions completed:** 24
+**Last updated:** 2026-09-25 · **Milestone:** M7 stretch — eight of nine items done; report
+compiled and current · **Sessions completed:** 25
 
 ---
 
 ## One-line status
 
-This session (M7-8) measured whether adversarial retraining — augmenting the training corpus with
-perturbed copies of its positive rows, using M7-3's own top-5 features/bounds — hardens the
-detector against M7-3's attack, and what it costs on clean data.
+This session (M7-9) is documentation only: constructed the threat model the paper's §V never
+states, mapping every security-relevant result this project has produced (Scyther, pBFT threshold
+analysis, Raft comparison, hybrid anchoring, adversarial attack/defense) onto four adversary tiers
+by capability, and replaced §V's five paragraphs of prose with a coverage matrix.
 
-- **`detection/adversarial.py`** (new): M7-3's perturbation/scoring/curve/adaptive-search
-  machinery, factored out of `scripts/run_adversarial_robustness.py` so M7-3 and M7-8 share one
-  tested implementation. M7-3's own script is left untouched (already-published, numbered result;
-  zero regression risk) and keeps its own equivalent inline.
-- **`detection/retraining.py`** (new): `augment_positive_rows` — K=5 perturbed copies per positive
-  training row, each feature independently sampled from `Uniform(0, budget)` toward its own
-  evasion bound. Negatives and the eval set are never touched. `budget=0.0` is a no-op (returns
-  the input unchanged) rather than K exact duplicates, so the degenerate case trains on the
-  identical draw the original model saw and reproduces its fit exactly — verified, not assumed
-  (`tests/unit/test_m7_8_adversarial_retraining.py`).
-- **`scripts/m7_8_adversarial_retraining.py`** (new): sweeps training budgets 0/25/50/100%,
-  re-runs M7-3's degradation curves + adaptive evasion against each hardened model, checks
-  feature-importance shift, emits 4 figures + sidecar.
-- **The finding: real but narrow, non-monotonic robustness.** At 25% training budget the hardened
-  model is *worse* than no hardening on both axes (median adaptive evasion drops 0.321→0.250; the
-  combined-evasion curve crosses below 0.50, which the original never did). At 50%/100% the
-  opposite happens sharply (median adaptive evasion → 0.883/1.000), but the mechanism is the model
-  learning "near the evasion bound" as its own ransomware signature (the 100%-budget combined
-  curve *rises* with perturbation, 0.736→0.888) — pattern-matching on the augmentation's own
-  footprint, not a deeper representation. Cost: clean balanced accuracy falls 6–10.5pt, driven by
-  recall (0.827→0.586 at 100%), not false positives. Top-5 feature-importance sum shrinks
-  0.455→0.231 at 100% (partial version of the "throws away signal" failure mode named in the
-  brief — real shift, not full collapse).
-- `RESULTS.md` "M7-8", report §"Adversarial Retraining" (after §Adversarial Robustness, before
-  §Real Malware Transfer Evaluation), four new figures (`fig9a`-`fig9d`), `docs/ROADMAP.md` M7-8
-  ticked. No `docs/DEVIATIONS.md` entry — same as M7-3, this is a pure experimental addition with
-  nothing in the paper to depart from.
+- **`docs/THREAT_MODEL.md`** (new): standalone reference — assets (with the chain + property that
+  protects each), four adversary tiers (external network attacker / one compromised server f=1 /
+  two compromised servers f=2 / adversarial ML evasion), five explicit trust assumptions, a
+  coverage matrix (§V claim → tier → method → result → limitation), a four-item gap analysis
+  (honeypot data poisoning, registration-authority insider threat, consensus DoS, backup-chain
+  side channels). No solutions proposed — gaps are findings, not tickets.
+- **`docs/report/report.tex`** new §"Threat Model" (before §Conclusion): shorter version, focused
+  on the coverage-matrix table and the gap analysis. Recompiled with `tectonic`; fixed two LaTeX
+  issues while building the table (backtick-quoted code spans instead of `\texttt{}`; one table
+  cell holding an essay-length sentence in a non-wrapping `c` column caused a 144pt overfull hbox
+  — both fixed, `tectonic` now clean of new warnings).
+- **The finding: 3 of 5 §V claims hold at their defensible tier, 2 have measured gaps the paper
+  doesn't acknowledge, and a 6th attack surface isn't a §V claim at all.** (1) session protocol —
+  fully verified (Scyther, M7-1). (3) pBFT — Sybil and f=1 verified, but the "51%" framing is
+  wrong (FLAW-5); f=2 demonstrably forks the chain. (5) chain isolation — verified structurally,
+  unconditionally. (2) credential deletion — never implemented, nothing to check it against. (4)
+  DoS-resistance — has a measured liveness gap (DEV-20: one lagging honest replica + one Byzantine
+  stalls the chain at n=4). Adversarial ML (M7-3/M7-8) isn't a §V claim at all — GAP-6's clearest
+  consequence.
+- No code changed. `docs/ROADMAP.md` M7-9 ticked.
 
-`make test` (1547 tests, 44 new) and `make lint` (ruff + mypy) both green.
+`make test` (1547 tests, unchanged) and `make lint` (ruff + mypy) both green — confirms nothing
+broke, since this session touched no `src/`.
 
 ---
 
@@ -51,32 +46,32 @@ detector against M7-3's attack, and what it costs on clean data.
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | `detection/adversarial.py`, `detection/retraining.py` added this session (M7-8) |
-| `docs/report/report.pdf` | done, current | recompiled this session (`tectonic`), new §"Adversarial Retraining" |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session (M7-9 is docs-only) |
+| `docs/THREAT_MODEL.md` | done (M7-9) | new — standalone reference, cross-referenced from the report |
+| `docs/report/report.pdf` | done, current | recompiled this session (`tectonic`), new §"Threat Model" |
 | `verification/` | done (M7-1) | unchanged |
 | `docs/STORAGE_ANALYSIS.md` | done (M7-2) | unchanged |
-| `scripts/run_adversarial_robustness.py` | done (M7-3) | unchanged; its logic now also lives (factored, not moved) in `detection/adversarial.py` |
+| `scripts/run_adversarial_robustness.py` | done (M7-3) | unchanged |
 | `scripts/run_consensus_comparison.py` | done (M7-4) | unchanged |
 | `scripts/run_hybrid_benchmark.py` | done (M7-5) | unchanged |
 | `scripts/m7_6_gap_closure.py` | done (M7-6) | unchanged |
 | `scripts/m7_7_real_malware_transfer.py` | done (M7-7) | unchanged |
-| `scripts/m7_8_adversarial_retraining.py` | done (M7-8) | new this session, ~15s local run |
+| `scripts/m7_8_adversarial_retraining.py` | done (M7-8) | unchanged |
 
 ## Current numbers
 
-New this session: `RESULTS.md` "M7-8" section, run `20260925T052030Z-31a79c4a`. Hardened clean
-bal_acc: 0.7803 (25%), 0.7616 (50%), 0.7363 (100%), vs. original 0.8408. Adaptive-evasion median:
-0.2499 (25%, worse than original's 0.3213), 0.8825 (50%), 1.0000 (100%). Everything else unchanged
-since the last session.
+None new — M7-9 is a synthesis of existing measurements, no new experiments. Every number in
+`docs/THREAT_MODEL.md` and the report's new §"Threat Model" cites an existing `RESULTS.md` line,
+test name, or `verification/` claim (M7-1/M7-3/M7-4/M7-5/M7-7/M7-8).
 
 ## Next task
 
-None forced — M7 is optional stretch work and the core deliverable was complete before M7-6/7/8.
-If continued: async pBFT with modelled network latency is the one remaining `docs/ROADMAP.md`
-M7 item. A natural M7-8 follow-up (not forced): re-run the M7-3-style attack against a hardened
-model's own *new* top-5 features (`directory_breadth`, `entropy_delta`, `key_generation_events`
-gained importance this session) to test whether the measured robustness survives a differently-
-shaped attack.
+None forced — M7 is optional stretch work and the core deliverable was complete before M7-6
+through M7-9. If continued: async pBFT with modelled network latency is the one remaining
+`docs/ROADMAP.md` M7 item. `docs/THREAT_MODEL.md`'s own gap analysis names four uncovered attack
+surfaces (honeypot data poisoning, registration-authority insider threat, consensus DoS, backup-
+chain side channels) as candidate future sessions — none forced, all explicitly out of scope for
+the session that found them.
 
 ## Blockers
 
@@ -107,6 +102,7 @@ None.
 | Raft's message-count ratio (~60% of pBFT) is measured only at `n=4`; a reader might extrapolate the O(n)/O(n^2) asymptotic gap and expect a bigger number | over-claiming Raft's advantage at other cluster sizes | `docs/DEVIATIONS.md` DEV-32 and the report both state the ratio is small-`n`-specific, not the asymptotic one |
 | M7-7's bal_acc=0.5000 could be misread as "the framework doesn't work" rather than "19/22 features have no static analogue" | undersells the synthetic-corpus result (0.8422) and the framework's actual design | DEV-34 and the report state explicitly that this is a schema dynamic-vs-static grounding finding, not a generator-calibration failure, before giving the number |
 | M7-8's 25%-budget "hardening backfires" result could be misread as "adversarial retraining doesn't work" rather than "a narrow training budget generalises worse than a wide one" | undersells the real robustness gain measured at 50%/100% | report and `RESULTS.md` state the non-monotonicity explicitly and lead with it, rather than averaging budgets into one number |
+| `docs/THREAT_MODEL.md`'s anchor-chain trust assumption (Tier 3's only detection mechanism) is itself simulated, single-authority, and untested against a compromised anchor authority | a reader could mistake hybrid anchoring for a closed Tier-3 solution rather than a partial, unverified one | stated plainly in both the Tier 3 writeup and Trust Assumption 2, cross-referencing DEV-33's own "not real Ethereum or Bitcoin" caveat |
 
 ---
 
@@ -135,6 +131,7 @@ fraction of the window before any work begins, and gets skimmed rather than read
 | `RESULTS.md` | every benchmark ever run, one line each | append-only |
 | `sessions/` | what happened in each session | append-only, one file per session |
 | `docs/DEVIATIONS.md` | departures from the paper | append-only |
+| `docs/THREAT_MODEL.md` | assets, adversary tiers, trust assumptions, coverage matrix, gaps | stable; amend if a future session changes a covered result |
 | `CLAUDE.md` | how to work here | near-stable |
 
 If a fact could go in two of these, it goes in exactly one — the leftmost row that fits.
