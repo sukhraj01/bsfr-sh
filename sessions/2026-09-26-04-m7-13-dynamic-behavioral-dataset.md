@@ -233,4 +233,4 @@ anything currently shipped.
 - [x] `RESULTS.md` appended, one line per run
 - [x] `docs/ROADMAP.md` boxes ticked
 - [x] `docs/DEVIATIONS.md` updated (DEV-39)
-- [ ] Committed, message explains *why* — pending, next step
+- [x] Committed (`16a2db4`) and pushed to `origin/main`, message explains *why*
