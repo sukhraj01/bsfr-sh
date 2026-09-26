@@ -1772,7 +1772,7 @@ orthogonal to hardening (a smoother decision boundary, already harder to evade b
 retraining); the fix this section implies is the same one \S\ref{sec:m7-8} already named --
 diversifying what the augmentation teaches -- not a change of model family.
 
-\subsection{Real-Data Transfer: ClaMP and EMBER}
+\subsection{Real-Data Transfer: ClaMP, EMBER, and MalbehavD-V1}
 \label{sec:m7-7}
 
 \textbf{Why real-data evaluation matters.} M4b's 0.8422 balanced accuracy
@@ -1961,6 +1961,69 @@ field can observe a process spawn, a network connection, or a kill-chain stage; 
 execution, which is what makes a dataset dynamic in the first place. A richer \emph{static} source
 narrows the coverage gap (6/22 vs.\ 3/22) and improves the discarded continuous score, without
 changing the shape of the gap or the hard-decision transfer outcome.
+
+\textbf{A genuinely dynamic source: MalbehavD-V1.} If the gap is structural to staticness, a
+dataset built from real \emph{execution} should close it. \texttt{MalbehavD-V1}
+(\texttt{github.com/mpasco/MalbehavD-V1}, Maniriho et al.\ 2023) is 2{,}570 real Windows PE files
+(1{,}285 malware, 1{,}285 benign), each executed in a Cuckoo sandbox and represented as its
+observed API-call sequence. Locating it took checking four session-specified candidates first --
+BODMAS turned out, on inspection of its own project page rather than the brief's description of
+it, to use EMBER's identical static LIEF pipeline; CICMalDroid-2020 and MalwareBazaar/Triage both
+require creating an account or submitting a personal access request under the researcher's
+identity; a public Cuckoo instance did not respond -- documented in DEV-39. \texttt{honeypot.
+malbehavd\_mapping} grounds \textbf{12 of 22 features across 5 of 7 groups} (filesystem 3/5,
+crypto\_api 3/3, process 3/3, network 2/3, persistence 1/3) -- double EMBER's 6/22, and the
+\emph{inverse} coverage pattern: entropy and kill\_chain, the only two groups ClaMP/EMBER ever
+grounded, are fully missing here, because an API-call-sequence dataset carries no byte content and
+no per-call timestamps.
+
+\begin{table}[h]
+\centering
+\caption{Real-dataset coverage progression against $FT_{RW}$'s 22 features / 7 groups.}
+\label{tab:m7-13-coverage}
+\footnotesize
+\begin{tabular}{lccl}
+\hline
+\textbf{Dataset} & \textbf{Mapped} & \textbf{Groups grounded} & \textbf{Nature} \\
+\hline
+ClaMP (M7-7)         & 3/22  & 1/7 (entropy only) & static \\
+EMBER (M7-10a)        & 6/22  & 2--3/7 (entropy, partial crypto/fs) & static \\
+MalbehavD-V1 (M7-13)  & 12/22 & 5/7 (fs, crypto, process, network, persistence) & dynamic \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Yet the transfer result is still exactly $\mathrm{bal\_acc}=0.5000$} -- but diagnosed more
+precisely than either prior dataset allowed. Every one of the 7 per-group permutation-importance
+drops on real data is exactly $0.0000$ (Figure~\ref{fig:m7-13-importance}), including the 5
+genuinely-mapped groups: the fitted ensemble predicts the single constant class \emph{benign} for
+all 2{,}570 real rows (every real score falls in $[0.158, 0.380]$, inside the \texttt{normal}
+profile's own 1-sigma band, nowhere near \texttt{abnormal}'s $0.855$ mean), so no feature can move
+a prediction that has already saturated. This is not ClaMP/EMBER's "most features collapse to the
+mapping's structural zero" story -- only 10/22 are that zero here. A within-dataset Mann-Whitney
+test (no synthetic data involved at all) shows the real signal genuinely exists: 9 of the 12
+mapped features separate real malware from real benign at $p<10^{-4}$, three overwhelmingly
+(\texttt{child\_process\_spawns} $p=2.25\times10^{-235}$, \texttt{autostart\_writes}
+$p=5.69\times10^{-98}$). The KS comparison (Figure~\ref{fig:m7-13-heatmap}) explains the actual
+failure: \texttt{honeypot.collector}'s counters simulate a full, unbounded ransomware episode
+(synthetic \texttt{crypto\_calls} mean $\approx$25{,}530), while MalbehavD-V1's Cuckoo traces are
+capped at 175 total API calls, so every real per-category count sits in the single digits (real
+\texttt{crypto\_call\_rate} mean $0.36$) -- a range the fitted profiles were never shown for either
+class. \textbf{The failure is a scale-calibration mismatch between an assumed-unbounded monitor and
+a bounded sandbox window, not an absence of real dynamic behavioural signal} -- a concrete,
+falsifiable target for a future generator revision (re-scale \texttt{collector}'s count features to
+a bounded-observation regime) distinct from "the generator's distributions are wrong."
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{figs/fig13d_group_importance.png}
+\includegraphics[width=0.49\linewidth]{figs/fig13e_ks_heatmap.png}
+\caption{Left: per-group permutation importance, synthetic eval vs.\ MalbehavD-V1 -- every real bar
+is exactly zero. Right: KS $D$-statistic per feature per dataset (ClaMP/EMBER/MalbehavD-V1), the
+coverage-and-divergence pattern at a glance.}
+\label{fig:m7-13-importance}
+\label{fig:m7-13-heatmap}
+\end{figure}
 
 \section{Scalability Analysis}
 \label{sec:scalability}
@@ -2182,9 +2245,11 @@ than assumed. \textbf{Detection} (\S\ref{sec:detection-analysis}): the honeypot 
 end-to-end result; adversarial feature-space evasion finding roughly a quarter of ransomware
 samples trivially evadable, and a hardening defense that works only at a real, non-trivial
 accuracy cost and only within a narrow training-budget window, confirmed non-tree-specific by an
-independent neural-network replication; and transfer evaluation against two real malware
-datasets (ClaMP, EMBER) finding the honeypot schema's dynamic behavioural design does not ground
-in either, because no static dataset can observe what only execution produces.
+independent neural-network replication; and transfer evaluation against three real malware
+datasets (ClaMP, EMBER, and the dynamic MalbehavD-V1) finding that even a dataset grounding 12/22
+features across 5/7 groups -- including the process and network groups no static dataset can touch
+-- still fails to transfer, a scale-calibration mismatch between the generator's assumed-unbounded
+observation window and a real bounded sandbox trace, not an absence of real dynamic signal.
 \textbf{Scalability} (\S\ref{sec:scalability}): on-chain storage growth from clinical to
 network scale, and confirmation that the paper's own reported throughput curve does not scale
 the way it is presented as scaling. One extension remains unpursued: an asynchronous pBFT variant

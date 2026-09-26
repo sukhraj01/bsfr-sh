@@ -1045,3 +1045,86 @@ grows as batches shrink.
 
 Figures: `results/figures/fig12_drift_defense_comparison.png`, sidecar
 `results/logs/20260926T041840Z-670ec207.json`.
+
+## M7-13 — dynamic-behavioral transfer: MalbehavD-V1 (2026-09-26)
+
+`scripts/m7_13_malbehavd_transfer.py --seed 20260912`: fits the ensemble once on the committed
+synthetic corpus (never retrained below), scores it on MalbehavD-V1 — 2,570 real Windows PE files
+actually **executed** in a Cuckoo sandbox (1,285 malware, 1,285 benign), represented as observed
+API call sequences and mapped onto `FT_RW`'s 22-feature schema (`honeypot.malbehavd_mapping`,
+`docs/DEVIATIONS.md` DEV-39). Unlike M7-7's ClaMP and M7-10a's EMBER (both static, entropy-only),
+this dataset grounds 12/22 features across 5/7 groups — filesystem, crypto_api, process, network,
+persistence — the inverse coverage pattern (entropy and kill_chain are the two groups fully
+`MISSING` here). Full method, mapping table and figures in DEV-39 and `docs/report/report.tex`
+§"Real Malware Transfer Evaluation"; sidecar `results/logs/20260926T091633Z-be5973ca.json`.
+
+```
+2026-09-26 | detection/honeypot-m7-13-malbehavd-transfer | synthetic CSV baseline (sanity check), n=731 | bal_acc=0.8408 prec=0.8415 rec=0.8272 mcc=0.6822 pr_auc=0.9111 | measured | 20260926T091633Z-be5973ca | reproduces M7-3's 0.8408
+2026-09-26 | detection/honeypot-m7-13-malbehavd-transfer | MalbehavD-V1 real-data transfer (12/22 features mapped, dynamic Cuckoo traces), n=2570 (pos=1285) | bal_acc=0.5000 prec=0.0000 rec=0.0000 mcc=0.0000 pr_auc=0.4557 | measured | 20260926T091633Z-be5973ca | cf. M7-7 ClaMP bal_acc=0.5000 (3/22), M7-10a EMBER bal_acc=0.5000 (6/22)
+2026-09-26 | detection/honeypot-m7-13-ks | files_touched_per_s (proxy) | D=0.2838 p=1.41e-84 syn_mean=8.7843 real_mean=4.4747 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | read_write_ratio (proxy) | D=0.6242 p=0.00e+00 syn_mean=1.8176 real_mean=0.6210 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | rename_rate_per_s (proxy) | D=0.9363 p=0.00e+00 syn_mean=3.1622 real_mean=0.0323 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | crypto_call_rate (proxy) | D=0.7400 p=0.00e+00 syn_mean=25530.1225 real_mean=0.3626 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | key_generation_events (proxy) | D=0.5444 p=1.66e-321 syn_mean=2.7356 real_mean=0.1650 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | crypto_ngram_novelty (proxy) | D=0.9900 p=0.00e+00 syn_mean=0.4216 real_mean=1.0000 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | child_process_spawns (proxy) | D=0.5438 p=2.09e-321 syn_mean=2.1148 real_mean=0.5436 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | injection_attempts (proxy) | D=0.3237 p=2.62e-110 syn_mean=0.6374 real_mean=0.8405 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | privilege_escalation_attempts (proxy) | D=0.2442 p=1.76e-62 syn_mean=0.6018 real_mean=0.1918 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | c2_beacon_count (proxy) | D=0.7141 p=0.00e+00 syn_mean=5.4409 real_mean=0.1603 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | outbound_burst_rate (proxy) | D=0.8209 p=0.00e+00 syn_mean=2.6938 real_mean=0.0693 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-ks | autostart_writes (proxy) | D=0.1940 p=1.87e-39 syn_mean=1.0858 real_mean=1.2537 | measured | 20260926T091633Z-be5973ca | KS test, synthetic vs. MalbehavD-V1-mapped
+2026-09-26 | detection/honeypot-m7-13-group-importance | filesystem | synthetic_drop=0.0950 real_drop=0.0000 | measured | 20260926T091633Z-be5973ca | balanced-accuracy drop from permuting the group's features, 20 repeats
+2026-09-26 | detection/honeypot-m7-13-group-importance | entropy | synthetic_drop=0.0355 real_drop=0.0000 | measured | 20260926T091633Z-be5973ca | balanced-accuracy drop from permuting the group's features, 20 repeats
+2026-09-26 | detection/honeypot-m7-13-group-importance | crypto_api | synthetic_drop=0.0337 real_drop=0.0000 | measured | 20260926T091633Z-be5973ca | balanced-accuracy drop from permuting the group's features, 20 repeats
+2026-09-26 | detection/honeypot-m7-13-group-importance | process | synthetic_drop=0.0082 real_drop=0.0000 | measured | 20260926T091633Z-be5973ca | balanced-accuracy drop from permuting the group's features, 20 repeats
+2026-09-26 | detection/honeypot-m7-13-group-importance | network | synthetic_drop=0.0216 real_drop=0.0000 | measured | 20260926T091633Z-be5973ca | balanced-accuracy drop from permuting the group's features, 20 repeats
+2026-09-26 | detection/honeypot-m7-13-group-importance | persistence | synthetic_drop=0.0220 real_drop=0.0000 | measured | 20260926T091633Z-be5973ca | balanced-accuracy drop from permuting the group's features, 20 repeats
+2026-09-26 | detection/honeypot-m7-13-group-importance | kill_chain | synthetic_drop=0.0294 real_drop=0.0000 | measured | 20260926T091633Z-be5973ca | balanced-accuracy drop from permuting the group's features, 20 repeats
+2026-09-26 | detection/honeypot-m7-13-separation | files_touched_per_s | benign_mean=3.6171 malware_mean=5.3323 p=1.21e-53 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | read_write_ratio | benign_mean=0.4482 malware_mean=0.7938 p=7.94e-73 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | rename_rate_per_s | benign_mean=0.0132 malware_mean=0.0514 p=4.59e-08 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | crypto_call_rate | benign_mean=0.3891 malware_mean=0.3362 p=5.23e-02 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | key_generation_events | benign_mean=0.1541 malware_mean=0.1759 p=1.36e-01 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | crypto_ngram_novelty | benign_mean=1.0000 malware_mean=1.0000 p=1.00e+00 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | child_process_spawns | benign_mean=0.1346 malware_mean=0.9525 p=2.25e-235 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | injection_attempts | benign_mean=0.9222 malware_mean=0.7588 p=2.83e-15 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | privilege_escalation_attempts | benign_mean=0.1891 malware_mean=0.1946 p=1.52e-01 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | c2_beacon_count | benign_mean=0.0848 malware_mean=0.2358 p=3.63e-05 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | outbound_burst_rate | benign_mean=0.0397 malware_mean=0.0988 p=1.69e-05 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+2026-09-26 | detection/honeypot-m7-13-separation | autostart_writes | benign_mean=0.7440 malware_mean=1.7634 p=5.69e-98 | measured | 20260926T091633Z-be5973ca | Mann-Whitney U, within MalbehavD-V1 only, no synthetic data involved
+```
+
+**Finding: coverage grew 4x (3 -> 6 -> 12/22) and flipped which groups ground (entropy-only ->
+process/network/persistence-inclusive), and the transfer result is still exactly 0.5000 —
+but for a different, more precise reason than ClaMP/EMBER's.** Every one of the 7 per-group
+permutation-importance drops on real data is **exactly 0.0000**, for every group including the
+5 that are genuinely mapped: the ensemble's prediction on all 2,570 real rows is the single
+constant class `benign` (`prec=0.0000 rec=0.0000`, confirmed by direct inspection — every real
+score falls in [0.158, 0.380], entirely inside the `normal` profile's 1-sigma band and nowhere
+near `abnormal`'s 0.855 mean), so no feature, mapped or missing, can move a prediction that has
+already saturated. This is not the ClaMP/EMBER story (16-19/22 features collapsed to the
+mapping's structural zero, read as benign by profiles fitted where those slots are populated) —
+here only 10/22 are that zero. **The within-dataset Mann-Whitney separation check (`separation`
+above, no synthetic data involved) proves the real signal exists**: 9 of 12 mapped features
+separate real malware from real benign at p<1e-4, three of them overwhelmingly so
+(`child_process_spawns` p=2.25e-235, `autostart_writes` p=5.69e-98, `read_write_ratio` p=7.94e-73).
+The detector's failure is therefore a **scale-calibration mismatch, not an absence of signal**:
+the KS means show why — `honeypot.collector`'s counters simulate a full ransomware episode
+(`crypto_calls` mean ~25,530, `renames` mean ~3.16, `outbound_burst_rate` mean ~2.69) while
+MalbehavD-V1's Cuckoo traces are bounded to a short sandbox window (max 175 total API calls per
+sample, so any single category's count is naturally in the single digits: real `crypto_call_rate`
+mean 0.36, `rename_rate_per_s` mean 0.032, `outbound_burst_rate` mean 0.069) — the fitted
+`NProf`/`AProf` profiles were never shown a value in that range for *either* class, so every real
+row lands in the same corner of feature space regardless of its label. `crypto_ngram_novelty`
+(the one feature MalbehavD-V1 uniquely makes computable, DEV-39) is degenerate here — mean 1.0000
+for both classes, p=1.00 — the traces are short enough (mean 43 calls) that almost every adjacent
+bigram is unique, so the self-referential diversity statistic saturates and carries no signal;
+flagged as this session's weakest mapped feature. **Actionable for future work:** re-calibrating
+`honeypot.collector`'s count-feature distributions to a bounded-observation-window regime (tens,
+not thousands, per category) is a concrete, falsifiable next step distinct from "the generator's
+distributions are wrong" — the shapes may be fine, the scale assumes an unbounded monitor a real
+sandbox does not have.
+
+Figures: `results/figures/fig13{a,b,c,d,e}_{coverage_progression,malbehavd_feature_distributions,
+transfer_metrics,group_importance,ks_heatmap}.png`, sidecar
+`results/logs/20260926T091633Z-be5973ca.json`.

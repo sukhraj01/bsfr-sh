@@ -1671,3 +1671,124 @@ batch an undefended cluster commits — bounded run, see the module's own note t
 cluster unanimously refusing one request stalls via view-change escalation rather than failing
 cleanly, a pre-existing property of `consensus/pbft.py`'s reduced view change, DEV-20, not
 something this session introduced or fixed).
+
+### DEV-39 · ADD · Dynamic-behavioral transfer: MalbehavD-V1 grounds 12/22 features across 5/7
+groups, and the transfer still fails, but for a scale-calibration reason, not a coverage reason
+(M7-13)
+
+**Paper:** n/a — same as DEV-34/DEV-35, this is about testing `FT_RW`'s real-world grounding, not
+the paper's design.
+
+**Problem:** DEV-34 (ClaMP) and DEV-35 (EMBER) both mapped *static* PE-feature datasets — header
+and structure fields read off a file that is never executed. Both grounded only the entropy group
+(3/22, then 6/22), because entropy is one of the few properties measurable both statically and
+dynamically; the other six groups (filesystem's dynamic half, crypto_api, process, network,
+persistence, kill_chain) had no analogue in either dataset, structurally, no matter how much raw
+data either one carried. The open question neither could answer: does a genuinely *dynamic*
+dataset — real execution traces — change the transfer story, since it can ground groups no static
+dataset can touch at all?
+
+**Dataset search, and why the session brief's own candidate list needed correction before use.**
+The brief named four candidates in order, to be checked and used at the first that works with
+>=12/22 coverage:
+
+1. **BODMAS** (brief's URL `github.com/UrbSec/BODMAS` does not exist). The real repository is
+   `github.com/whyisyoung/BODMAS`. Its own README and project page state it extracts features
+   "using the LIEF project (version 0.9.0), the same as the Ember dataset" — 2381-dim **static**
+   structural features, not the dynamic sandbox behavioral data the brief attributed to it.
+   Verified against the dataset's own documentation, not assumed from the brief's description
+   (CLAUDE.md: "do not trust README descriptions — inspect the actual data" applies as much to a
+   session brief's characterization of a dataset as to the dataset's own README). **Ruled out**:
+   it would only reproduce EMBER's coverage under a different name.
+2. **CICMalDroid-2020** — genuinely dynamic (CopperDroid VMI sandbox over 13,077 executed APKs:
+   syscalls, binder calls, composite behaviors, network PCAP) but gated behind a
+   `cicresearch.ca` download form requiring name/email/institution/job-title/country and manual
+   review — exactly the risk the brief itself flagged. **Not obtainable this session** without
+   creating an external record under the user's identity and waiting on approval.
+3. **MalwareBazaar + Hatching Triage** — MalwareBazaar's API now requires an Auth-Key obtained
+   through an abuse.ch account-registration portal (confirmed: an unauthenticated `get_info` POST
+   now returns `{"error": "Unauthorized"}`); Triage's docs endpoint returned HTTP 403 and its
+   public reports listing redirects to a login-gated SPA. **Not obtainable** without creating an
+   account under the user's identity — the same class of blocker as (2).
+4. **Public Cuckoo instances** (`cuckoo.cert.ee`) — did not respond at all within a 15s timeout.
+   **Unreachable**, matching the brief's own "availability varies" caveat.
+
+All four named candidates failed for distinct, verified reasons. Rather than stop on "no candidate
+reachable" (the exit condition does not accept that, and CLAUDE.md's "never claim a number we did
+not measure" rules out the alternative of inventing a mapping), one further, freely-downloadable,
+no-registration option was checked — in the same spirit as candidate 3 (a real, published,
+Cuckoo-derived API-call dataset), since none of candidates 2-4 could be obtained without the user
+personally creating an external account, which this session does not do unilaterally.
+
+**Dataset used: `github.com/mpasco/MalbehavD-V1`** (Maniriho, Mahmood & Chowdhury, "API-MalDetect:
+Automated malware detection framework for Windows based on API calls and deep learning
+techniques," *J. Network and Computer Applications*, 2023). 2,570 real Windows PE files (1,285
+malware + 1,285 benign, perfectly balanced), each **executed** in an isolated Cuckoo-sandbox
+environment and represented as its observed API call sequence (up to 175 calls, 291 distinct API
+names across the corpus). MIT-licensed, committed directly to a public GitHub repo, no download
+form, no account. Fetched via direct HTTPS GET, committed to this repo (`data/external/malbehavd/
+README.md`: sha256 verified, row count and label balance verified by direct inspection, not taken
+from the README's stated numbers alone).
+
+**The mapping (`honeypot.malbehavd_mapping`) grounds 12 of 22 features across 5 of 7 groups** —
+double EMBER's 6, quadruple ClaMP's 3 — and, more importantly, **inverts which groups ground**:
+filesystem (3/5), crypto_api (3/3), process (3/3), network (2/3), persistence (1/3) are grounded;
+entropy (0/3) and kill_chain (0/2) are fully `MISSING`, the exact opposite of ClaMP/EMBER, because
+this dataset never captures byte content (no entropy signal) or per-call wall-clock time (no
+stage-dwell signal) — only call identity and order. Every mapped feature is a real count of
+observed API calls in a curated category (e.g. `child_process_spawns` <- count of
+`CreateProcessInternalW`/`NtCreateUserProcess`/`ShellExecuteExW`; `key_generation_events` <- count
+of `CryptGenKey`/`CryptAcquireContext*`), following the same discipline DEV-35 established:
+`extension_change_rate`, `directory_breadth`, `dns_entropy`, `shadow_copy_deletions` and
+`backup_path_accesses` all have a same-category API present in the vocabulary (a rename call, a
+directory-traversal call, a DNS-resolution call, a generic WMI call) but are marked `MISSING`
+anyway, because the dataset carries no call *arguments* (no extension string, no path, no resolved
+domain name), and a count of same-category activity is a different quantity than the
+argument-dependent one `FT_RW` names — the identical rejection DEV-35 applied to `NumberOfSections`
+as a `directory_breadth` proxy. Every mapped feature is `PROXY`, never `DIRECT`, matching DEV-35's
+own bar (a raw count standing in for a rate, since no timestamps exist — the same "count stands in
+for a rate" convention `ember_mapping.crypto_call_rate` established). `crypto_ngram_novelty` is
+the one feature only this dataset makes computable at all (ClaMP/EMBER have no call sequence),
+computed as a self-referential distinct-bigram diversity ratio rather than novelty against a
+reference population, to avoid the mapping depending on the labels of the data it evaluates —
+flagged as the weakest of the twelve, and turns out to be genuinely degenerate (see below).
+
+**The transfer result is still exactly 0.5000 — bal_acc=0.5000, prec=0.0000, rec=0.0000 — matching
+both ClaMP and EMBER, but the mechanism is different and more precisely diagnosed.** Every one of
+the 7 per-group permutation-importance drops on real data is exactly 0.0000, including the 5
+groups that are genuinely mapped: the ensemble's prediction on all 2,570 real rows is the single
+constant class `benign` (confirmed by direct score inspection — every real row's ensemble score
+falls in [0.158, 0.380], entirely inside the `normal` profile's own 1-sigma band and nowhere near
+`abnormal`'s 0.855 mean), so no feature — mapped or missing — can move a prediction that has
+already saturated to one class. This is not ClaMP/EMBER's "16-19/22 features collapse to the
+mapping's structural zero" story (here only 10/22 are that zero). **A within-dataset Mann-Whitney
+U test (no synthetic data involved at all) proves real signal exists**: 9 of the 12 mapped
+features separate real malware from real benign at p<1e-4, three overwhelmingly
+(`child_process_spawns` p=2.25e-235, `autostart_writes` p=5.69e-98, `read_write_ratio` p=7.94e-73).
+The KS means explain the actual failure mode: `honeypot.collector`'s counters simulate a full
+ransomware *episode* (synthetic `crypto_calls` mean ~25,530, `renames` mean ~1,200-8,000-scale raw
+counters) while MalbehavD-V1's Cuckoo traces are bounded to a short sandbox window (max 175 total
+API calls per sample, so any single category's count sits in the single digits — real
+`crypto_call_rate` mean 0.36, `rename_rate_per_s` mean 0.032). The fitted `NProf`/`AProf` profiles
+were never shown a value in that range for *either* class, so every real row lands in the same
+corner of feature space regardless of label — a **scale-calibration mismatch between an
+assumed-unbounded monitor and a bounded sandbox window**, not an absence of dynamic behavioral
+signal in the real world. `crypto_ngram_novelty` independently turns out to be degenerate on this
+dataset (mean 1.0000 for both classes, p=1.00): traces average only 43 calls, short enough that
+almost every adjacent bigram is unique, saturating the statistic — a limitation of this session's
+specific proxy, not of the underlying feature concept.
+
+**Actionable for future work, stated as a concrete, falsifiable next step rather than a vague
+"improve the generator":** re-calibrating `honeypot.collector`'s count-feature distributions to a
+bounded-observation-window regime (tens, not thousands, per category) is the specific, testable
+change this finding points at. The shapes of the synthetic distributions may be fine; the *scale*
+assumes a monitor with no time limit, which no real sandbox (or honeypot deployment with a bounded
+observation window) actually has.
+
+**Impact on reproduction:** none — new evaluation, no paper target touched. Figures:
+`results/figures/fig13{a,b,c,d,e}_{coverage_progression,malbehavd_feature_distributions,
+transfer_metrics,group_importance,ks_heatmap}.png`. Full numbers: `RESULTS.md` "M7-13", sidecar
+`results/logs/20260926T091633Z-be5973ca.json`. Tests:
+`tests/unit/test_honeypot_malbehavd_mapping.py` (21 tests: the mapping table is deterministic and
+total, coverage-fraction ordering vs. ClaMP/EMBER, entropy/kill_chain fully missing, per-feature
+compute correctness, malformed-row handling).

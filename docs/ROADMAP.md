@@ -2,9 +2,9 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11) and its
-statistical drift-detection defense (M7-12) delivered; async pBFT with modelled network latency
-is the one remaining, not-required item**
+**Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11), its
+statistical drift-detection defense (M7-12), and dynamic-behavioral real-data transfer (M7-13)
+delivered; async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -349,6 +349,22 @@ existing baseline convention). Variance is reported and the repeat count follows
       exception (`consensus/` -> `detection/`, pinned in `test_module_boundaries.py`).
       `scripts/m7_12_poisoning_defense.py`, `RESULTS.md` M7-12, `docs/DEVIATIONS.md` DEV-38,
       `docs/THREAT_MODEL.md` Gap 1 updated (2026-09-26)
+- [x] **M7-13 — dynamic-behavioral transfer: MalbehavD-V1.** `honeypot.malbehavd_mapping` grounds
+      12/22 `FT_RW` features across 5/7 groups (filesystem, crypto_api, process, network,
+      persistence) from 2,570 real Windows PE files actually executed in a Cuckoo sandbox — double
+      EMBER's 6/22, quadruple ClaMP's 3/22, and the inverse coverage pattern (entropy/kill_chain
+      fully missing here, the only groups ClaMP/EMBER ever grounded). Transfer result still
+      bal_acc=0.5000 like both priors, but diagnosed precisely: every per-group permutation
+      importance on real data is exactly 0.0000 (the ensemble predicts the constant class `benign`
+      for all 2,570 real rows), while a within-dataset Mann-Whitney check (no synthetic data
+      involved) proves 9/12 mapped features genuinely separate real malware from real benign —
+      a scale-calibration mismatch (`honeypot.collector`'s counters simulate an unbounded
+      ransomware episode; MalbehavD-V1's traces are capped at 175 total API calls) is the
+      diagnosed cause, not an absence of real dynamic signal. All four of the session brief's
+      named dataset candidates (BODMAS, CICMalDroid-2020, MalwareBazaar/Triage, public Cuckoo)
+      were checked and ruled out for verified reasons before this fifth option was found and used.
+      `scripts/m7_13_malbehavd_transfer.py`, `RESULTS.md` M7-13, `docs/DEVIATIONS.md` DEV-39,
+      report §"Real Malware Transfer Evaluation" extended (2026-09-26)
 
 ---
 
