@@ -204,4 +204,4 @@ currently shipped depends on it.
 - [x] `docs/DEVIATIONS.md` updated (DEV-40)
 - [x] `docs/THREAT_MODEL.md` updated with the defense and its trust assumptions (Gap 1 subsection
       + Trust Assumption 8)
-- [ ] Committed, message explains *why* — pending, next step
+- [x] Committed (`629f3d0`) and pushed to `origin/main`, message explains *why*
