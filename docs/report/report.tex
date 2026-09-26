@@ -25,15 +25,25 @@ ransomware in smart healthcare, reporting 98.98\% accuracy and 0.990 F1 on the B
 dataset. We built a complete, from-scratch implementation of all five of its algorithms, both
 of its private blockchains under real pBFT consensus, and the honeypot feature pipeline the
 paper specifies but never defines. Reproducing the paper's own evaluation protocol, our best
-model reaches 0.9442 accuracy / 0.9697 F1 -- 4.56 points below the published figure, and an
-ablation over both candidate leakage sources we identified narrows but does not close a
-3.58-point residual gap. We further
-identify five independent defects spanning the paper's evaluation methodology, security
-argument, and preprocessing specification. The framework's central idea -- chain-protecting a
-detector's ground truth and a system's backups from the same adversary -- is sound; several of
-the paper's supporting claims measurably are not.
+model reaches 0.9442 accuracy / 0.9697 F1 -- 4.56 points below the published figure; an
+eight-hypothesis ablation over every candidate methodological explanation we could identify
+narrows, but does not close, a residual gap that tightens from 3.58 to 1.51 points. Beyond
+reproduction, twelve extensions build three analyses the paper never attempts. A
+\emph{security} analysis: formal verification of our own session protocol, a pBFT-vs-Raft
+consensus comparison, external anchoring against a simulated public chain, a four-tier threat
+model, and a measured honeypot data-poisoning attack together with a drift-detection defense for
+it -- the defense catches the poisoning strategy predicted least catchable and misses the one
+predicted most catchable, at a measured false-positive cost. A \emph{detection} analysis: the
+honeypot pipeline's real end-to-end result, adversarial feature-space evasion and a partial
+defense against it tested across two model architectures, and transfer evaluation against two
+real malware datasets. And a \emph{scalability} analysis of on-chain storage growth and
+throughput. We further identify five independent defects spanning the paper's evaluation
+methodology, security argument, and preprocessing specification. The framework's central idea --
+chain-protecting a detector's ground truth and a system's backups from the same adversary -- is
+sound; several of the paper's supporting claims measurably are not, and the extensions built here
+show that idea can be attacked, and in one case only partially defended, in ways the paper's own
+security argument never considers.
 \end{abstract}
-
 \section{Introduction}
 
 BSFR-SH \cite{wazid2023} proposes a blockchain-enabled defense against ransomware for smart
@@ -61,17 +71,47 @@ and kept the design decision separate from any claim about reproducing the paper
 gap the paper leaves open is not evidence against the paper, and we treat the two categories,
 undefined design and measurable defect, differently throughout.
 
-We state the result up front rather than at the end. We found \textbf{five independent
-defects} in the paper, spanning its evaluation methodology, its security argument, its
-preprocessing specification, its reported throughput claim, and the correspondence between what
-its framework is designed to detect and what it is actually evaluated on. And its
+We state the reproduction result up front rather than at the end. We found \textbf{five
+independent defects} in the paper, spanning its evaluation methodology, its security argument,
+its preprocessing specification, its reported throughput claim, and the correspondence between
+what its framework is designed to detect and what it is actually evaluated on. And its
 \textbf{headline detection result does not reproduce}: under the paper's own protocol, our best
 model falls 4.56 accuracy points short of the published figure, and a leakage ablation designed
-to find an innocent explanation narrows that gap to 3.58 points without closing it. Neither
-finding is presented as a failure of this project -- both are measured, bounded, and reported
-with baselines. The paper's central architectural idea survives scrutiny better than its
-supporting claims do, and \S\ref{sec:critique} says so explicitly.
+to find an innocent explanation narrows that gap to 3.58 points without closing it; a further
+eight-hypothesis follow-up (\S\ref{sec:m76}) tightens the bound again, to 1.51 points, still
+without closing it. Neither finding is presented as a failure of this project -- both are
+measured, bounded, and reported with baselines. The paper's central architectural idea survives
+scrutiny better than its supporting claims do, and \S\ref{sec:critique} says so explicitly.
 
+Reproduction alone does not test the paper's central claim -- that chaining a detector's ground
+truth and a system's backups protects both from an adversary with every incentive to attack
+either. Testing that claim needs a working system to attack, which reproduction under the
+paper's own protocol does not by itself provide: the paper's evaluation runs entirely on
+BitcoinHeist address features, not on anything a ransomware operator, a compromised cloud server,
+or a network attacker actually controls. \textbf{Twelve extensions}, built once the working
+system existed, supply that missing half, organized into three analyses beyond reproduction and
+critique. \S\ref{sec:security} is a \emph{security} analysis the paper never attempts: it
+constructs the four-tier threat model \S V's five informal paragraphs never state, formally
+verifies our own session-establishment protocol against a Dolev-Yao adversary, measures pBFT
+against Raft to ask whether the paper's own deployment needs Byzantine tolerance at all, adds
+external anchoring against a simulated public chain so a private chain's operators cannot rewrite
+history undetected, and measures a real honeypot data-poisoning attack together with a
+drift-detection defense built and evaluated against it -- a genuine research contribution, not a
+critique, that finds the defense catches exactly the poisoning strategy predicted least
+catchable and misses the one predicted most catchable. \S\ref{sec:detection-analysis} is a
+\emph{detection} analysis the paper's own \S VII never runs, because it evaluates on data no
+ransomware author could ever produce: the honeypot pipeline's real end-to-end result once its
+undefined layer is actually built, adversarial feature-space evasion against the resulting
+detector and a hardening defense tested across two model architectures, and transfer evaluation
+against two real malware datasets the detector was never fit on. \S\ref{sec:scalability} is a
+\emph{scalability} analysis of on-chain storage growth at clinical scale and the paper's own
+reported throughput claim.
+
+Taken together, the reproduction, the critique, and the twelve extensions answer a broader
+question than ``does the published number replicate'': does the architecture BSFR-SH proposes
+survive contact with the adversaries it claims to defend against, once it is actually built and
+attacked. \S\ref{sec:critique} answers the first question; \S\ref{sec:security} through
+\S\ref{sec:scalability} answer the second.
 \section{Paper Summary}
 
 BSFR-SH defines five algorithms across two independent blockchains, $BC_{DTBU}$ (data backups)
@@ -125,7 +165,6 @@ every second in Fig.~6 is, on the page, a function of an unstated constant. Both
 filled explicitly in our implementation (declared hyperparameters, declared payload size, a
 swept sensitivity range) rather than guessed once and left implicit, so that our own reported
 numbers are reproducible from our own configuration even where the paper's are not.
-
 \section{Implementation}
 \label{sec:impl}
 
@@ -180,45 +219,6 @@ prevent replay \emph{within} that window. We fixed the first by signing the resp
 into the initiator's message, and the second with a seen-nonce cache keyed by (peer, nonce) held
 for twice the timestamp window. Both properties are now pinned by dedicated replay and
 man-in-the-middle tests.
-
-\S V is entirely informal prose -- five paragraphs of argument, no ROR model, no BAN logic, no
-tool-checked proof -- for a paper whose author's other work almost always includes one. We
-verified this protocol, which is our own design and not the paper's, with
-Scyther~\cite{cremers2008scyther} under its default Dolev-Yao adversary. Table~\ref{tab:scyther}
-maps \S V-1's informal claims onto the formal claims Scyther checks. Every claim verifies, at both
-bounded (5 runs) and unbounded search, on the protocol as built above. Run against the
-\emph{pre-fix} sketch instead -- the version missing the responder's identity from the
-initiator's signature -- the identical tool and claims find a real attack: a non-injective
-agreement violation in which the two parties finish believing they talked to different
-counterparts. That the tool is silent on the fixed protocol and vocal on the broken one is a
-stronger confirmation than a clean run alone would be. Two limitations are stated rather than
-elided: the seen-nonce cache is stateful and has no representation in Scyther's per-session
-symbolic model, so replay resistance rests on the unit tests, not this proof; and Scyther has no
-equational theory for $g^{ab} = g^{ba}$, so the Diffie-Hellman exchange is modelled with the
-standard oracle idiom Scyther's own author uses for the same purpose, rather than checked
-natively. Full model, tool provenance, and raw output: \texttt{verification/}.
-
-\begin{table}[t]
-\centering
-\caption{\S V-1's informal claims, the formal claim Scyther checks for each, and the result.}
-\label{tab:scyther}
-\footnotesize
-\begin{tabular}{@{}p{2.3cm}@{\hspace{3pt}}p{2.1cm}@{\hspace{3pt}}p{1.5cm}@{}}
-\hline
-\textbf{\S V-1 claim} & \textbf{Formal claim} & \textbf{Result} \\
-\hline
-Adversary cannot estimate $SK$ & \texttt{Secret} & Verified \\
-Mutual auth., A $\to$ B & \texttt{Niagree}/ \texttt{Nisynch} & Verified \\
-Mutual auth., B $\to$ A & \texttt{Niagree}/ \texttt{Nisynch} & Verified \\
-Distinct keys per session & fresh-nonce argument & Holds by constr. \\
-Impersonation resistance & \texttt{Weakagree}/ \texttt{Alive} & Verified \\
-No reflection & default self-play search & No attack found \\
-Cross-id.\ replay (fixed) & \texttt{Niagree}, fixed model & Verified \\
-Cross-id.\ replay (pre-fix) & \texttt{Niagree}, pre-fix model & Attack found \\
-Within-window replay & -- (stateful cache) & Out of scope \\
-\hline
-\end{tabular}
-\end{table}
 
 \subsection{The honeypot feature pipeline: defining $Sig_{RW}$ and $FT_{RW}$}
 \label{sec:honeypot}
@@ -337,7 +337,6 @@ audit log record, and terminates in a simulated \texttt{POLICY\_BLOCKED} state r
 decision's outcome. No network access, wallet interaction, or transaction construction exists
 anywhere in the module that implements this, enforced by a test that statically scans it for
 exactly those imports and asserts the function's only observable effect is the one log record.
-
 \section{Reproduction Results}
 \label{sec:repro}
 
@@ -429,7 +428,6 @@ cell combinations tested reaches 0.9540/0.9749, still 3.58 accuracy points and 2
 under the published figure. At that point we reported the residual gap as unexplained with a
 measured bound, having tested two of at least five plausible candidates. \S\ref{sec:m76} tests
 the remaining three.
-
 \subsection{M7-6 -- three more hypotheses; the bound tightens to 1.51 points}
 \label{sec:m76}
 
@@ -566,7 +564,6 @@ paper's own KNN never saw more than a small fraction of the 2.9M rows it describ
 with the 90/10 resample's 46,014-row bound, or its reported runtime is missing from \S VII
 entirely; \S VII gives no timing figures for the ML evaluation at all, only for the separate
 consensus benchmark.
-
 \subsection{Blockchain timing (Targets 3--4)}
 \label{sec:5c}
 
@@ -658,12 +655,9 @@ canonicalise than the backup chain's single opaque byte blob.
 
 Tables~\ref{tab:timing} and~\ref{tab:marginal} measure consensus with message serialization off --
 the M6a run's original configuration. D3 (\texttt{docs/DEVIATIONS.md} DEV-30) found that turning
-consensus message serialization on --
-every \texttt{Proposal}/\texttt{Prepare}/\texttt{Commit} paying a real encode/decode round-trip,
-not the in-memory Python objects the unserialized bus passes -- adds +48--68\% at case-3. Before
-presenting the tables above, or building anything further on them, we re-ran the full three-case,
-both-chain matrix with serialization on, at the same seed and the same adaptive repeat-count
-protocol Table~\ref{tab:timing} uses.
+serialization on -- every \texttt{Proposal}/\texttt{Prepare}/\texttt{Commit} paying a real
+encode/decode round-trip -- adds +48--68\% at case-3, so we re-ran the full matrix under that
+condition before building anything further on the tables above.
 
 \begin{table}[t]
 \centering
@@ -686,877 +680,24 @@ Case 3, $BC_{SigRW}$ & 1.043\,s & +50.8\% & 1438 \\
 \end{tabular}
 \end{table}
 
-Three questions this answers. \textbf{Does marginal cost stay flat?} Yes -- DEV-08 survives
-unchanged: $BC_{DTBU}$ 0.0541--0.0543\,s/block and $BC_{SigRW}$ 0.0678--0.0688\,s/block across
-cases 1--3, each varying under 1\%, same shape as serialization-off, just uniformly higher.
-Serialization is a per-message cost, not a per-block-count-dependent one, so it cannot
-reintroduce the fixed-cost-amortisation shape DEV-08 already ruled out. \textbf{Does the
-$BC_{SigRW}$/$BC_{DTBU}$ gap stay at 35--45\%?} No -- it narrows to $\sim$25--27\% (case 1
-+25.8\%, case 2 +24.6\%, case 3 +27.4\%). Both chains' D3 encode cost is nearly identical in
-absolute terms (0.000072\,s vs.\ 0.000073\,s per block at case 3), so the real bus's fuller
-encode+decode cost is plausibly close to chain-independent in absolute seconds; added to
-$BC_{DTBU}$'s smaller base, it inflates $BC_{DTBU}$'s own time by a larger percentage than it
-inflates the gap, which is why the percentage gap shrinks even as the absolute-seconds gap
-grows slightly. This does not overturn the structural ECDSA/encoding attribution above -- that
-attribution is specifically about the serialization-off condition, and the serialization-off
-35--45\% figure is unchanged -- but any future citation of ``the gap'' must now say which
-condition it is under. \textbf{Do the trends still hold?} Yes, on every axis checked: monotone
-increase, $BC_{SigRW}$ slower than $BC_{DTBU}$ (narrower, never inverting), and TPS flat rather
-than rising, just at a uniformly lower level than Table~\ref{tab:timing}.
-
-\section{Critique}
-\label{sec:critique}
-
-Five defects, ordered by severity rather than by the order we found them. They are the ones
-that rise to a methodological or architectural problem; a complete record of every smaller
-departure from the paper's published design, each with its own rationale, is maintained
-separately and is not reproduced here.
-
-\subsection{FLAW-2 -- framework/evaluation disconnect}
-\label{sec:flaw2}
-
-Algorithm 2 collects data from a ransomware honeypot and Algorithm 3 trains a detector on the
-resulting signatures and behavioural features -- properties of an executing, or emulated,
-program. Section VII then evaluates entirely on BitcoinHeist: address-level graph features
-(length, weight, count, looped, neighbours, income) of a Bitcoin address that has already
-received a ransom payment. These are different problems. Detecting a running ransomware program
-from its behaviour and forensically labelling a wallet address after the fact share no features,
-no data-generating process, and arguably not even the same notion of a positive instance -- one
-is prospective and behavioural, the other retrospective and financial. Nothing in \S IV-C or
-\S VII acknowledges the substitution.
-
-We built both pipelines rather than choosing one. The BitcoinHeist pipeline
-(\S\ref{sec:5a}--\S\ref{sec:5b}) reproduces the paper's actual published evaluation. The
-honeypot pipeline (\S\ref{sec:honeypot}, \S\ref{sec:honeypot-eval}) runs Algorithm 2's honeypot
-output through real Phase-2 consensus onto $BC_{SigRW}$, decrypts it back out, and trains
-Algorithm 3's four models on it -- the sequence the paper's own Fig.~3 draws. It produces a
-real, bounded result (0.8422 balanced accuracy, \S\ref{sec:honeypot-eval}). The paper's
-framework half, run end to end as specified, was never demonstrated by its authors; only the
-mismatched evaluation half was. FLAW-2 is therefore sharper than ``the paper evaluates on the
-wrong data'': the paper's own framework, when actually built and run, produces a defensible
-result that the paper itself never reports, choosing an unrelated dataset instead.
-
-\subsection{FLAW-4 -- evaluation methodology}
-
-Section VII resamples BitcoinHeist to 90\% ransomware before evaluating, without stating that the
-resample is bounded by the scarce class: only 41{,}413 ransomware rows exist in the cited
-2{,}916{,}697-row dataset, so a 90\%-ransomware sample can hold at most
-$41{,}413/0.9=46{,}014$ rows -- 1.6\% of the dataset described two paragraphs earlier. The
-published 98.98\% accuracy is a number from a $\sim$46K-row experiment, reported with nothing to
-mark that it is not the 2.9M-row one. Compounding this, the resulting class balance makes
-accuracy nearly free: a constant-positive classifier on this split scores 90.0\%
-(\S\ref{sec:5a}).
-
-Reproducing the paper's own protocol exactly, our best model reaches 0.9442/0.9697, 4.56 accuracy
-points under published. An ablation over the two candidate leakage sources we could identify --
-\texttt{address} retained as a feature, and a non-grouped split -- narrows this only to 3.58
-points at the single most leakage-favourable cell tested (Table~\ref{tab:q10}), and both effects
-vanish or shrink under the methodologically correct grouped split. A follow-up session
-(\S\ref{sec:m76}) tested three further hypotheses -- splitting criterion, resample strategy, and
-single-split variance -- plus feature engineering and a stacked worst case combining every
-favourable choice found; the best of these, an oversampled resample under a non-grouped split,
-narrows the bound further to 1.51 points (Table~\ref{tab:m76}). We report the residual gap as
-unexplained, with a measured and now considerably tighter bound, rather than attribute it to a
-cause we found no evidence for.
-
-\subsection{FLAW-5 -- the \S V-3 security claim}
-\label{sec:flaw5}
-
-Section V-3 argues that BSFR-SH resists 51\% attacks because it replaces proof-of-work with pBFT.
-The argument borrows PoW's 51\% threshold and applies it to a consensus mechanism with a
-different one: pBFT is safe only while fewer than $n/3$ of replicas are Byzantine
-($n\geq3f+1$). Moving from PoW to pBFT does not raise the fraction of the network an adversary
-must control -- it \emph{lowers} it, from just over one half to one third. At the paper's own
-deployment of four miner nodes, $f=1$: two colluding replicas (50\% of the cluster -- above the
-$f=1$ bound the cluster actually tolerates, and below the 51\% figure the paper cites as the
-threshold being defended against) can make two honest replicas commit different blocks at the
-same height. We demonstrate this directly rather than argue it: a test constructs exactly this
-scenario against our own pBFT implementation and asserts the fork occurs, at exactly the bound
-$f$ predicts and no tighter.
-
-The fair counter-argument, which \S V-3 could have made and does not, is that pBFT's threshold
-counts identities, not hash power, and in a permissioned deployment identities cannot be minted
-by an outside adversary -- a property we test separately, showing a swarm of unauthorised
-identities cannot form a certificate regardless of size. The defensible version of \S V-3's claim
-is therefore \emph{operational} -- ``an attacker must compromise two of our four named cloud
-servers'' -- not consensus-theoretic, and it gets \emph{weaker}, not stronger, in relative terms
-as a reason to prefer pBFT over PoW at a fixed and small node count.
-
-\subsection{DEV-26 -- preprocessing deletes the positive class}
-\label{sec:flaw-preprocess}
-
-Algorithm 2 line 3 pre-processes honeypot data and, in its entirety, ``removes the
-abnormalities.'' The literal reading is statistical outlier removal. On a corpus whose purpose is
-teaching a detector what ransomware looks like, that reading is self-defeating: ransomware
-behaviour is the minority class by construction -- it \emph{is} the abnormality -- so an
-outlier-removal step deletes exactly the samples the detector exists to learn from. Applied
-naively, Algorithm 2's own pre-processing step would hand Algorithm 3 a clean-looking dataset
-with the positive class silently gone, and \S VII would then report a plausible-looking accuracy
-computed on data that never saw an attack. We interpret ``abnormalities'' as sensor defects
-rather than unusual behaviour (\S\ref{sec:preprocessing}) and pin the alternative reading's
-failure mode with a direct test asserting that cleaning never removes the positive class.
-
-\subsection{DEV-08 -- TPS is amortisation, not throughput}
-
-Section VII-D presents TPS as a measured throughput property that improves as the chain grows
-across the paper's three cases. Every one of the six published TPS values equals
-$\text{total\_tx}/\text{total\_time}$ exactly, verified to four significant figures against all
-six points; the rise the paper reports is the amortisation of a fixed per-run setup cost over a
-growing number of blocks, not a throughput property of the consensus mechanism. We add a second,
-measured line of evidence beyond this arithmetic observation: when we time only the append span
-itself, excluding cluster setup, our own marginal per-block cost is flat across cases 1 through 3
-on both chains (Table~\ref{tab:marginal}), and our own TPS is correspondingly flat rather than
-rising (\S\ref{sec:5c}). Removing the fixed cost from the timed span removes the rise -- exactly
-what ``the rise is amortisation'' predicts, and what our own implementation lets us test
-directly rather than infer.
-
-\subsection{GAP-2 -- storage-cost analysis}
-\label{sec:storage}
-
-Section VII benchmarks consensus timing but never asks how much storage its own design consumes,
-or at what scale that stops being feasible. We compute this from values already measured
-elsewhere in this project -- the declared 4096B transaction payload (DEV-15), the measured 215B
-framing and 161B hybrid-encryption overhead per chunk (DEV-24), and the measured 1.14$\times$
-full-block overhead factor (header, Merkle root and canonical encoding, amortised over a 100-tx
-block, \S\ref{sec:5c}) -- rather than from new estimates; full arithmetic in
-\texttt{docs/STORAGE\_ANALYSIS.md}.
-
-\begin{table*}[t]
-\centering
-\caption{On-chain storage growth, daily 1~MiB backups, 4 replicas. Every figure is arithmetic
-over \S\ref{sec:5c}'s measured overhead factor, not a new measurement.}
-\label{tab:storage}
-\footnotesize
-\begin{tabular}{lccc}
-\hline
-\textbf{Scenario} & \textbf{Per-node/yr} & \textbf{Cluster/yr ($\times$4)} & \textbf{Time to 1~TiB/node} \\
-\hline
-Small clinic (50 pts) & 20.3~GiB & 81.3~GiB & $\approx$50.4~yr \\
-Medium hospital (5{,}000 pts) & 1.98~TiB & 7.94~TiB & $\approx$6.05~mo \\
-Large network (50{,}000 pts) & 19.8~TiB & 79.4~TiB & $\approx$18.4~days \\
-\hline
-\end{tabular}
-\end{table*}
-
-At hospital scale, the paper's own on-chain design fills 1~TiB per replica in about six months
-under daily backups; at network scale, in under three weeks. Backup frequency is the larger lever
-of the two the paper leaves open: at the medium scenario, daily backups cost $\approx$7$\times$
-weekly and $\approx$30$\times$ monthly in chain growth for identical clinical content, a bigger
-effect than DEV-15's payload-size sweep found from a 16$\times$ range of payload sizes alone.
-
-Against this, an on-chain-hash / off-chain-data design -- store only a content digest and a
-storage pointer on-chain, keep the encrypted payload in external storage -- preserves the same
-tamper-evidence the paper's Merkle-root-and-signature chain already provides (recomputing and
-comparing the digest catches off-chain tampering exactly as the paper's own immutability argument
-requires), at $\approx$504~bytes per backup regardless of payload size, against
-$\approx$1.14~MiB for a 1~MiB backup under the paper's design -- a $\approx$2{,}371$\times$
-reduction that widens further as backups get larger, since the hash-only cost is flat and the
-paper's is not. What it does not preserve is on-chain \emph{availability}: lose the off-chain
-store and the digest alone cannot reconstruct the backup, where the paper's design always can.
-We state this trade-off rather than resolving it, per this project's rule against silently
-revising the paper's design.
-
-Compute is not the bottleneck this analysis surfaces: the large-network scenario's daily block
-count, at \S\ref{sec:5c}'s measured marginal per-block cost, comes to $\approx$4{,}045
-CPU-seconds/day ($\approx$4.7\% of a day) on the same 8~GB dev laptop -- comfortably inside its
-measured throughput ceiling, though nothing here measures a production cluster's network or disk
-behaviour, only this one machine's compute.
-
-\subsection{What the paper gets right}
-
-Two of the paper's choices are execution defects, not premise defects, and the distinction
-matters for how it should be read. The two-chain architecture -- one chain for the ground truth a
-detector trains on, a separate chain for the backups a system restores from, never sharing node
-sets or state -- genuinely does separate detection integrity from recovery integrity: an
-adversary who compromises the mechanism protecting one does not thereby compromise the other. And
-the central idea that blockchain immutability can protect a detector's training data from
-tampering, in a domain where an attacker has every incentive to poison exactly that data if they
-can reach it, is sound, and is not the load-bearing idea of any of the four papers Table~II
-compares against. The paper's execution of that idea -- its evaluation methodology, its security
-argument for choosing pBFT, its preprocessing specification, and the connection between what it
-builds and what it measures -- has the five gaps above. Both are true, and a critique that lists
-only the five would misrepresent the paper's contribution as smaller than it is.
-
-\section{Honeypot Detection Evaluation}
-\label{sec:honeypot-eval}
-
-\S\ref{sec:honeypot} described the design of the honeypot feature pipeline the paper omits. This
-section reports what it measures once built end to end: honeypot deployment $\to$ Phase-2
-collection $\to$ real four-node pBFT consensus onto $BC_{SigRW}$ $\to$ Phase-3 decryption,
-training, and detection -- the sequence Fig.~3 of the paper draws and the paper's own evaluation
-never runs.
-
-\begin{table}[t]
-\centering
-\caption{Honeypot detection result (Alg.\ 3 end to end) and its derived confusion matrix. TP/FP
-are computed from the reported precision, recall and evaluation-set composition (353 of 731 eval
-records positive) -- a computed quantity, not a separately measured one.}
-\label{tab:honeypot}
-\footnotesize
-\begin{tabular}{lc}
-\hline
-Train $n$ / Eval $n$ & 1467 / 731 \\
-Balanced accuracy & \textbf{0.8422} \\
-Precision & 0.8439 \\
-Recall & 0.8272 \\
-MCC & 0.6849 \\
-PR-AUC & 0.9100 \\
-Constant-positive baseline & 0.5000 \\
-\hline
-\multicolumn{2}{c}{\textit{Derived confusion matrix, eval set ($n=731$)}} \\
-\hline
-True positive & 292 \\
-False negative & 61 \\
-False positive & 54 \\
-True negative & 324 \\
-\hline
-\end{tabular}
-\end{table}
-
-Table~\ref{tab:honeypot} reports the result on the committed corpus (1467 training records, 731
-evaluation records, drawn from two independent seeds so no latent generator parameter is shared
-across the split): \textbf{0.8422 balanced accuracy}, between the measured simple-Gaussian
-baseline (0.830) and the corpus's stated intended ceiling ($\approx0.85$, \S\ref{sec:honeypot})
--- above the naive baseline, not above the ceiling that would indicate the classifier is reading
-a leak rather than the corpus's designed difficulty. The evaluation script checks this
-automatically against a 0.05 leak margin and refuses to record a result that would fail the
-check; it did not fire here. The derived confusion matrix shows a detector that is neither
-trivially accurate nor degenerate: 292 of 353 ransomware records correctly flagged, 61 missed, 54
-benign records misclassified.
-
-This is the first number in this project produced by Phase 2's output feeding Phase 3's input
-through the paper's own architecture. It demonstrates that the framework, as specified, is not
-merely completable on paper -- once \S IV-B's undefined $Sig_{RW}$/$FT_{RW}$ are actually given a
-definition, Algorithms 2 and 3 connect into a working, non-degenerate detection pipeline. This is
-the strongest available rebuttal to a reading of FLAW-2 as ``the framework as designed cannot
-work'': it can. The paper simply never tried.
-
-\section{Adversarial Robustness of the Honeypot Detector}
-\label{sec:adversarial}
-
-\S\ref{sec:honeypot-eval}'s 0.8422/0.8408\footnote{This section trains and evaluates on
-\texttt{data/honeypot/corpus\_\{train,eval\}.csv} directly, per \S\ref{sec:honeypot}'s ``committed
-corpus is the fixed dataset'' convention. Read this way the same seed and configuration give
-0.8408, not 0.8422: \texttt{honeypot/corpus.py} formats every feature to six significant figures
-when it writes the CSV, and that rounding alone accounts for the 0.0014 difference from
-Table~\ref{tab:honeypot}'s chain-reconstructed, full-precision number. Both are measured; neither
-is wrong; every threshold below is relative to 0.8408.} balanced accuracy answers ``does the
-detector work.'' It does not answer ``does it keep working against an adversary who knows a
-behavioural sensor is watching.'' The paper's threat model is silent on this: Algorithm 3 assumes
-$FT_{RW}$ is simply observed, never that a rational attacker -- one motivated to avoid exactly the
-detection Algorithm 3 performs -- would adjust their program's observable behaviour to defeat it.
-This is not a gap we can hold against the paper alone: testing it requires a defined, differentiable
-feature pipeline, which is precisely what \S IV of the paper never provides (FLAW-2). Only having
-built $FT_{RW}$ ourselves (DEV-03, DEV-27) makes the question answerable at all.
-
-\begin{table}[t]
-\centering
-\caption{Top-5 features by Random Forest importance (individually, bal.\ acc.\ 0.8513 on the
-committed corpus -- the higher of the two importance-bearing models, Decision Tree scoring
-0.8063), with each feature's evasion direction and physical bound.}
-\label{tab:top5}
-\footnotesize
-\begin{tabular}{lccl}
-\hline
-\textbf{Feature} & \textbf{Importance} & \textbf{Direction} & \textbf{Bound} \\
-\hline
-observed\_stages & 0.126 & $\downarrow$ & 0 stages \\
-extension\_change\_rate & 0.109 & $\downarrow$ & 0 \\
-rename\_rate\_per\_s & 0.079 & $\downarrow$ & 0 s$^{-1}$ \\
-write\_entropy\_var & 0.074 & $\uparrow$ & 6.5494 \\
-crypto\_ngram\_novelty & 0.067 & $\downarrow$ & 0 \\
-\hline
-\end{tabular}
-\end{table}
-
-Table~\ref{tab:top5}'s bounds are not arbitrary. Four features move toward 0 -- an attacker can
-always throttle: delay the kill chain so fewer of the four observable stages complete inside a
-honeypot's finite dwell time (\texttt{observed\_stages}), rename files less aggressively or not at
-all (\texttt{extension\_change\_rate}), slow the rename loop (\texttt{rename\_rate\_per\_s}), or
-mimic a common, previously-seen crypto-API call sequence instead of a distinctive one
-(\texttt{crypto\_ngram\_novelty}). The fifth, \texttt{write\_entropy\_var}, moves the other way:
-ransomware ciphertext is consistently near-maximal entropy (\emph{low} variance across blocks),
-while benign writes are heterogeneous, so an attacker raises variance by interleaving some
-deliberately low-entropy writes among the ciphertext. Its bound, 6.5494, is not an abstract limit
-but the highest \texttt{write\_entropy\_var} the generator's own benign profiles are ever observed
-to produce in the committed corpus -- an attacker cannot manufacture more heterogeneity than a
-real, non-malicious write pattern in this environment exhibits. No feature in the top-5 turned out
-structurally robust (unlike mean write entropy, which cannot fall below the entropy of properly
-encrypted data and is exactly the kind of feature that would resist this attack, but did not rank
-in the top 5).
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig7a_single_feature_degradation.png}
-\caption{Each top-5 feature perturbed independently, 0--100\% of its evasion range, against the
-committed eval corpus's 353 malicious rows. Ensemble fit once; never retrained.}
-\label{fig:single-feature}
-\end{figure}
-
-\textbf{Single-feature evasion is weak.} Figure~\ref{fig:single-feature} shows every individual
-feature, pushed all the way to its bound, costing the detector at most 9 points of balanced
-accuracy (0.841 $\to$ 0.752 for \texttt{write\_entropy\_var}, the largest single-feature drop;
-\texttt{rename\_rate\_per\_s} alone costs under 3 points). None approaches 0.50. A one-dimensional
-attacker -- one who tunes a single observable behaviour and leaves everything else alone -- does
-not meaningfully dent this detector.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig7b_combined_evasion.png}
-\caption{All five features perturbed simultaneously (bold), against the five single-feature curves
-as context (light gray) on the same axes.}
-\label{fig:combined}
-\end{figure}
-
-\textbf{Combined evasion compounds, but does not collapse the detector.} Perturbing all five
-features together (Figure~\ref{fig:combined}) drops balanced accuracy from 0.841 to a floor
-around 0.57--0.60 by 60--100\% joint perturbation -- roughly triple any single feature's damage,
-confirming the features compound as a competent adversary would exploit. It never reaches the
-0.50 useless-detector line, though: the top-5 features carry only 45.5\% of Random Forest's total
-importance mass (0.126+0.109+0.079+0.074+0.067), so the remaining 17 features, entirely
-unperturbed here, still carry real discriminative signal even once the five most important ones
-are pushed to their physical limits. This is itself the finding -- exactly the outcome the session
-brief's own test criterion anticipated as a possibility (``the model uses features outside the
-top-5 enough to still discriminate''), and it is a mild point in the detector's favor: no small,
-named feature subset is a single point of failure.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig7c_adaptive_evasion_histogram.png}
-\caption{Per-sample minimum $L_\infty$ perturbation (top-5 features, each normalized to its own
-evasion range) that flips the ensemble's verdict, over all 353 positive eval rows.}
-\label{fig:adaptive}
-\end{figure}
-
-\textbf{Adaptive, per-sample evasion is a different picture.} An adversary who knows the model and
-optimizes per sample does much better than one perturbing blindly. Binary search per positive row
-over the $L_\infty$ ball (Figure~\ref{fig:adaptive}) finds: median minimum perturbation
-\textbf{0.321} (a typical ransomware sample needs about a third of the available evasion range to
-flip); 10th percentile \textbf{0.000} -- driven by the 61 of 353 positive rows (17.3\%) the
-detector already misses at 0\% perturbation (consistent with the measured 0.8408's own false-negative
-rate), plus a further 7.9\% needing under 5\% perturbation, so roughly a quarter of ransomware
-samples are trivially evadable by an adaptive attacker; 90th percentile \textbf{0.977} -- the
-hardest samples need nearly the entire evasion range. 28 of 353 positive rows (7.9\%) never flip
-even at the full $L_\infty$ ball. Checking those survivors against the sixth-through-tenth ranked
-features (never perturbed here) shows exactly what the session's own test criterion predicted:
-survivors average \texttt{c2\_beacon\_count} 10.3 against 7.0 for the malicious class as a whole,
-\texttt{entropy\_delta} 3.58 against 2.61, and similarly elevated \texttt{key\_generation\_events},
-\texttt{shadow\_copy\_deletions} and \texttt{dns\_entropy} -- these are the ransomware samples so
-extreme on features outside the top-5 that disguising only the top-5 cannot save them.
-
-\textbf{Conclusion: shape (c), the nuanced answer.} No single top-5 feature is fragile enough to
-break the detector alone, and no combination of exactly these five is either -- the ensemble's
-reliance on 17 further features is real and measured, not assumed. But a median-effort adaptive
-adversary needs only about a third of the physically plausible evasion range, and roughly a
-quarter of ransomware samples are evadable with under 5\% perturbation on features an attacker can
-freely throttle to zero. The paper's implicit assumption that $FT_{RW}$ is unconditionally robust
-is false for a meaningful minority of cases and approximately true for the rest, and this
-asymmetry -- some samples essentially free to evade, others requiring near-maximal effort -- is
-exactly the kind of result a single aggregate accuracy number cannot show. It is a direct
-consequence of FLAW-2 (\S\ref{sec:flaw2}): the paper's own evaluation, run on BitcoinHeist address
-features that no attacker can \emph{choose their own value of} at will, could never have surfaced
-this question, because it is a question about behavioural features an attacker actually controls.
-Only the framework path this project built makes it a question with a measured answer.
-
-\section{Adversarial Retraining: Does Hardening the Detector Work?}
-\label{sec:m7-8}
-
-\S\ref{sec:adversarial} measured the attack. This section measures a candidate defense: if the
-ensemble is fit on a training draw that already contains perturbed positives, do the fragile
-samples become robust, and what does that cost on clean data? The training draw's 717 positive
-rows are each augmented with $K=5$ perturbed copies, one independent
-$\mathrm{Uniform}(0,\,\mathrm{budget})$ fraction per top-5 feature per copy, moved toward that
-feature's own evasion bound (Table~\ref{tab:top5}) -- negative rows and the eval corpus are never
-touched. Three training budgets are swept -- 25\%, 50\%, 100\% of each feature's evasion range --
-plus a 0\% degenerate case as a pure sanity check. All perturbation and scoring machinery is
-identical to \S\ref{sec:adversarial}'s (`detection.adversarial`, factored out this session so both
-experiments share one tested implementation rather than two copies that could silently drift).
-
-\textbf{The degenerate case reproduces the original model exactly.} At 0\% budget, augmentation is
-a no-op by design (`detection.retraining.augment\_positive\_rows`) rather than five duplicate
-copies of every positive row: duplicating would still change
-\texttt{RandomForestClassifier}'s bootstrap sampling for zero new information, breaking bit-exact
-reproduction. Measured: \texttt{train\_n=1467} (unchanged), \texttt{bal\_acc=0.8408}, identical to
-\S\ref{sec:adversarial}'s baseline to the last recorded digit.
-
-\begin{table}[t]
-\centering
-\caption{Clean-eval cost of adversarial retraining. Baseline: bal.\ acc.\ 0.8408, precision
-0.8415, recall 0.8272, MCC 0.6822.}
-\label{tab:m7-8-cost}
-\footnotesize
-\begin{tabular}{lccccc}
-\hline
-\textbf{Budget} & \textbf{Bal.\ Acc.} & \textbf{$\Delta$} & \textbf{Prec.} & \textbf{Rec.} & \textbf{MCC} \\
-\hline
-25\%  & 0.7803 & $-6.05$pt  & 0.886 & 0.637 & 0.588 \\
-50\%  & 0.7616 & $-7.92$pt  & 0.845 & 0.632 & 0.544 \\
-100\% & 0.7363 & $-10.45$pt & 0.828 & 0.586 & 0.498 \\
-\hline
-\end{tabular}
-\end{table}
-
-\textbf{The cost is real and grows monotonically with training budget} (Table~\ref{tab:m7-8-cost},
-Figure~\ref{fig:m7-8-cost}), driven almost entirely by falling recall (0.8272 $\to$ 0.586 at
-100\%) rather than rising false positives -- precision stays high throughout. The hardened models
-are not noisier; they are more conservative, increasingly refusing to call genuine, unperturbed
-ransomware "ransomware."
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig9a_clean_accuracy_cost.png}
-\caption{Clean-eval metrics, original vs.\ hardened at each training budget.}
-\label{fig:m7-8-cost}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig9b_combined_degradation_overlay.png}
-\caption{Combined evasion (\S\ref{sec:adversarial}'s attack) against the original model and each
-hardened model.}
-\label{fig:m7-8-overlay}
-\end{figure}
-
-\textbf{Robustness is non-monotonic in training budget -- the headline finding.} At 25\% budget,
-the hardened model is \emph{worse} than doing nothing: median adaptive perturbation to evade falls
-from the original's 0.3213 to 0.2499, and the combined-evasion curve
-(Figure~\ref{fig:m7-8-overlay}) crosses the 0.50 useless-detector line at full perturbation
-(0.463), something the original model's own floor (0.570) never did. A narrow training budget
-teaches the model the small-perturbation region at the cost of the large-perturbation region it
-never saw during training -- hardening that backfires against a stronger attacker than the one it
-was tuned against. At 50\% and 100\% budget the opposite happens, sharply: median adaptive
-perturbation rises to 0.8825 and 1.0000, and the 100\%-budget combined-evasion curve
-\emph{increases} with perturbation instead of falling (0.736 at 0\% eval-time perturbation
-$\to$ 0.888 at 100\%, Table~\ref{tab:m7-8-adaptive}). The mechanism: a large fraction of the
-hardened model's own positive training rows sit at or near the top-5 features' evasion bounds, so
-the model learns "values at the bound" as a strong ransomware signature in its own right. That is
-genuine, measured robustness against \S\ref{sec:adversarial}'s specific attack shape -- but it is
-pattern-matching on the augmentation's own footprint, not a deeper representation, and is untested
-against any attack that does not resemble "features pushed toward their historical evasion
-bound."
-
-\begin{table}[t]
-\centering
-\caption{Adaptive evasion: minimum $L_\infty$ perturbation to flip, original vs.\ hardened.}
-\label{tab:m7-8-adaptive}
-\footnotesize
-\begin{tabular}{lccc}
-\hline
-\textbf{Model} & \textbf{p10} & \textbf{median} & \textbf{p90} \\
-\hline
-original (\S\ref{sec:adversarial}) & 0.000 & 0.321 & 0.977 \\
-hardened @25\% & 0.000 & 0.250 & 0.951 \\
-hardened @50\% & 0.000 & 0.883 & 1.000 \\
-hardened @100\% & 0.000 & 1.000 & 1.000 \\
-\hline
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig9c_adaptive_evasion_comparison.png}
-\caption{p10/median/p90 minimum perturbation to evade, original vs.\ each hardened budget.}
-\label{fig:m7-8-adaptive}
-\end{figure}
-
-\textbf{The "throws away signal" failure mode occurs, partially.} The session's own test
-criterion: does the hardened model solve robustness by driving top-5 importance to near zero
-rather than learning a robust representation? Top-5 importance sum falls from 0.4553 (original)
-to 0.4044 (25\%), 0.2966 (50\%), 0.2309 (100\%) -- a real, budget-proportional redistribution,
-never collapsing to near zero. The features consistently gaining importance --
-\texttt{directory\_breadth}, \texttt{entropy\_delta}, \texttt{key\_generation\_events} -- are none
-of them perturbed in this experiment. This is the partial case the test anticipated: not
-"solved robustness by discarding the top-5 entirely," but a real, measured shift of reliance onto
-features an attacker could target next, which a follow-up session would need a new perturbation
-round against the hardened models' own new top-5 to test.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig9d_pareto_clean_vs_robustness.png}
-\caption{Clean balanced accuracy vs.\ median adaptive perturbation to evade -- the deployment
-trade-off, one point per training budget.}
-\label{fig:m7-8-pareto}
-\end{figure}
-
-\textbf{The Pareto trade-off is not a smooth curve.} Figure~\ref{fig:m7-8-pareto}: 25\% budget is
-strictly dominated by the original model (worse clean accuracy \emph{and} worse robustness); only
-50\% and 100\% trade clean accuracy for robustness in the direction a defender would want, and
-100\%'s marginal robustness gain over 50\% (median 1.000 vs.\ 0.883) is small next to its
-additional clean-recall cost (0.586 vs.\ 0.632 recall) -- 50\% budget is the more defensible
-operating point of the three tested, not 100\%.
-
-\textbf{Conclusion: adversarial retraining is a real but narrow, expensive defense.} At a
-well-chosen budget it measurably hardens the detector against \S\ref{sec:adversarial}'s specific
-attack -- median evasion effort rises from needing a third of the evasion range to needing nearly
-all of it. But every budget that helps costs 8-10 points of clean balanced accuracy, driven by
-recall, meaning a hardened deployment would silently miss more real, unperturbed ransomware in
-exchange for resisting an adversary sophisticated enough to know the top-5 features and their
-physical bounds. And the mechanism behind the gain -- learning that near-bound feature values are
-themselves suspicious -- is exactly the kind of narrow, augmentation-shaped pattern that a
-differently-shaped attack (partial perturbation of a \emph{different} feature subset, or of the
-newly-important \texttt{directory\_breadth}/\texttt{entropy\_delta}/\texttt{key\_generation\_events})
-was never tested against and has no particular reason to survive. Whether this trade-off is worth
-taking is a deployment decision this project can inform but not make: it depends on whether an
-operator weighs a sophisticated feature-space adversary more heavily than routine, unperturbed
-ransomware, which this framework's own honeypot corpus (DEV-27) was built to represent as the
-common case. The more durable fix implied by both \S\ref{sec:adversarial} and this section is
-architectural, not just training a wider draw -- ensemble diversity over feature subsets, or a
-loss that penalises reliance on any single small feature group, neither of which this session's
-scope covers.
-
-\section{Real Malware Transfer Evaluation}
-\label{sec:m7-7}
-
-\textbf{Why real-data evaluation matters.} M4b's 0.8422 balanced accuracy
-(\S\ref{sec:honeypot-eval}) is the detection ensemble scored on \texttt{honeypot.collector}'s own
-synthetic corpus -- the same session designed the generator and fit the classifier against it, so
-that number measures the generator-detector \emph{pair}, not whether the detector would recognise
-anything the generator did not anticipate. This section asks the question synthetic-only
-evaluation cannot answer: does the detector transfer to real behavioural features it has never
-seen, from programs it was not designed around? The detector used below is the identical fitted
-ensemble -- same seed, same committed corpus, never retrained.
-
-\textbf{Dataset.} The session brief named EMBER, CIC-MalMem-2022/CICMalDroid-2020 and
-MalwareBazaar, in that order. EMBER's actual feature dataset is a $\sim$2.4GB archive; this
-sandbox's measured throughput on a small test fetch ($\sim$40.6KB/s) projects a $\sim$17-hour
-download, infeasible in one session. The CIC datasets are gated behind a research-access request
-form, not a scriptable download. Used instead: \textbf{ClaMP} (Classification of Malware with PE
-headers, \texttt{github.com/urwithajit9/ClaMP}) -- 5210 real Windows PE files' static
-header-derived structural features, 2722 malicious and 2488 benign, openly published for exactly
-this kind of ML research use. Fetched once and committed at \texttt{data/external/clamp/} (1.28MB,
-sha256 recorded in its README) for full reproducibility, and used for \textbf{evaluation only}: it
-never fits or tunes anything in \texttt{honeypot/} or \texttt{detection/}.
-
-\textbf{The mapping table is itself the first finding.} $FT_{RW}$ (\S\ref{sec:honeypot}) is a
-\emph{dynamic behavioural} schema -- what a monitor observes a running program \emph{do}. ClaMP is
-\emph{static} -- header fields read off a file that is never executed. Table~\ref{tab:m77-mapping}
-shows what that mismatch produces: only the entropy group (3 of 22 features) has any real
-correspondence at all, because entropy is one of the few observables measurable both statically (a
-file's own byte distribution) and dynamically (the byte distribution of what a process writes).
-The other six groups -- filesystem, crypto API, process, network, persistence, kill-chain -- have
-\textbf{no} analogue in a dataset that never ran the sample, and are marked missing, handled
-exactly as \texttt{honeypot.features.build()} already handles an unobserved sensor: value $0.0$,
-\texttt{missing\_mask} bit set.
-
-\begin{table}[t]
-\centering
-\caption{$FT_{RW}$ features mapped from ClaMP, by group. 19 of 22 features have no analogue in a
-static PE-header dataset.}
-\label{tab:m77-mapping}
-\footnotesize
-\begin{tabular}{lccc}
-\hline
-\textbf{Group} & \textbf{Features} & \textbf{Mapped (direct/proxy)} & \textbf{Missing} \\
-\hline
-entropy & 3 & 3 & 0 \\
-filesystem & 5 & 0 & 5 \\
-crypto\_api & 3 & 0 & 3 \\
-process & 3 & 0 & 3 \\
-network & 3 & 0 & 3 \\
-persistence & 3 & 0 & 3 \\
-kill\_chain & 2 & 0 & 2 \\
-\hline
-\textbf{Total} & \textbf{22} & \textbf{3} & \textbf{19} \\
-\hline
-\end{tabular}
-\end{table}
-
-\textbf{Transfer result: not a partial degradation, a clean failure, and mildly worse than
-chance.} Before touching ClaMP, the script reproduces the established CSV-path baseline exactly
-(0.8408, \S\ref{sec:adversarial}'s sanity condition) as a check that the mapping code has not
-corrupted the fitted ensemble. Scored on all 5210 mapped ClaMP rows:
-$\mathrm{bal\_acc}=0.5000$, $\mathrm{precision}=0.0000$, $\mathrm{recall}=0.0000$,
-$\mathrm{mcc}=0.0000$, $\mathrm{pr\_auc}=0.4612$ (Figure~\ref{fig:m77-metrics}).
-$\mathrm{bal\_acc}=0.5000$ exactly is not a rounding coincidence: the ensemble predicts
-\emph{every} row, malicious and benign alike, as benign. More strikingly, $\mathrm{pr\_auc}=0.4612$
-sits \emph{below} this dataset's no-skill baseline (class prevalence $2722/5210=0.5225$) -- the
-continuous ensemble score is mildly anti-correlated with the true label here, not merely
-uninformative. The mechanism is legible: with 86\% of the feature space collapsed to a mapping
-artifact of zero, there is essentially nothing left for the profiles fitted on the synthetic
-corpus to discriminate on beyond three entropy features, and a mostly-zero vector apparently reads
-as closer to $NProf$ than $AProf$ under those fitted distributions. \textbf{This is a finding
-about the schema's dynamic-vs-static mismatch with the most tractable available real dataset, not
-evidence that the synthetic generator's own difficulty calibration is wrong} (DEV-27's 0.85
-Bayes-optimal ceiling) -- no dataset that never executed a sample could ground the other six
-feature groups, whatever the generator's own distributions looked like.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig8b_transfer_metrics.png}
-\caption{Synthetic CSV-path baseline vs.\ ClaMP real-data transfer, same fitted ensemble.}
-\label{fig:m77-metrics}
-\end{figure}
-
-\textbf{Distribution comparison: which synthetic features match reality.} Two-sample
-Kolmogorov-Smirnov, synthetic corpus vs.\ ClaMP-mapped, for the 3 features with a real analogue
-(Figure~\ref{fig:m77-dist}) -- the other 19 are a constant $0.0$ under the mapping, and a KS test
-against a constant characterises the mapping, not the generator, so it is not reported as a
-distributional claim:
-
-\begin{center}
-\scriptsize
-\begin{tabular}{lccc}
-\hline
-\textbf{Feature} & \textbf{$D$} & \textbf{$p$} & \textbf{syn.\ / real mean} \\
-\hline
-\texttt{write\_entropy\_mean} & 0.197 & $6.9\times10^{-53}$ & 5.63 / 6.36 \\
-\texttt{write\_entropy\_var} & 0.488 & $<10^{-300}$ & 0.59 / 3.52 \\
-\texttt{entropy\_delta} & 0.285 & $1.7\times10^{-111}$ & 2.00 / 3.00 \\
-\hline
-\end{tabular}
-\end{center}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig8a_entropy_distributions.png}
-\caption{Synthetic vs.\ real (ClaMP-mapped) distributions, the 3 mapped entropy features.}
-\label{fig:m77-dist}
-\end{figure}
-
-All three diverge significantly. Read cautiously, not as "the generator is wrong": ClaMP's entropy
-readings are whole-file and per-section entropy of arbitrary real PE binaries -- many of them
-large, compiled, resource-laden files with high baseline entropy regardless of malice -- while the
-synthetic features model entropy of write operations during a specific kill-chain episode, tuned
-to a 0.85 Bayes-ceiling difficulty budget for a deliberately hard classification problem. These are
-different measurement modalities compared on the closest available real analogue, not the same
-observable measured twice. One further caveat: $\sim$8--9\% of the synthetic corpus's
-\texttt{write\_entropy\_mean} values are the generator's own missing-value zero-fill, visibly
-inflating the low end of the synthetic histogram in Figure~\ref{fig:m77-dist} and modestly
-affecting, but not creating, the measured divergence.
-
-\textbf{Limitations.} The mapping is necessarily imperfect: static header fields are the closest
-real analogue available for entropy, and no real analogue exists at all for six of seven feature
-groups, so the effective comparison the detector faces is far narrower than the 22-dimensional
-space it was fit on. ClaMP's own labelling process (VirusTotal-report-based, per its own
-documentation) may differ in criteria and era from the ransomware-specific threat model
-$FT_{RW}$'s kill-chain groups were designed around -- ClaMP's malicious class is general malware,
-not specifically ransomware. The transfer gap measured here is therefore a statement about how far
-our generator's approximation reaches when most of its feature space cannot be exercised at all,
-not a general claim about honeypot-based ransomware detection.
-
-\textbf{A richer static dataset: EMBER.} EMBER2018 (\texttt{github.com/elastic/ember}) exposes far
-richer raw PE data than ClaMP -- a 256-bin whole-file byte histogram, every section's own entropy
-and read/write/execute flags, and a full per-DLL import table -- and \texttt{honeypot.
-ember\_mapping} (DEV-35) grounds 6 of 22 $FT_{RW}$ features against it (entropy 3/3, crypto\_api
-2/3, filesystem 1/5), double ClaMP's 3/22, verified line-by-line against the \texttt{elastic/ember}
-extractor source rather than assumed. The dataset (200,000 fully-labelled real PE files,
-sha256-verified) was scored against the identical fitted ensemble, evaluation-only, same posture
-as ClaMP.
-
-\begin{table}[t]
-\centering
-\caption{EMBER transfer vs.\ the ClaMP baseline (M7-7), same fitted ensemble.}
-\label{tab:m7-10a-transfer}
-\footnotesize
-\begin{tabular}{lccccc}
-\hline
-\textbf{Dataset} & \textbf{Mapped} & \textbf{Bal.\ Acc.} & \textbf{Prec.} & \textbf{Rec.} & \textbf{PR-AUC} \\
-\hline
-ClaMP (M7-7)  & 3/22 & 0.5000 & 0.0000 & 0.0000  & 0.4612 \\
-EMBER (M7-10a) & 6/22 & 0.5000 & 0.6667 & 0.00002 & 0.6301 \\
-\hline
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig10b_ember_transfer_metrics.png}
-\caption{Synthetic baseline vs.\ ClaMP (M7-7) vs.\ EMBER transfer.}
-\label{fig:m7-10a-metrics}
-\end{figure}
-
-\textbf{Still exactly chance on the hard decision -- but the continuous score is no longer
-anti-correlated with truth.} Table~\ref{tab:m7-10a-transfer}: $\mathrm{bal\_acc}=0.5000$ again, not
-a coincidence -- the fitted \emph{NProf}/\emph{AProf} profiles place all but 3 of 200,000 rows on
-the benign side regardless of true label (2 of those 3 are true positives: recall $0.00002$,
-precision $0.6667$). The mechanism is the same one ClaMP exposed: 16 of 22 dimensions collapse to
-the structural-missing zero (\texttt{missing\_mask} constant across every row), and profiles fitted
-where 16/22 features are normally populated read a mostly-zero vector as ``benign'' almost
-universally. \textbf{What doubling the coverage fraction changes is the continuous score, not the
-hard call:} $\mathrm{pr\_auc}=0.6301$ sits above this dataset's balanced 0.50 no-skill line, where
-ClaMP's $\mathrm{pr\_auc}=0.4612$ sat \emph{below} its own 0.5225 no-skill line (M7-7) -- EMBER's
-ensemble score is weakly but genuinely informative about the true label; ClaMP's was mildly
-anti-correlated with it. Richer static grounding measurably helps the model's underlying
-confidence signal without moving the threshold decision it is discarded into.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig10a_ember_feature_distributions.png}
-\caption{Synthetic vs.\ real (EMBER-mapped) distributions, the 6 mapped features.}
-\label{fig:m7-10a-dist}
-\end{figure}
-
-\textbf{Distribution comparison: EMBER diverges from the synthetic corpus more sharply than ClaMP
-did, on every mapped feature} (Figure~\ref{fig:m7-10a-dist}; full KS statistics in DEV-35 and
-\texttt{RESULTS.md}). The largest gaps (\texttt{write\_entropy\_var}, \texttt{crypto\_call\_rate},
-$D>0.6$) are partly a units mismatch rather than a substantive disagreement -- the synthetic
-generator's \texttt{crypto\_call\_rate} is drawn in calls-per-second units, EMBER's mapped value is
-a raw import \emph{count}, and only the two features' \emph{presence} is meaningfully comparable
-across that gap, not their raw scale.
-
-\textbf{The question this section set out to answer: does a richer static source close the
-schema's dynamic-vs-static gap?} No -- 11 of 22 features (process, network, persistence,
-kill-chain) stay unmapped regardless of dataset richness, because no PE-header, import, or section
-field can observe a process spawn, a network connection, or a kill-chain stage; those require
-execution, which is what makes a dataset dynamic in the first place. A richer \emph{static} source
-narrows the coverage gap (6/22 vs.\ 3/22) and improves the discarded continuous score, without
-changing the shape of the gap or the hard-decision transfer outcome.
-
-\section{Neural vs.\ Tree-Based Detector: Architecture or Features?}
-\label{sec:m7-10b}
-
-\textbf{The open question.} \S\ref{sec:m7-8} found that adversarially retraining the Random-Forest
-ensemble hardens it against \S\ref{sec:adversarial}'s attack at 50\%/100\% training budget, but by
-learning ``values near the evasion bound'' as its own signature -- the 100\%-budget model's
-combined-evasion curve \emph{rises} with perturbation rather than falling. Is that failure mode a
-property of tree ensembles' axis-aligned splits specifically, or of the 22-feature space and
-augmentation strategy, independent of model architecture? This section runs the identical protocol
--- same top-5 features and evasion bounds (\S\ref{sec:adversarial}'s \texttt{FEATURE\_BOUNDS},
-reused verbatim, never re-derived from the new model), same training budgets -- against a small
-MLP (\texttt{detection.mlp\_model}, DEV-36: two hidden layers of 32/16 units, ReLU, \texttt{adam},
-\texttt{alpha}=0.001 L2 regularisation and early stopping standing in for dropout/batch-norm,
-which scikit-learn's \texttt{MLPClassifier} does not implement) plugged into the identical
-\emph{NProf}/\emph{AProf} profile machinery as a single-model ensemble, so every downstream
-mechanism (\texttt{detection/detector.py}, \texttt{detection/adversarial.py},
-\texttt{detection/retraining.py}) runs unchanged. Feature importance is compared by permutation
-(shuffle one feature at a time against the fitted detector's own decision, measure the
-balanced-accuracy drop) rather than Gini importance, since an MLP has no
-\texttt{.feature\_importances\_} attribute -- this is an absolute, not normalised-to-1, scale, so
-\S\ref{sec:m7-8}'s Gini-based top-5 sums (0.4553 original, falling to 0.2309 at 100\%) are not
-directly comparable to this section's permutation-based numbers even for the same RF model,
-recomputed here for a like-for-like comparison against the MLP.
-
-\begin{table}[t]
-\centering
-\caption{Clean accuracy, RF ensemble vs.\ MLP, on the untouched eval corpus.}
-\label{tab:m7-10b-clean}
-\footnotesize
-\begin{tabular}{lccccc}
-\hline
-\textbf{Model} & \textbf{Bal.\ Acc.} & \textbf{Prec.} & \textbf{Rec.} & \textbf{MCC} & \textbf{PR-AUC} \\
-\hline
-RF ensemble (\S\ref{sec:adversarial}) & 0.8408 & 0.8415 & 0.8272 & 0.6822 & 0.9111 \\
-MLP                                    & 0.8237 & 0.8094 & 0.8300 & 0.6471 & 0.8925 \\
-\hline
-\end{tabular}
-\end{table}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig10c_mlp_vs_rf_clean_accuracy.png}
-\caption{Clean-eval accuracy, RF ensemble vs.\ MLP.}
-\label{fig:m7-10b-clean}
-\end{figure}
-
-\textbf{Clean accuracy: comparable, MLP slightly behind.} Table~\ref{tab:m7-10b-clean}: the MLP
-trails the four-model ensemble by 1.7 points of balanced accuracy on unperturbed data -- a small
-corpus (1467 training rows) and only 22 engineered features leave little for a higher-capacity
-model to exploit that a forest of trees does not already capture, consistent with the session
-brief's stated expectation that trees are often competitive on tabular data at this scale.
-
-\textbf{Before any hardening, the MLP is already more robust to \S\ref{sec:adversarial}'s attack.}
-Unperturbed, the MLP's median adaptive-evasion perturbation is 0.4866, against the RF ensemble's
-0.3213 -- a real architectural difference, not a training-budget effect: a smooth, distributed
-decision boundary requires a larger combined push across all five top features to cross than a
-forest of axis-aligned splits does. Both models' un-hardened combined-degradation curves
-(Figure~\ref{fig:m7-10b-degrade}) fall smoothly with perturbation in the ordinary way (RF:
-0.841$\to$0.570; MLP: 0.824$\to$0.497) -- neither shows the rising-curve memorisation signature
-before retraining.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig10d_mlp_vs_rf_combined_degradation.png}
-\caption{Combined evasion, RF vs.\ MLP, no hardening.}
-\label{fig:m7-10b-degrade}
-\end{figure}
-
-\begin{table}[t]
-\centering
-\caption{Adaptive evasion (median) by training budget, RF vs.\ MLP. RF's own numbers reproduce
-\S\ref{sec:m7-8} (Table~\ref{tab:m7-8-adaptive}); the MLP's 25\% row is the headline contrast.}
-\label{tab:m7-10b-adaptive}
-\footnotesize
-\begin{tabular}{lcc}
-\hline
-\textbf{Budget} & \textbf{RF median} & \textbf{MLP median} \\
-\hline
-original & 0.3213 & 0.4866 \\
-25\%     & 0.2499 (\emph{worse}) & 1.0000 \\
-50\%     & 0.8825 & 1.0000 \\
-100\%    & 1.0000 & 1.0000 \\
-\hline
-\end{tabular}
-\end{table}
-
-\textbf{The headline result: the MLP shows \S\ref{sec:m7-8}'s memorisation failure mode earlier
-and more completely than RF, not less.} Every one of the MLP's three hardened combined-degradation
-curves \emph{rises} monotonically with perturbation -- 25\% budget: 0.828$\to$0.877; 50\%:
-0.810$\to$0.897; 100\%: 0.770$\to$0.896 (Figure~\ref{fig:m7-10b-degrade}) -- the same signature
-\S\ref{sec:m7-8} found only at RF's 100\% budget, here present at every budget tested, including
-the smallest. Correspondingly, the MLP's median adaptive-evasion perturbation jumps straight to
-1.0000 at 25\% and stays there (Table~\ref{tab:m7-10b-adaptive}), and critically, \textbf{the MLP
-never reproduces RF's 25\%-budget backfire}: RF's median evasion effort at 25\% \emph{drops} below
-its own un-hardened baseline (0.3213 $\to$ 0.2499) before recovering at higher budgets; the MLP's
-never dips at all. A higher-capacity, continuously-weighted model does not avoid the
-augmentation-boundary-memorisation failure mode \S\ref{sec:m7-8} identified -- it engages that
-shortcut faster and more uniformly than an ensemble of axis-aligned trees does.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig10e_mlp_vs_rf_retraining_adaptive.png}
-\caption{p10/median/p90 adaptive evasion by training budget, RF vs.\ MLP.}
-\label{fig:m7-10b-retrain-adaptive}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figs/fig10f_mlp_vs_rf_importance_shift.png}
-\caption{Top-5 permutation-importance sum by training budget, RF vs.\ MLP.}
-\label{fig:m7-10b-importance}
-\end{figure}
-
-\textbf{Feature-importance shift: both models redistribute away from the top-5, on different
-schedules.} By permutation importance (Figure~\ref{fig:m7-10b-importance}), the MLP's top-5
-reliance falls monotonically and sharply with training budget -- 0.0971 (original) $\to$ 0.0328
-(25\%) $\to$ 0.0251 (50\%) $\to$ 0.0219 (100\%), a 77\% reduction end to end. RF's own
-permutation-importance numbers (distinct from \S\ref{sec:m7-8}'s Gini-based figures) are
-\emph{non}-monotonic: 0.1170 (original) $\to$ 0.1535 (25\%, a rise) $\to$ 0.0818 (50\%) $\to$
-0.0177 (100\%). The 25\%-budget rise is consistent with, and helps explain, RF's 25\%-budget
-backfire: by this measure the narrowly-hardened RF model becomes \emph{more}, not less, reliant on
-the attacked features at exactly the budget where it is also most fragile -- a different failure
-signature from the MLP's, which sheds top-5 reliance steadily from the first budget onward without
-ever becoming more concentrated on it. Neither model solves robustness by discarding the top-5
-entirely (no value approaches zero), matching \S\ref{sec:m7-8}'s "partial, not total" finding for
-RF and extending it to the MLP.
-
-\textbf{Conclusion: the fragility is in the features and the augmentation strategy, not the tree
-structure.} If \S\ref{sec:m7-8}'s memorisation failure mode were a tree-ensemble-specific
-artefact of axis-aligned splits, a distributed neural representation should have shown a
-qualitatively different, more robust response to the same augmentation. It shows the opposite: the
-MLP adopts the rising-curve memorisation signature at every budget tested, including the 25\%
-budget where RF instead backfires by a different mechanism. Both failure modes -- RF's narrow-band
-backfire and both models' bound-memorisation at wider budgets -- point to the same root cause: a
-training procedure that augments positives toward a bounded region of a fixed, low-dimensional
-feature space gives \emph{any} sufficiently flexible model a shortcut (‘‘near the bound’’ or
-``far from the original distribution'') that is easier to learn than the underlying behavioural
-signal the features were designed to carry. The MLP's one genuine architectural advantage measured
-here is orthogonal to hardening: before any retraining, its smoother decision boundary is already
-harder to evade with small perturbations than RF's (0.4866 vs.\ 0.3213 median). The fix implied by
-this section is the same one \S\ref{sec:m7-8} already named -- diversifying what the augmentation
-teaches, or constraining reliance on any single small feature subset -- rather than a change of
-model family.
-
-\section{Consensus Comparison: pBFT vs.\ Raft}
-\label{sec:m7-4}
-
-\S V-3's argument for pBFT (\S\ref{sec:flaw5}) does not survive scrutiny, and once it falls the
-paper is left having chosen pBFT without ever asking the question its own deployment invites: four
-cloud servers the operator controls are exactly the setting where ``do we actually need Byzantine
-fault tolerance?'' is legitimate, because BFT's cost buys protection against a specific threat --
-an actively lying node -- that the paper never argues is the one it faces. This section asks that
-question directly, against Raft (Ongaro \& Ousterhout), the standard crash-fault-tolerant
-alternative: simpler, faster, and covered by the same distributed-systems curriculum (6.5840 Lab
-2/3) that motivated implementing it here.
+Marginal cost stays flat (DEV-08 survives unchanged: $BC_{DTBU}$ 0.0541--0.0543\,s/block,
+$BC_{SigRW}$ 0.0678--0.0688\,s/block across cases 1--3, each varying under 1\%) -- serialization is
+a per-message cost, not a per-block-count-dependent one, so it cannot reintroduce the amortisation
+shape DEV-08 already ruled out. The $BC_{SigRW}$/$BC_{DTBU}$ gap narrows from 35--45\% to
+$\sim$25--27\%: both chains' D3 encode cost is nearly identical in absolute terms
+(0.000072\,s vs.\ 0.000073\,s per block at case 3), so it inflates $BC_{DTBU}$'s smaller base by a
+larger percentage than it inflates the gap -- the serialization-off 35--45\% figure is unchanged,
+but any future citation of ``the gap'' must say which condition it is under. Every other trend
+holds: monotone increase, $BC_{SigRW}$ slower than $BC_{DTBU}$, TPS flat rather than rising, just
+at a uniformly lower level.
+
+\subsection{Consensus Protocol Comparison: pBFT vs.\ Raft}
+\label{sec:5c-raft}
+
+This subsection measures Raft (Ongaro \& Ousterhout \cite{ongaro2014raft}), the standard
+crash-fault-tolerant alternative to pBFT, against the identical four-node cluster and benchmark
+matrix \S\ref{sec:5c} already established for pBFT alone; \S\ref{sec:m7-4} asks what the
+measurement below means for the paper's own choice of consensus protocol.
 
 \textbf{What Raft is, briefly.} Raft replicates a log across $n$ replicas via a single elected
 leader. Followers accept whatever the current-term leader's \texttt{AppendEntries} tells them,
@@ -1574,7 +715,6 @@ consensus protocol itself, and made \texttt{framework.\_block\_pipeline} consens
 cluster. Log compaction, cluster membership changes, and snapshotting are out of scope, matching
 the same kind of reduction pBFT's own view-change implementation already accepted (DEV-20).
 
-\subsection{Quantitative: timing, messages, TPS}
 
 \begin{table*}[t]
 \centering
@@ -1636,7 +776,99 @@ consensus round trips, switching consensus protocols buys a modest, not a transf
 -- the timing number the paper never measured turns out to matter less than the message-count
 number it never asked about.
 
-\subsection{Qualitative: the Byzantine leader}
+\section{Security Analysis}
+\label{sec:security}
+
+\S V states five security properties as informal prose and never once says, for any of them,
+\emph{what an adversary can do} before the property is claimed to hold. GAP-6 names the direct
+consequence -- no formal model, no protocol-verification tool -- and FLAW-5 (\S\ref{sec:flaw5})
+names a deeper one: without a stated adversary capability, \S V-3 borrows a 51\% proof-of-work
+threshold to defend a protocol (pBFT) whose real safety bound is a third, because nothing in the
+paper's argument structure distinguishes a hash-power adversary from an identity-controlling one.
+\S II is a ransomware taxonomy (four types, a seven-stage kill chain), not an adversary-capability
+model -- it says what ransomware \emph{is}, never what a network attacker, a compromised operator,
+or an adversarial machine-learning attacker can \emph{do}. This section constructs the threat
+model the paper omits and organizes every security-relevant result this project has produced
+around it, evidence first, interpretation last: formal verification of the session protocol
+(Tier 1), the pBFT/Raft comparison's security finding (Tier 2), hybrid anchoring (Tier 2--3), and
+the honeypot data-poisoning attack and its defense (Tier 2) -- closing with the coverage matrix
+that maps \S V's five original claims onto these tiers and the gaps that remain. Full version,
+with the reasoning behind every cell: \texttt{docs/THREAT\_MODEL.md}.
+
+\subsection{Four Adversary Tiers, by Capability}
+\label{sec:threat-tiers}
+
+Not by which paper section mentions them -- \S V's own flattening of a hash-power adversary and an
+identity-controlling one into a single borrowed threshold (FLAW-5) is exactly the failure that
+follows from organizing a threat model by section rather than by what an adversary can actually
+do. Four tiers, used throughout this section:
+
+\begin{itemize}
+\item \textbf{Tier 1 -- external network attacker.} Full Dolev-Yao control of messages in transit
+(intercept, replay, modify, inject, reorder); cannot compromise any node's internal state or key.
+\item \textbf{Tier 2 -- one compromised cloud server ($f{=}1$).} Controls one of the four pBFT
+replicas -- exactly the fault count the paper's own deployment is sized to tolerate.
+\item \textbf{Tier 3 -- two compromised, possibly colluding, cloud servers ($f{=}2$).} Above the
+$f{=}1$ bound pBFT actually tolerates at $n{=}4$, and, not coincidentally, at or below the 51\%
+figure \S V-3 borrows from proof-of-work (\S\ref{sec:flaw5}).
+\item \textbf{Tier 4 -- adversarial ML evasion.} No node compromised at all; a rational attacker
+who knows a behavioural detector is watching and adjusts their program's observable behaviour to
+defeat it -- a capability Algorithm 3 (\S IV-C) never considers.
+\end{itemize}
+\subsection{Formal Verification of the Session Protocol (Tier 1)}
+\label{sec:scyther}
+
+\S\ref{sec:impl}'s own session-establishment design (ECDH over secp256r1, ECDSA-signed
+transcripts, timestamps and nonces, built because \S IV-A/\S V-1 defer to ``any standard mutual
+authentication and key establishment mechanism'') is where Tier 1's evidence comes from.
+\S V is entirely informal prose -- five paragraphs of argument, no ROR model, no BAN logic, no
+tool-checked proof -- for a paper whose author's other work almost always includes one. We
+verified this protocol, which is our own design and not the paper's, with
+Scyther~\cite{cremers2008scyther} under its default Dolev-Yao adversary. Table~\ref{tab:scyther}
+maps \S V-1's informal claims onto the formal claims Scyther checks. Every claim verifies, at both
+bounded (5 runs) and unbounded search, on the protocol as built above. Run against the
+\emph{pre-fix} sketch instead -- the version missing the responder's identity from the
+initiator's signature -- the identical tool and claims find a real attack: a non-injective
+agreement violation in which the two parties finish believing they talked to different
+counterparts. That the tool is silent on the fixed protocol and vocal on the broken one is a
+stronger confirmation than a clean run alone would be. Two limitations are stated rather than
+elided: the seen-nonce cache is stateful and has no representation in Scyther's per-session
+symbolic model, so replay resistance rests on the unit tests, not this proof; and Scyther has no
+equational theory for $g^{ab} = g^{ba}$, so the Diffie-Hellman exchange is modelled with the
+standard oracle idiom Scyther's own author uses for the same purpose, rather than checked
+natively. Full model, tool provenance, and raw output: \texttt{verification/}.
+
+\begin{table}[t]
+\centering
+\caption{\S V-1's informal claims, the formal claim Scyther checks for each, and the result.}
+\label{tab:scyther}
+\footnotesize
+\begin{tabular}{@{}p{2.3cm}@{\hspace{3pt}}p{2.1cm}@{\hspace{3pt}}p{1.5cm}@{}}
+\hline
+\textbf{\S V-1 claim} & \textbf{Formal claim} & \textbf{Result} \\
+\hline
+Adversary cannot estimate $SK$ & \texttt{Secret} & Verified \\
+Mutual auth., A $\to$ B & \texttt{Niagree}/ \texttt{Nisynch} & Verified \\
+Mutual auth., B $\to$ A & \texttt{Niagree}/ \texttt{Nisynch} & Verified \\
+Distinct keys per session & fresh-nonce argument & Holds by constr. \\
+Impersonation resistance & \texttt{Weakagree}/ \texttt{Alive} & Verified \\
+No reflection & default self-play search & No attack found \\
+Cross-id.\ replay (fixed) & \texttt{Niagree}, fixed model & Verified \\
+Cross-id.\ replay (pre-fix) & \texttt{Niagree}, pre-fix model & Attack found \\
+Within-window replay & -- (stateful cache) & Out of scope \\
+\hline
+\end{tabular}
+\end{table}
+\subsection{Consensus Comparison: The Byzantine Leader (Tier 2)}
+\label{sec:m7-4}
+
+\S\ref{sec:5c-raft} measured pBFT against Raft quantitatively at this cluster's own scale --
+timing, message counts, signature operations. This subsection asks the security question that
+comparison sets up, and \S V-3 never does (\S\ref{sec:flaw5}): four cloud servers the operator
+controls are exactly the setting where ``do we actually need Byzantine fault tolerance?'' is
+legitimate, because BFT's cost buys protection against a specific Tier-2 threat -- an actively
+lying node -- that the paper never argues is the one it faces.
+\subsubsection{Qualitative: the Byzantine leader}
 \label{sec:m7-4-byzantine}
 
 We ran both protocols with one of four nodes silently crashed and, separately, one of four nodes
@@ -1669,7 +901,7 @@ one height would require $2f+1$ matching votes for \emph{each} side, which needs
 replicas than $f=1$ permits at $n=4$ (\S\ref{sec:flaw5} already demonstrates the actual threshold
 is two colluding replicas, not one).
 
-\subsection{The trade-off, stated precisely}
+\subsubsection{The trade-off, stated precisely}
 
 Raft is 7--11\% faster and sends roughly 60\% as many consensus messages as pBFT at this cluster
 size, but a single compromised leader corrupts the chain undetectably -- every node individually
@@ -1683,7 +915,7 @@ a minor implementation detail: it is the entire reason pBFT, not Raft, is the co
 -- but it is a reason the paper never states, and the 7--11\% speed cost of stating it and paying
 for it honestly is modest.
 
-\section{Hybrid Blockchain}
+\subsection{Hybrid Anchoring}
 \label{sec:hybrid}
 
 \S VIII of the paper itself states its own limitation and stops: ``in future, we have plan to
@@ -1696,7 +928,7 @@ verifiability, at the cost of exposing whatever it carries to everyone. A hybrid
 paper's own private chains exactly as built -- same speed, same confidentiality, \S IV's pBFT
 consensus unchanged -- and adds one small, public commitment alongside them.
 
-\subsection{Architecture: an anchor chain and the \texttt{AnchorRecord} schema}
+\subsubsection{Architecture: an anchor chain and the \texttt{AnchorRecord} schema}
 
 An \texttt{AnchorRecord} carries one private block's height, its header hash $HC_{\beta_j}$, its
 Merkle root $MTR$, a timestamp, and the anchor creator's ECDSA signature over all of it -- copied
@@ -1724,7 +956,7 @@ anchor commits, even against an operator who controls every private-chain replic
 claim about the private chain's contents being correct -- only that they cannot change afterward
 without the change being visible to anyone holding the anchor.
 
-\subsection{The anchor frequency trade-off}
+\subsubsection{The anchor frequency trade-off}
 
 \texttt{AnchorPolicy.frequency} is the cost/integrity lever: anchoring every block gives maximum
 integrity at maximum anchor traffic; anchoring every $N$th block cuts that traffic by $N\times$ at
@@ -1732,39 +964,23 @@ the cost of up to $N{-}1$ blocks' unanchored tampering window. Table~\ref{tab:m7
 $N \in \{1, 5, 10\}$ across the paper's own three cases, both chains, serialization on -- the same
 condition \S VIII's comparison settled on.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
-\caption{Hybrid vs.\ private-only, both chains, all three cases, anchor frequency 1/5/10,
-serialization on (5 repeats, seed 20260925, run \texttt{20260924T213216Z-2bd78940}). Hybrid
-seconds is the identical private commit plus one \texttt{sync()}+\texttt{flush()} pair.}
+\caption{Hybrid vs.\ private-only, summarized across both chains and all three cases per anchor
+frequency (18 raw cells: \texttt{RESULTS.md} M7-5, run \texttt{20260924T213216Z-2bd78940}).
+Serialization on -- the same condition \S IV-F's comparison settled on.}
 \label{tab:m7-5-matrix}
 \footnotesize
-\begin{tabular}{llccccc}
+\begin{tabular}{lccc}
 \hline
-\textbf{Case} & \textbf{Chain} & \textbf{Freq} & \textbf{Private (s)} & \textbf{Hybrid (s)} &
-\textbf{Overhead} & \textbf{Anchors (bytes)} \\
+\textbf{Anchor freq.} & \textbf{Overhead range} & \textbf{Anchors/chain} & \textbf{Bytes/anchor} \\
 \hline
-1 & $BC_{DTBU}$  & 1  & 0.27387 & 0.27287 & $-0.37\%$ & 5 (5029) \\
-1 & $BC_{DTBU}$  & 5  & 0.27387 & 0.27372 & $-0.05\%$ & 1 (1004) \\
-1 & $BC_{DTBU}$  & 10 & 0.27387 & 0.27419 & $+0.12\%$ & 1 (1004) \\
-1 & $BC_{SigRW}$ & 1  & 0.33973 & 0.33887 & $-0.25\%$ & 5 (5035) \\
-1 & $BC_{SigRW}$ & 5  & 0.33973 & 0.33673 & $-0.88\%$ & 1 (1006) \\
-1 & $BC_{SigRW}$ & 10 & 0.33973 & 0.33907 & $-0.19\%$ & 1 (1005) \\
-2 & $BC_{DTBU}$  & 1  & 0.54432 & 0.54371 & $-0.11\%$ & 10 (10060) \\
-2 & $BC_{DTBU}$  & 5  & 0.54432 & 0.54329 & $-0.19\%$ & 2 (2013) \\
-2 & $BC_{DTBU}$  & 10 & 0.54432 & 0.54137 & $-0.54\%$ & 1 (1009) \\
-2 & $BC_{SigRW}$ & 1  & 0.67989 & 0.68087 & $+0.14\%$ & 10 (10077) \\
-2 & $BC_{SigRW}$ & 5  & 0.67989 & 0.67193 & $-1.17\%$ & 2 (2021) \\
-2 & $BC_{SigRW}$ & 10 & 0.67989 & 0.74360 & $+9.37\%$ & 1 (1009) \\
-3 & $BC_{DTBU}$  & 1  & 0.81568 & 0.81811 & $+0.30\%$ & 15 (15105) \\
-3 & $BC_{DTBU}$  & 5  & 0.81568 & 0.91398 & $+12.05\%$ & 3 (3018) \\
-3 & $BC_{DTBU}$  & 10 & 0.81568 & 0.86512 & $+6.06\%$ & 2 (2016) \\
-3 & $BC_{SigRW}$ & 1  & 1.01988 & 1.03381 & $+1.37\%$ & 15 (15131) \\
-3 & $BC_{SigRW}$ & 5  & 1.01988 & 1.01789 & $-0.20\%$ & 3 (3027) \\
-3 & $BC_{SigRW}$ & 10 & 1.01988 & 1.02178 & $+0.19\%$ & 2 (2019) \\
+Every block ($N{=}1$)  & $-0.37\%$ to $+1.37\%$  & 5--15 & $\approx$1006 \\
+Every 5th ($N{=}5$)    & $-1.17\%$ to $+12.05\%$ & 1--3  & $\approx$1006 \\
+Every 10th ($N{=}10$)  & $-0.54\%$ to $+9.37\%$  & 1--2  & $\approx$1006 \\
 \hline
 \end{tabular}
-\end{table*}
+\end{table}
 
 Two findings, both against the frequency lever's intuition. First, anchor overhead is at or below
 measurement noise, not a real structural cost: 15 of 18 cells fall within $\pm 1.4\%$, and the
@@ -1778,7 +994,7 @@ metadata, never a function of the private block's own payload size. The frequenc
 trades anchor count linearly against the tampering window it leaves open, not against a real
 cost curve on the anchor side -- the anchor's own cost is already negligible at $N{=}1$.
 
-\subsection{What external verifiability buys: three security tests}
+\subsubsection{What external verifiability buys: three security tests}
 
 Three tests, mirroring \texttt{tests/unit/test\_hybrid\_chain.py}, demonstrate what the anchor
 adds and where it honestly does not reach.
@@ -1806,7 +1022,7 @@ who controls the anchor authority's own signing key from the start. In productio
 is a real public blockchain with its own, separate consensus; an operator who also controlled that
 consensus would defeat the entire hybrid design, not just this check.
 
-\subsection{Limitations, stated honestly}
+\subsubsection{Limitations, stated honestly}
 
 The anchor chain here is simulated, and three simplifications matter for anyone reading these
 numbers as evidence about a real deployment. First, a real public chain (Ethereum, Bitcoin, or a
@@ -1824,30 +1040,249 @@ possible for any of them without a relationship with the private chain's operato
 property \S IV-A's trade-off was missing; deciding who should exercise it is a policy question
 this report does not answer.
 
-\section{Threat Model}
-\label{sec:threat-model}
+\subsection{Honeypot Data Poisoning: The Attack}
+\label{sec:m7-11}
 
-\S V states five security properties as informal prose and never once says, for any of them,
-\emph{what an adversary can do} before the property is claimed to hold. GAP-6 names the direct
-consequence -- no formal model, no protocol-verification tool -- and FLAW-5 (\S\ref{sec:flaw5})
-names a deeper one: without a stated adversary capability, \S V-3 borrows a 51\% proof-of-work
-threshold to defend a protocol (pBFT) whose real safety bound is a third, because nothing in the
-paper's argument structure distinguishes a hash-power adversary from an identity-controlling one.
-\S II is a ransomware taxonomy (four types, a seven-stage kill chain), not an adversary-capability
-model -- it says what ransomware \emph{is}, never what a network attacker, a compromised operator,
-or an adversarial machine-learning attacker can \emph{do}. This section constructs the threat
-model the paper omits -- four adversary tiers by capability, not by which paper section mentions
-them -- and maps every security-relevant result this project has produced (Scyther verification,
-\S\ref{sec:adversarial}--\ref{sec:m7-8}'s attack/defense pair, \S\ref{sec:m7-4}'s pBFT/Raft
-finding, \S\ref{sec:hybrid}'s anchoring) onto it. Full version, with the reasoning behind every
-cell: \texttt{docs/THREAT\_MODEL.md}.
+\S\ref{sec:threat-model}'s Gap 1 named, without measuring, this framework's sharpest irony: a
+Tier-2 adversary who controls the honeypot's collection process can feed false training data into
+$Sig_{RW}$/$FT_{RW}$, and once that data commits to $BC_{SigRW}$ through real pBFT consensus, the
+chain's own immutability -- the paper's central selling point -- certifies the poison as
+\emph{tamper-proof}, not as \emph{false}. This section measures both halves of that claim.
+
+\subsubsection{The attack: three strategies, one adversary}
+
+A Tier-2 adversary controlling one cloud server that contributes to $BC_{SigRW}$ can submit
+crafted samples. Three strategies (\texttt{detection.poisoning}), each a pure transform on the
+training draw, never touching the eval set:
+
+\begin{itemize}
+\item \textbf{Label flipping.} Relabel a fraction of real ransomware training rows as benign.
+Features untouched -- the "benign" contribution is a real ransomware trace under the wrong label.
+\item \textbf{Feature poisoning.} Inject synthetic rows labelled ransomware whose features are
+resampled from real benign training rows.
+\item \textbf{Anchor-point injection.} Inject rows interpolated at the midpoint between the benign
+and ransomware per-feature centroids, labelled benign -- teaching the model that the class
+boundary itself is benign, pushing the effective boundary toward the ransomware centroid without
+fabricating an obviously wrong vector or flipping any real label.
+\end{itemize}
+
+Budget is a fraction of the training set's ransomware row count (717 of 1467 rows), swept at
+1/5/10/20/50\%, against the committed corpus, sanity-checked at the CSV-path baseline
+\textbf{0.8408} (not the chain-path 0.8422; DEV-27/DEV-37 explain the 0.0014 gap).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig11a_poisoning_degradation.png}
+\caption{Detector degradation under three poisoning strategies, five budgets each.}
+\label{fig:m7-11-degradation}
+\end{figure}
+
+\subsubsection{The degradation curves: sophistication is not effectiveness}
+
+\textbf{Label flipping is the most damaging strategy, and the only monotonic one.} $-1.5$pt
+balanced accuracy at 1\% budget, widening to $-17.3$pt at 50\%, collapsing to exactly
+$\mathrm{bal\_acc}=0.5000$ at 100\% -- at full budget the training set has zero positive rows
+left, so no classifier can be fit past "always benign," which scores 0.50 on a balanced eval set
+by construction, not by any model actually running. This matches the session brief's own
+prediction: the simplest attack is the one most likely to succeed.
+
+\textbf{Feature poisoning is mild and roughly budget-insensitive} ($-0.3$ to $-1.5$pt across the
+whole range, non-monotonic). Duplicating real benign feature vectors under the ransomware label
+dilutes $AProf$ without teaching it anything structurally new -- the injected rows are, feature-
+wise, indistinguishable from rows already in the benign class.
+
+\textbf{Anchor-point injection -- billed as the most sophisticated strategy -- is the
+\emph{least} damaging at low-to-medium budget, and briefly \emph{improves} accuracy}: $+0.6$pt at
+1\%, still $+0.1$pt at 20\%, only turning negative at 50\% ($-1.3$pt). Points at the inter-class
+midpoint, labelled benign, act as a mild regulariser at low budget rather than the intended
+boundary shift, before enough of them accumulate to move it. \textbf{A designed attack's
+sophistication and its measured effectiveness are not the same axis} -- the crudest attack
+(mislabel real data) beat the most carefully engineered one across most of the tested range.
+
+\subsubsection{The permanence argument, demonstrated once, for real}
+
+Not simulated: \texttt{scripts/m7\_11\_honeypot\_poisoning.py} builds one real malicious
+\texttt{CleanSample} through the same honeypot collection path every other record in this
+project uses, signs and attests it normally, then constructs its \texttt{SignatureRecordPayload}
+with \texttt{label="benign"} instead of the sample's true \texttt{"RW"} -- label flipping,
+applied concretely to one record -- and commits it through \texttt{framework.
+phase2\_collection}'s unchanged pipeline to a real $BC_{SigRW}$ cluster running actual pBFT
+consensus. \textbf{It committed in one block, cleanly, on the first attempt.}
+
+Algorithm 2 has no counter-move, and this is a code-level fact, not an inference: reading
+\texttt{blockchain.chain.Chain}'s full public method list --
+\texttt{append}, \texttt{check\_append}, \texttt{create\_genesis}, \texttt{adopt\_genesis},
+\texttt{draft\_next}, and read-only accessors -- finds no delete, remove, rollback, revert,
+truncate, or undo method anywhere. No code was written to produce this finding; the class was
+already in the repository (OUT OF SCOPE for this session: no changes to the chain).
+
+\subsubsection{The detection gap: pre-commit and post-commit}
+
+\textbf{Pre-commit.} The poisoned record passed all five of \texttt{Chain.check\_append}'s checks
+-- prev\_hash linkage, Merkle root recomputation, hash uniqueness, ECDSA signature, timestamp-skew
+tolerance -- every one structural or cryptographic, none semantic. A correctly formatted,
+correctly signed poisoned sample passes every existing validation check, because nothing in
+Algorithms 1-5 was ever asked to check semantic content, and this project's implementation does
+not accidentally add that check either.
+
+\textbf{Post-commit.} Not built, and named as a gap rather than fixed. Honest nodes independently
+maintaining their own feature distributions and flagging statistical outliers in new
+contributions could in principle catch anchor-point-style poisoning (it visibly clusters near
+the class boundary) but not label flipping (its features are real; only the label lies) -- and
+the mechanism itself would need cross-node feature-space agreement, a research problem this
+project does not attempt to solve.
+
+\subsubsection{Hybrid anchoring does not help}
+
+\S\ref{sec:hybrid}'s anchor chain verifies that already-committed $BC_{SigRW}$ data has not been
+tampered with \emph{after} commitment -- an integrity guarantee over time. Poisoning is not
+post-commit tampering; it is a validly signed, validly consensus-approved commitment by an
+authorized node in the first place. The anchor faithfully records the poisoned block exactly as
+submitted. It cannot distinguish a legitimate record from a false one an authorized party chose
+to submit, because that distinction is \emph{validity}, not \emph{integrity} --
+\S\ref{sec:threat-model}'s Trust Assumption 2 already states the anchor chain's guarantee stops
+there.
+
+\subsubsection{Not a BSFR-SH-specific bug}
+
+Any system that trains a model on data from a source it does not fully trust, and commits that
+data to tamper-evident, append-only storage, faces the same structural tension: the storage
+layer's integrity guarantee and the training data's trustworthiness are orthogonal properties,
+and strengthening the first -- more replicas, stronger consensus, longer chains -- does nothing
+to strengthen the second. Blockchain-backed ML training pipelines inherit this tension by
+construction, not by implementation mistake. It is the same "chain integrity is not chain
+validity" distinction \S\ref{sec:threat-model}'s coverage matrix already needed for
+$Sig_{RW}$/$FT_{RW}$'s own integrity-vs-truth caveat -- Gap 1 is that distinction's sharpest
+consequence, not a new one.
+
+\subsection{Statistical Poisoning Detection: The Defense}
+\label{sec:m7-12}
+
+\S\ref{sec:m7-11} measured the attack Gap 1 named: a validly-signed poisoned $Sig_{RW}$ record
+commits to $BC_{SigRW}$ exactly as cleanly as an honest one, because \texttt{Chain.check\_append}'s
+five checks are all structural or cryptographic. This section builds and measures the defense
+Gap 1 predicted the shape of but never implemented -- a genuine research contribution, not a
+reproduction of the paper or a critique of it, since Algorithm 2 has no semantic validation step
+to reproduce or critique in the first place.
+
+\subsubsection{The mechanism: batch-level drift, gated into the existing vote}
+
+\texttt{detection.drift.DriftDetector} keeps a per-replica running per-feature profile
+(\texttt{RunningStats}, Welford's online algorithm \cite{welford1962} -- no historical sample is
+ever stored or re-read) and scores an incoming batch two ways: \textbf{Mahalanobis}, a diagonal,
+RMS-aggregated standardized distance of the batch centroid from the running mean; and
+\textbf{Page-Hinkley} \cite{page1954}, a classical streaming mean-shift test applied to that same
+scalar signal, for slow cumulative drift
+across many small batches. A full per-feature Kolmogorov-Smirnov test needs the historical sample
+\emph{values}, not just their moments, so it was scoped out rather than built. This is
+deliberately \emph{not} per-sample outlier detection -- DEV-26 already rules that out for the
+honeypot's own design, since a single unusual sample can be genuine, newly-observed ransomware
+behaviour, not poison.
+
+\texttt{consensus.validated\_commit.ValidatedSigRWChain} subclasses \texttt{Chain} and overrides
+\texttt{check\_append()} -- the one place \texttt{consensus/pbft.py}'s own docstring says block
+validity is decided ("Consensus decides whether, \texttt{Chain} decides valid") -- to run the
+detector over the block's decrypted $Sig_{RW}$ batch after the five existing checks pass. A
+replica that detects drift raises \texttt{ChainError} and is rejected by the \emph{existing} pBFT
+vote-counting exactly like a bad signature would be: no new consensus message, no change to
+\texttt{Replica}'s state machine. \texttt{Cluster.\_\_init\_\_} gained one additive,
+backward-compatible \texttt{chain\_factory} parameter (default \texttt{Chain}) so $BC_{DTBU}$'s
+commit path is unaffected.
+
+\subsubsection{Defended vs.\ undefended: all 15 of \S\ref{sec:m7-11}'s cells}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig12_drift_defense_comparison.png}
+\caption{Defended (Mahalanobis-gated) vs.\ undefended balanced accuracy, all three strategies,
+five budgets each.}
+\label{fig:m7-12-comparison}
+\end{figure}
+
+\textbf{The defense catches the strategy predicted least catchable, and misses the one predicted
+most catchable.} Anchor-point injection's interpolated class-boundary midpoint coincides, in a
+roughly class-balanced corpus, with the \emph{population mean} -- it scores \emph{below} the
+same-size clean-batch noise floor at every budget measured (e.g.\ $0.008$ vs.\ a clean $p_{95}$ of
+$0.11$ at $n{=}143$), the sharpest measured case yet of "sophistication and detectability are not
+the same axis." Label flipping and feature poisoning score \emph{above} the matched noise floor at
+budgets $\geq5\%$ -- not because the detector reads labels (it structurally cannot; $FT_{RW}$ and
+\texttt{label} are separate fields by design), but because an all-malicious batch's feature
+\emph{composition} differs from the profile's usual mix. An honest, unusually ransomware-heavy
+batch -- a real outbreak, not an attack -- would trigger the identical alarm.
+
+At the threshold this session shipped (Mahalanobis RMS $\geq 3.0$, chosen before any of the above
+was measured and left unmoved after), \textbf{0 of the 15 cells were actually prevented}: every
+defended-column number in Table~\ref{tab:m7-12} equals the undefended one, because nothing crossed
+the bar. This is not "the defense does not work" -- see the false-positive analysis below for why
+the bar was not simply lowered.
+
+\begin{table*}[t]
+\centering
+\small
+\begin{tabular}{lrrrr}
+\hline
+Strategy & Budget & Mahalanobis score & Clean-batch $p_{95}$ (matched $n$) & Prevented \\
+\hline
+Label flip & 1--50\% & 0.32--0.57 & 0.24--0.55 & No \\
+Feature poison & 1--50\% & 0.28--0.50 & 0.24--0.55 & No \\
+Anchor injection & 1--50\% & 0.008--0.016 & 0.067--0.55 & No \\
+\hline
+\end{tabular}
+\caption{Score ranges across all five budgets per strategy (full per-cell numbers: \texttt{RESULTS.md} M7-12). Label-flip/feature-poison scores exceed the matched noise floor at $n\geq36$ (budgets $\geq5\%$); anchor injection never does.}
+\label{tab:m7-12}
+\end{table*}
+
+\subsubsection{False-positive rate, and the new-family tension}
+
+Zero of 30 chunked, never-poisoned eval-corpus batches (25 rows each) triggered a false alarm at
+the shipped threshold. A documented, disclosed feature-space perturbation of real ransomware rows
+-- scaling network/beacon features up and crypto/encryption features down, modelling a
+hypothetical family that exfiltrates rather than encrypts, never a new call into
+\texttt{honeypot/collector.py}'s own generator -- scored $1.2255$, roughly $17\times$ its own
+matched clean-batch $p_{95}$ ($0.070$), and was \emph{still not flagged} at the shipped threshold.
+This is the tension item 4 of the M7-12 brief asked for, measured rather than assumed: a threshold
+loose enough to catch that probe sits close enough to the label-flip/feature-poison noise range
+that it would also raise the false-positive rate on ordinary small clean batches -- the exact
+trade-off a real deployment would have to accept explicitly, not one this session resolved by
+picking a more flattering number.
+
+\subsubsection{The architectural observation, and its cost}
+
+Gating the check inside \texttt{check\_append()} is the right integration point because it is the
+last moment before immutability makes the decision permanent -- once committed, $BC_{SigRW}$'s own
+guarantee (\S\ref{sec:m7-11}) prevents removal. Reusing pBFT's existing $2f{+}1$ threshold, rather
+than inventing a new vote type, means a Tier-2 adversary who also controls one consensus replica
+still cannot force a commit past three independently-refusing honest replicas.
+
+That integration point has a cost this project had not paid before: \texttt{blockchain/
+transaction.py}'s own docstring states "miners validate blocks they cannot read; that is the
+point" -- $Sig_{RW}$ payloads are hybrid-encrypted to one recipient (DEV-01), and no replica held
+that key before this session. \texttt{ValidatedSigRWChain} requires one, which
+\S\ref{sec:threat-model} states as a new trust assumption (TA-6) rather than a detail: this
+defense narrows a confidentiality invariant that held since M2b. A second new assumption (TA-7):
+every honest replica must run the identical \texttt{DriftPolicy} to agree on whether to vote --
+untested against a policy-mismatched replica, stated as a limitation rather than assumed away.
+
+\subsubsection{The gap is real, and this is a measured, partial answer to it}
+
+This defense is not in the paper's design, and its absence is a real gap -- \S\ref{sec:m7-11}
+demonstrated exactly how much that costs. It is also not a general fix: measured against the
+three strategies and five budgets already on record, it closes one case (a batch introducing
+feature values the corpus profile has never produced, submitted at enough scale against a mature
+history) and does not close the strategy M7-11 found most damaging, except as a side effect of
+batch composition an honest outbreak would trigger identically. A single record -- \S\ref{sec:m7-11}'s
+own permanence-demo shape -- is undetectable in principle at any threshold, since a batch of one
+has no averaging to suppress sampling noise. Reporting a solvable gap honestly, with the numbers
+that show exactly how far the solution reaches and where it stops, is the more useful contribution
+than reporting either "poisoning is unsolved" or "poisoning is solved."
+
+\subsection{Coverage Matrix and Gaps}
+\label{sec:threat-model}
 
 \begin{table*}[t]
 \centering
 \caption{Coverage matrix: \S V's five claims, mapped onto the adversary tier(s) they actually
-address, our verification method, and the result. Tier 1 = external network attacker (Dolev-Yao).
-Tier 2 = one compromised cloud server ($f{=}1$). Tier 3 = two compromised, possibly colluding,
-cloud servers ($f{=}2$). Tier 4 = adversarial ML evasion (no node compromised).}
+address (\S\ref{sec:threat-tiers}), our verification method, and the result.}
 \label{tab:threat-coverage}
 \footnotesize
 \begin{tabular}{p{3.2cm}p{1.1cm}p{3.7cm}p{3.0cm}p{3.8cm}}
@@ -1923,241 +1358,793 @@ constructed the threat model the paper omits and mapped our verification results
 properties hold at their stated tier. Two have measured limitations the paper does not
 acknowledge, and a sixth attack surface -- adversarial ML -- exists that the paper's own
 vocabulary has no way to name.
+\section{Detection Analysis}
+\label{sec:detection-analysis}
 
-\section{Honeypot Data Poisoning}
-\label{sec:m7-11}
+\S\ref{sec:honeypot} designed the honeypot feature pipeline the paper omits. This section reports
+what it measures once built end to end and pressure-tested: the pipeline's own result, whether it
+survives an adversary who knows a behavioural sensor is watching, whether hardening it against
+that adversary is worth its cost, and whether it transfers to real, never-synthetic malware data.
 
-\S\ref{sec:threat-model}'s Gap 1 named, without measuring, this framework's sharpest irony: a
-Tier-2 adversary who controls the honeypot's collection process can feed false training data into
-$Sig_{RW}$/$FT_{RW}$, and once that data commits to $BC_{SigRW}$ through real pBFT consensus, the
-chain's own immutability -- the paper's central selling point -- certifies the poison as
-\emph{tamper-proof}, not as \emph{false}. This section measures both halves of that claim.
+\subsection{Honeypot Pipeline Result}
+\label{sec:honeypot-eval}
 
-\subsection{The attack: three strategies, one adversary}
+\S\ref{sec:honeypot} described the design of the honeypot feature pipeline the paper omits. This
+section reports what it measures once built end to end: honeypot deployment $\to$ Phase-2
+collection $\to$ real four-node pBFT consensus onto $BC_{SigRW}$ $\to$ Phase-3 decryption,
+training, and detection -- the sequence Fig.~3 of the paper draws and the paper's own evaluation
+never runs.
 
-A Tier-2 adversary controlling one cloud server that contributes to $BC_{SigRW}$ can submit
-crafted samples. Three strategies (\texttt{detection.poisoning}), each a pure transform on the
-training draw, never touching the eval set:
+\begin{table}[t]
+\centering
+\caption{Honeypot detection result (Alg.\ 3 end to end) and its derived confusion matrix. TP/FP
+are computed from the reported precision, recall and evaluation-set composition (353 of 731 eval
+records positive) -- a computed quantity, not a separately measured one.}
+\label{tab:honeypot}
+\footnotesize
+\begin{tabular}{lc}
+\hline
+Train $n$ / Eval $n$ & 1467 / 731 \\
+Balanced accuracy & \textbf{0.8422} \\
+Precision & 0.8439 \\
+Recall & 0.8272 \\
+MCC & 0.6849 \\
+PR-AUC & 0.9100 \\
+Constant-positive baseline & 0.5000 \\
+\hline
+\multicolumn{2}{c}{\textit{Derived confusion matrix, eval set ($n=731$)}} \\
+\hline
+True positive & 292 \\
+False negative & 61 \\
+False positive & 54 \\
+True negative & 324 \\
+\hline
+\end{tabular}
+\end{table}
 
-\begin{itemize}
-\item \textbf{Label flipping.} Relabel a fraction of real ransomware training rows as benign.
-Features untouched -- the "benign" contribution is a real ransomware trace under the wrong label.
-\item \textbf{Feature poisoning.} Inject synthetic rows labelled ransomware whose features are
-resampled from real benign training rows.
-\item \textbf{Anchor-point injection.} Inject rows interpolated at the midpoint between the benign
-and ransomware per-feature centroids, labelled benign -- teaching the model that the class
-boundary itself is benign, pushing the effective boundary toward the ransomware centroid without
-fabricating an obviously wrong vector or flipping any real label.
-\end{itemize}
+Table~\ref{tab:honeypot} reports the result on the committed corpus (1467 training records, 731
+evaluation records, drawn from two independent seeds so no latent generator parameter is shared
+across the split): \textbf{0.8422 balanced accuracy}, between the measured simple-Gaussian
+baseline (0.830) and the corpus's stated intended ceiling ($\approx0.85$, \S\ref{sec:honeypot})
+-- above the naive baseline, not above the ceiling that would indicate the classifier is reading
+a leak rather than the corpus's designed difficulty. The evaluation script checks this
+automatically against a 0.05 leak margin and refuses to record a result that would fail the
+check; it did not fire here. The derived confusion matrix shows a detector that is neither
+trivially accurate nor degenerate: 292 of 353 ransomware records correctly flagged, 61 missed, 54
+benign records misclassified.
 
-Budget is a fraction of the training set's ransomware row count (717 of 1467 rows), swept at
-1/5/10/20/50\%, against the committed corpus, sanity-checked at the CSV-path baseline
-\textbf{0.8408} (not the chain-path 0.8422; DEV-27/DEV-37 explain the 0.0014 gap).
+This is the first number in this project produced by Phase 2's output feeding Phase 3's input
+through the paper's own architecture. It demonstrates that the framework, as specified, is not
+merely completable on paper -- once \S IV-B's undefined $Sig_{RW}$/$FT_{RW}$ are actually given a
+definition, Algorithms 2 and 3 connect into a working, non-degenerate detection pipeline. This is
+the strongest available rebuttal to a reading of FLAW-2 as ``the framework as designed cannot
+work'': it can. The paper simply never tried.
+
+\subsection{Adversarial Robustness: The Attack}
+\label{sec:adversarial}
+
+\S\ref{sec:honeypot-eval}'s 0.8422/0.8408\footnote{This section trains and evaluates on
+\texttt{data/honeypot/corpus\_\{train,eval\}.csv} directly, per \S\ref{sec:honeypot}'s ``committed
+corpus is the fixed dataset'' convention. Read this way the same seed and configuration give
+0.8408, not 0.8422: \texttt{honeypot/corpus.py} formats every feature to six significant figures
+when it writes the CSV, and that rounding alone accounts for the 0.0014 difference from
+Table~\ref{tab:honeypot}'s chain-reconstructed, full-precision number. Both are measured; neither
+is wrong; every threshold below is relative to 0.8408.} balanced accuracy answers ``does the
+detector work.'' It does not answer ``does it keep working against an adversary who knows a
+behavioural sensor is watching.'' The paper's threat model is silent on this: Algorithm 3 assumes
+$FT_{RW}$ is simply observed, never that a rational attacker -- one motivated to avoid exactly the
+detection Algorithm 3 performs -- would adjust their program's observable behaviour to defeat it.
+This is not a gap we can hold against the paper alone: testing it requires a defined, differentiable
+feature pipeline, which is precisely what \S IV of the paper never provides (FLAW-2). Only having
+built $FT_{RW}$ ourselves (DEV-03, DEV-27) makes the question answerable at all.
+
+\begin{table}[t]
+\centering
+\caption{Top-5 features by Random Forest importance (individually, bal.\ acc.\ 0.8513 on the
+committed corpus -- the higher of the two importance-bearing models, Decision Tree scoring
+0.8063), with each feature's evasion direction and physical bound.}
+\label{tab:top5}
+\footnotesize
+\begin{tabular}{lccl}
+\hline
+\textbf{Feature} & \textbf{Importance} & \textbf{Direction} & \textbf{Bound} \\
+\hline
+observed\_stages & 0.126 & $\downarrow$ & 0 stages \\
+extension\_change\_rate & 0.109 & $\downarrow$ & 0 \\
+rename\_rate\_per\_s & 0.079 & $\downarrow$ & 0 s$^{-1}$ \\
+write\_entropy\_var & 0.074 & $\uparrow$ & 6.5494 \\
+crypto\_ngram\_novelty & 0.067 & $\downarrow$ & 0 \\
+\hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:top5}'s bounds are not arbitrary. Four features move toward 0 -- an attacker can
+always throttle: delay the kill chain so fewer of the four observable stages complete inside a
+honeypot's finite dwell time (\texttt{observed\_stages}), rename files less aggressively or not at
+all (\texttt{extension\_change\_rate}), slow the rename loop (\texttt{rename\_rate\_per\_s}), or
+mimic a common, previously-seen crypto-API call sequence instead of a distinctive one
+(\texttt{crypto\_ngram\_novelty}). The fifth, \texttt{write\_entropy\_var}, moves the other way:
+ransomware ciphertext is consistently near-maximal entropy (\emph{low} variance across blocks),
+while benign writes are heterogeneous, so an attacker raises variance by interleaving some
+deliberately low-entropy writes among the ciphertext. Its bound, 6.5494, is not an abstract limit
+but the highest \texttt{write\_entropy\_var} the generator's own benign profiles are ever observed
+to produce in the committed corpus -- an attacker cannot manufacture more heterogeneity than a
+real, non-malicious write pattern in this environment exhibits. No feature in the top-5 turned out
+structurally robust (unlike mean write entropy, which cannot fall below the entropy of properly
+encrypted data and is exactly the kind of feature that would resist this attack, but did not rank
+in the top 5).
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figs/fig11a_poisoning_degradation.png}
-\caption{Detector degradation under three poisoning strategies, five budgets each.}
-\label{fig:m7-11-degradation}
+\includegraphics[width=0.49\linewidth]{figs/fig7a_single_feature_degradation.png}
+\includegraphics[width=0.49\linewidth]{figs/fig7b_combined_evasion.png}
+\caption{Left: each top-5 feature perturbed independently, 0--100\% of its evasion range, against
+the committed eval corpus's 353 malicious rows (ensemble fit once, never retrained). Right: all
+five perturbed simultaneously (bold), against the five single-feature curves as context (light
+gray) on the same axes.}
+\label{fig:single-feature}
+\label{fig:combined}
 \end{figure}
 
-\subsection{The degradation curves: sophistication is not effectiveness}
+\textbf{Single-feature evasion is weak.} Figure~\ref{fig:single-feature} shows every individual
+feature, pushed all the way to its bound, costing the detector at most 9 points of balanced
+accuracy (0.841 $\to$ 0.752 for \texttt{write\_entropy\_var}, the largest single-feature drop;
+\texttt{rename\_rate\_per\_s} alone costs under 3 points). None approaches 0.50. A one-dimensional
+attacker -- one who tunes a single observable behaviour and leaves everything else alone -- does
+not meaningfully dent this detector.
 
-\textbf{Label flipping is the most damaging strategy, and the only monotonic one.} $-1.5$pt
-balanced accuracy at 1\% budget, widening to $-17.3$pt at 50\%, collapsing to exactly
-$\mathrm{bal\_acc}=0.5000$ at 100\% -- at full budget the training set has zero positive rows
-left, so no classifier can be fit past "always benign," which scores 0.50 on a balanced eval set
-by construction, not by any model actually running. This matches the session brief's own
-prediction: the simplest attack is the one most likely to succeed.
-
-\textbf{Feature poisoning is mild and roughly budget-insensitive} ($-0.3$ to $-1.5$pt across the
-whole range, non-monotonic). Duplicating real benign feature vectors under the ransomware label
-dilutes $AProf$ without teaching it anything structurally new -- the injected rows are, feature-
-wise, indistinguishable from rows already in the benign class.
-
-\textbf{Anchor-point injection -- billed as the most sophisticated strategy -- is the
-\emph{least} damaging at low-to-medium budget, and briefly \emph{improves} accuracy}: $+0.6$pt at
-1\%, still $+0.1$pt at 20\%, only turning negative at 50\% ($-1.3$pt). Points at the inter-class
-midpoint, labelled benign, act as a mild regulariser at low budget rather than the intended
-boundary shift, before enough of them accumulate to move it. \textbf{A designed attack's
-sophistication and its measured effectiveness are not the same axis} -- the crudest attack
-(mislabel real data) beat the most carefully engineered one across most of the tested range.
-
-\subsection{The permanence argument, demonstrated once, for real}
-
-Not simulated: \texttt{scripts/m7\_11\_honeypot\_poisoning.py} builds one real malicious
-\texttt{CleanSample} through the same honeypot collection path every other record in this
-project uses, signs and attests it normally, then constructs its \texttt{SignatureRecordPayload}
-with \texttt{label="benign"} instead of the sample's true \texttt{"RW"} -- label flipping,
-applied concretely to one record -- and commits it through \texttt{framework.
-phase2\_collection}'s unchanged pipeline to a real $BC_{SigRW}$ cluster running actual pBFT
-consensus. \textbf{It committed in one block, cleanly, on the first attempt.}
-
-Algorithm 2 has no counter-move, and this is a code-level fact, not an inference: reading
-\texttt{blockchain.chain.Chain}'s full public method list --
-\texttt{append}, \texttt{check\_append}, \texttt{create\_genesis}, \texttt{adopt\_genesis},
-\texttt{draft\_next}, and read-only accessors -- finds no delete, remove, rollback, revert,
-truncate, or undo method anywhere. No code was written to produce this finding; the class was
-already in the repository (OUT OF SCOPE for this session: no changes to the chain).
-
-\subsection{The detection gap: pre-commit and post-commit}
-
-\textbf{Pre-commit.} The poisoned record passed all five of \texttt{Chain.check\_append}'s checks
--- prev\_hash linkage, Merkle root recomputation, hash uniqueness, ECDSA signature, timestamp-skew
-tolerance -- every one structural or cryptographic, none semantic. A correctly formatted,
-correctly signed poisoned sample passes every existing validation check, because nothing in
-Algorithms 1-5 was ever asked to check semantic content, and this project's implementation does
-not accidentally add that check either.
-
-\textbf{Post-commit.} Not built, and named as a gap rather than fixed. Honest nodes independently
-maintaining their own feature distributions and flagging statistical outliers in new
-contributions could in principle catch anchor-point-style poisoning (it visibly clusters near
-the class boundary) but not label flipping (its features are real; only the label lies) -- and
-the mechanism itself would need cross-node feature-space agreement, a research problem this
-project does not attempt to solve.
-
-\subsection{Hybrid anchoring does not help}
-
-\S\ref{sec:hybrid}'s anchor chain verifies that already-committed $BC_{SigRW}$ data has not been
-tampered with \emph{after} commitment -- an integrity guarantee over time. Poisoning is not
-post-commit tampering; it is a validly signed, validly consensus-approved commitment by an
-authorized node in the first place. The anchor faithfully records the poisoned block exactly as
-submitted. It cannot distinguish a legitimate record from a false one an authorized party chose
-to submit, because that distinction is \emph{validity}, not \emph{integrity} --
-\S\ref{sec:threat-model}'s Trust Assumption 2 already states the anchor chain's guarantee stops
-there.
-
-\subsection{Not a BSFR-SH-specific bug}
-
-Any system that trains a model on data from a source it does not fully trust, and commits that
-data to tamper-evident, append-only storage, faces the same structural tension: the storage
-layer's integrity guarantee and the training data's trustworthiness are orthogonal properties,
-and strengthening the first -- more replicas, stronger consensus, longer chains -- does nothing
-to strengthen the second. Blockchain-backed ML training pipelines inherit this tension by
-construction, not by implementation mistake. It is the same "chain integrity is not chain
-validity" distinction \S\ref{sec:threat-model}'s coverage matrix already needed for
-$Sig_{RW}$/$FT_{RW}$'s own integrity-vs-truth caveat -- Gap 1 is that distinction's sharpest
-consequence, not a new one.
-
-\section{Statistical Poisoning Detection}
-\label{sec:m7-12}
-
-\S\ref{sec:m7-11} measured the attack Gap 1 named: a validly-signed poisoned $Sig_{RW}$ record
-commits to $BC_{SigRW}$ exactly as cleanly as an honest one, because \texttt{Chain.check\_append}'s
-five checks are all structural or cryptographic. This section builds and measures the defense
-Gap 1 predicted the shape of but never implemented -- a genuine research contribution, not a
-reproduction of the paper or a critique of it, since Algorithm 2 has no semantic validation step
-to reproduce or critique in the first place.
-
-\subsection{The mechanism: batch-level drift, gated into the existing vote}
-
-\texttt{detection.drift.DriftDetector} keeps a per-replica running per-feature profile
-(\texttt{RunningStats}, Welford's online algorithm -- no historical sample is ever stored or
-re-read) and scores an incoming batch two ways: \textbf{Mahalanobis}, a diagonal, RMS-aggregated
-standardized distance of the batch centroid from the running mean; and \textbf{Page-Hinkley}, a
-classical streaming mean-shift test applied to that same scalar signal, for slow cumulative drift
-across many small batches. A full per-feature Kolmogorov-Smirnov test needs the historical sample
-\emph{values}, not just their moments, so it was scoped out rather than built. This is
-deliberately \emph{not} per-sample outlier detection -- DEV-26 already rules that out for the
-honeypot's own design, since a single unusual sample can be genuine, newly-observed ransomware
-behaviour, not poison.
-
-\texttt{consensus.validated\_commit.ValidatedSigRWChain} subclasses \texttt{Chain} and overrides
-\texttt{check\_append()} -- the one place \texttt{consensus/pbft.py}'s own docstring says block
-validity is decided ("Consensus decides whether, \texttt{Chain} decides valid") -- to run the
-detector over the block's decrypted $Sig_{RW}$ batch after the five existing checks pass. A
-replica that detects drift raises \texttt{ChainError} and is rejected by the \emph{existing} pBFT
-vote-counting exactly like a bad signature would be: no new consensus message, no change to
-\texttt{Replica}'s state machine. \texttt{Cluster.\_\_init\_\_} gained one additive,
-backward-compatible \texttt{chain\_factory} parameter (default \texttt{Chain}) so $BC_{DTBU}$'s
-commit path is unaffected.
-
-\subsection{Defended vs.\ undefended: all 15 of \S\ref{sec:m7-11}'s cells}
+\textbf{Combined evasion compounds, but does not collapse the detector.} Perturbing all five
+features together (Figure~\ref{fig:combined}) drops balanced accuracy from 0.841 to a floor
+around 0.57--0.60 by 60--100\% joint perturbation -- roughly triple any single feature's damage,
+confirming the features compound as a competent adversary would exploit. It never reaches the
+0.50 useless-detector line, though: the top-5 features carry only 45.5\% of Random Forest's total
+importance mass (0.126+0.109+0.079+0.074+0.067), so the remaining 17 features, entirely
+unperturbed here, still carry real discriminative signal even once the five most important ones
+are pushed to their physical limits. This is itself the finding -- exactly the outcome the session
+brief's own test criterion anticipated as a possibility (``the model uses features outside the
+top-5 enough to still discriminate''), and it is a mild point in the detector's favor: no small,
+named feature subset is a single point of failure.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figs/fig12_drift_defense_comparison.png}
-\caption{Defended (Mahalanobis-gated) vs.\ undefended balanced accuracy, all three strategies,
-five budgets each.}
-\label{fig:m7-12-comparison}
+\includegraphics[width=\linewidth]{figs/fig7c_adaptive_evasion_histogram.png}
+\caption{Per-sample minimum $L_\infty$ perturbation (top-5 features, each normalized to its own
+evasion range) that flips the ensemble's verdict, over all 353 positive eval rows.}
+\label{fig:adaptive}
 \end{figure}
 
-\textbf{The defense catches the strategy predicted least catchable, and misses the one predicted
-most catchable.} Anchor-point injection's interpolated class-boundary midpoint coincides, in a
-roughly class-balanced corpus, with the \emph{population mean} -- it scores \emph{below} the
-same-size clean-batch noise floor at every budget measured (e.g.\ $0.008$ vs.\ a clean $p_{95}$ of
-$0.11$ at $n{=}143$), the sharpest measured case yet of "sophistication and detectability are not
-the same axis." Label flipping and feature poisoning score \emph{above} the matched noise floor at
-budgets $\geq5\%$ -- not because the detector reads labels (it structurally cannot; $FT_{RW}$ and
-\texttt{label} are separate fields by design), but because an all-malicious batch's feature
-\emph{composition} differs from the profile's usual mix. An honest, unusually ransomware-heavy
-batch -- a real outbreak, not an attack -- would trigger the identical alarm.
+\textbf{Adaptive, per-sample evasion is a different picture.} An adversary who knows the model and
+optimizes per sample does much better than one perturbing blindly. Binary search per positive row
+over the $L_\infty$ ball (Figure~\ref{fig:adaptive}) finds: median minimum perturbation
+\textbf{0.321} (a typical ransomware sample needs about a third of the available evasion range to
+flip); 10th percentile \textbf{0.000} -- driven by the 61 of 353 positive rows (17.3\%) the
+detector already misses at 0\% perturbation (consistent with the measured 0.8408's own false-negative
+rate), plus a further 7.9\% needing under 5\% perturbation, so roughly a quarter of ransomware
+samples are trivially evadable by an adaptive attacker; 90th percentile \textbf{0.977} -- the
+hardest samples need nearly the entire evasion range. 28 of 353 positive rows (7.9\%) never flip
+even at the full $L_\infty$ ball. Checking those survivors against the sixth-through-tenth ranked
+features (never perturbed here) shows exactly what the session's own test criterion predicted:
+survivors average \texttt{c2\_beacon\_count} 10.3 against 7.0 for the malicious class as a whole,
+\texttt{entropy\_delta} 3.58 against 2.61, and similarly elevated \texttt{key\_generation\_events},
+\texttt{shadow\_copy\_deletions} and \texttt{dns\_entropy} -- these are the ransomware samples so
+extreme on features outside the top-5 that disguising only the top-5 cannot save them.
 
-At the threshold this session shipped (Mahalanobis RMS $\geq 3.0$, chosen before any of the above
-was measured and left unmoved after), \textbf{0 of the 15 cells were actually prevented}: every
-defended-column number in Table~\ref{tab:m7-12} equals the undefended one, because nothing crossed
-the bar. This is not "the defense does not work" -- see the false-positive analysis below for why
-the bar was not simply lowered.
+\textbf{Conclusion: shape (c), the nuanced answer.} No single top-5 feature is fragile enough to
+break the detector alone, and no combination of exactly these five is either -- the ensemble's
+reliance on 17 further features is real and measured, not assumed. But a median-effort adaptive
+adversary needs only about a third of the physically plausible evasion range, and roughly a
+quarter of ransomware samples are evadable with under 5\% perturbation on features an attacker can
+freely throttle to zero. The paper's implicit assumption that $FT_{RW}$ is unconditionally robust
+is false for a meaningful minority of cases and approximately true for the rest, and this
+asymmetry -- some samples essentially free to evade, others requiring near-maximal effort -- is
+exactly the kind of result a single aggregate accuracy number cannot show. It is a direct
+consequence of FLAW-2 (\S\ref{sec:flaw2}): the paper's own evaluation, run on BitcoinHeist address
+features that no attacker can \emph{choose their own value of} at will, could never have surfaced
+this question, because it is a question about behavioural features an attacker actually controls.
+Only the framework path this project built makes it a question with a measured answer.
+
+\subsection{Adversarial Robustness: The Defense}
+\label{sec:m7-8}
+
+\S\ref{sec:adversarial} measured the attack. This section measures a candidate defense: if the
+ensemble is fit on a training draw that already contains perturbed positives, do the fragile
+samples become robust, and what does that cost on clean data? The training draw's 717 positive
+rows are each augmented with $K=5$ perturbed copies, one independent
+$\mathrm{Uniform}(0,\,\mathrm{budget})$ fraction per top-5 feature per copy, moved toward that
+feature's own evasion bound (Table~\ref{tab:top5}) -- negative rows and the eval corpus are never
+touched. Three training budgets are swept -- 25\%, 50\%, 100\% of each feature's evasion range --
+plus a 0\% degenerate case as a pure sanity check. All perturbation and scoring machinery is
+identical to \S\ref{sec:adversarial}'s (`detection.adversarial`, factored out this session so both
+experiments share one tested implementation rather than two copies that could silently drift).
+
+\textbf{The degenerate case reproduces the original model exactly.} At 0\% budget, augmentation is
+a no-op by design (`detection.retraining.augment\_positive\_rows`) rather than five duplicate
+copies of every positive row: duplicating would still change
+\texttt{RandomForestClassifier}'s bootstrap sampling for zero new information, breaking bit-exact
+reproduction. Measured: \texttt{train\_n=1467} (unchanged), \texttt{bal\_acc=0.8408}, identical to
+\S\ref{sec:adversarial}'s baseline to the last recorded digit.
+
+\begin{table}[t]
+\centering
+\caption{Clean-eval cost of adversarial retraining. Baseline: bal.\ acc.\ 0.8408, precision
+0.8415, recall 0.8272, MCC 0.6822.}
+\label{tab:m7-8-cost}
+\footnotesize
+\begin{tabular}{lccccc}
+\hline
+\textbf{Budget} & \textbf{Bal.\ Acc.} & \textbf{$\Delta$} & \textbf{Prec.} & \textbf{Rec.} & \textbf{MCC} \\
+\hline
+25\%  & 0.7803 & $-6.05$pt  & 0.886 & 0.637 & 0.588 \\
+50\%  & 0.7616 & $-7.92$pt  & 0.845 & 0.632 & 0.544 \\
+100\% & 0.7363 & $-10.45$pt & 0.828 & 0.586 & 0.498 \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{The cost is real and grows monotonically with training budget} (Table~\ref{tab:m7-8-cost},
+Figure~\ref{fig:m7-8-cost}), driven almost entirely by falling recall (0.8272 $\to$ 0.586 at
+100\%) rather than rising false positives -- precision stays high throughout. The hardened models
+are not noisier; they are more conservative, increasingly refusing to call genuine, unperturbed
+ransomware "ransomware."
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{figs/fig9a_clean_accuracy_cost.png}
+\includegraphics[width=0.49\linewidth]{figs/fig9b_combined_degradation_overlay.png}
+\caption{Left: clean-eval metrics, original vs.\ hardened at each training budget. Right: combined
+evasion (\S\ref{sec:adversarial}'s attack) against the original model and each hardened model.}
+\label{fig:m7-8-cost}
+\label{fig:m7-8-overlay}
+\end{figure}
+
+\textbf{Robustness is non-monotonic in training budget -- the headline finding.} At 25\% budget,
+the hardened model is \emph{worse} than doing nothing: median adaptive perturbation to evade falls
+from the original's 0.3213 to 0.2499, and the combined-evasion curve
+(Figure~\ref{fig:m7-8-overlay}) crosses the 0.50 useless-detector line at full perturbation
+(0.463), something the original model's own floor (0.570) never did. A narrow training budget
+teaches the model the small-perturbation region at the cost of the large-perturbation region it
+never saw during training -- hardening that backfires against a stronger attacker than the one it
+was tuned against. At 50\% and 100\% budget the opposite happens, sharply: median adaptive
+perturbation rises to 0.8825 and 1.0000, and the 100\%-budget combined-evasion curve
+\emph{increases} with perturbation instead of falling (0.736 at 0\% eval-time perturbation
+$\to$ 0.888 at 100\%, Table~\ref{tab:m7-8-adaptive}). The mechanism: a large fraction of the
+hardened model's own positive training rows sit at or near the top-5 features' evasion bounds, so
+the model learns "values at the bound" as a strong ransomware signature in its own right. That is
+genuine, measured robustness against \S\ref{sec:adversarial}'s specific attack shape -- but it is
+pattern-matching on the augmentation's own footprint, not a deeper representation, and is untested
+against any attack that does not resemble "features pushed toward their historical evasion
+bound."
+
+\begin{table}[t]
+\centering
+\caption{Adaptive evasion: minimum $L_\infty$ perturbation to flip, original vs.\ hardened.}
+\label{tab:m7-8-adaptive}
+\footnotesize
+\begin{tabular}{lccc}
+\hline
+\textbf{Model} & \textbf{p10} & \textbf{median} & \textbf{p90} \\
+\hline
+original (\S\ref{sec:adversarial}) & 0.000 & 0.321 & 0.977 \\
+hardened @25\% & 0.000 & 0.250 & 0.951 \\
+hardened @50\% & 0.000 & 0.883 & 1.000 \\
+hardened @100\% & 0.000 & 1.000 & 1.000 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{figs/fig9c_adaptive_evasion_comparison.png}
+\includegraphics[width=0.49\linewidth]{figs/fig9d_pareto_clean_vs_robustness.png}
+\caption{Left: p10/median/p90 minimum perturbation to evade, original vs.\ each hardened budget.
+Right: clean balanced accuracy vs.\ median adaptive perturbation to evade -- the deployment
+trade-off, one point per training budget.}
+\label{fig:m7-8-adaptive}
+\label{fig:m7-8-pareto}
+\end{figure}
+
+\textbf{The "throws away signal" failure mode occurs, partially.} The session's own test
+criterion: does the hardened model solve robustness by driving top-5 importance to near zero
+rather than learning a robust representation? Top-5 importance sum falls from 0.4553 (original)
+to 0.4044 (25\%), 0.2966 (50\%), 0.2309 (100\%) -- a real, budget-proportional redistribution,
+never collapsing to near zero. The features consistently gaining importance --
+\texttt{directory\_breadth}, \texttt{entropy\_delta}, \texttt{key\_generation\_events} -- are none
+of them perturbed in this experiment. This is the partial case the test anticipated: not
+"solved robustness by discarding the top-5 entirely," but a real, measured shift of reliance onto
+features an attacker could target next, which a follow-up session would need a new perturbation
+round against the hardened models' own new top-5 to test.
+
+\textbf{The Pareto trade-off is not a smooth curve.} Figure~\ref{fig:m7-8-pareto}: 25\% budget is
+strictly dominated by the original model (worse clean accuracy \emph{and} worse robustness); only
+50\% and 100\% trade clean accuracy for robustness in the direction a defender would want, and
+100\%'s marginal robustness gain over 50\% (median 1.000 vs.\ 0.883) is small next to its
+additional clean-recall cost (0.586 vs.\ 0.632 recall) -- 50\% budget is the more defensible
+operating point of the three tested, not 100\%.
+
+\textbf{Conclusion: adversarial retraining is a real but narrow, expensive defense.} At a
+well-chosen budget it measurably hardens the detector against \S\ref{sec:adversarial}'s specific
+attack -- median evasion effort rises from needing a third of the evasion range to needing nearly
+all of it. But every budget that helps costs 8-10 points of clean balanced accuracy, driven by
+recall, meaning a hardened deployment would silently miss more real, unperturbed ransomware in
+exchange for resisting an adversary sophisticated enough to know the top-5 features and their
+physical bounds. And the mechanism behind the gain -- learning that near-bound feature values are
+themselves suspicious -- is exactly the kind of narrow, augmentation-shaped pattern that a
+differently-shaped attack (partial perturbation of a \emph{different} feature subset, or of the
+newly-important \texttt{directory\_breadth}/\texttt{entropy\_delta}/\texttt{key\_generation\_events})
+was never tested against and has no particular reason to survive. Whether this trade-off is worth
+taking is a deployment decision this project can inform but not make: it depends on whether an
+operator weighs a sophisticated feature-space adversary more heavily than routine, unperturbed
+ransomware, which this framework's own honeypot corpus (DEV-27) was built to represent as the
+common case. The more durable fix implied by both \S\ref{sec:adversarial} and this section is
+architectural, not just training a wider draw -- ensemble diversity over feature subsets, or a
+loss that penalises reliance on any single small feature group, neither of which this session's
+scope covers.
+
+\subsubsection{Neural vs.\ Tree-Based Detector: Architecture or Features?}
+\label{sec:m7-10b}
+
+\S\ref{sec:m7-8}'s memorisation failure mode (the 100\%-budget model learns ``values near the
+evasion bound'' well enough that its combined-evasion curve \emph{rises} with perturbation) --
+is that a property of tree ensembles' axis-aligned splits, or of the feature space and
+augmentation strategy, independent of architecture? This section runs the identical protocol --
+same top-5 features and evasion bounds, same training budgets, same downstream
+detector/adversarial/retraining machinery -- against a small MLP (\texttt{detection.mlp\_model},
+DEV-36: two hidden layers of 32/16 units, \texttt{adam}, L2 regularisation and early stopping)
+plugged into the same \emph{NProf}/\emph{AProf} profiles as a single-model ensemble. Feature
+importance is compared by permutation (an MLP has no Gini-style importance), so \S\ref{sec:m7-8}'s
+Gini-based top-5 sums are not directly comparable even for the same RF model, recomputed here
+like-for-like.
+
+\begin{table}[t]
+\centering
+\caption{Adaptive evasion (median) by training budget, RF vs.\ MLP. RF's own numbers reproduce
+\S\ref{sec:m7-8}; the MLP's 25\% row is the headline contrast.}
+\label{tab:m7-10b-adaptive}
+\footnotesize
+\begin{tabular}{lcc}
+\hline
+\textbf{Budget} & \textbf{RF median} & \textbf{MLP median} \\
+\hline
+original & 0.3213 & 0.4866 \\
+25\%     & 0.2499 (\emph{worse}) & 1.0000 \\
+50\%     & 0.8825 & 1.0000 \\
+100\%    & 1.0000 & 1.0000 \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{figs/fig10c_mlp_vs_rf_clean_accuracy.png}
+\includegraphics[width=0.49\linewidth]{figs/fig10d_mlp_vs_rf_combined_degradation.png}
+\caption{Left: clean-eval accuracy, RF ensemble vs.\ MLP. Right: combined evasion, RF vs.\ MLP,
+no hardening.}
+\label{fig:m7-10b-clean}
+\label{fig:m7-10b-degrade}
+\end{figure}
+
+\textbf{Clean accuracy is comparable (RF 0.8408, MLP 0.8237) and, before any hardening, the MLP is
+already more robust.} Its median adaptive-evasion perturbation is 0.4866 against RF's 0.3213 -- a
+real architectural difference: a smooth, distributed decision boundary needs a larger combined
+push across all five top features than a forest of axis-aligned splits does. Both models' unhardened
+combined-degradation curves (Figure~\ref{fig:m7-10b-degrade}) fall smoothly with perturbation in
+the ordinary way (RF: 0.841$\to$0.570; MLP: 0.824$\to$0.497) -- neither shows the rising-curve
+memorisation signature before retraining.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{figs/fig10e_mlp_vs_rf_retraining_adaptive.png}
+\includegraphics[width=0.49\linewidth]{figs/fig10f_mlp_vs_rf_importance_shift.png}
+\caption{Left: p10/median/p90 adaptive evasion by training budget, RF vs.\ MLP. Right: top-5
+permutation-importance sum by training budget, RF vs.\ MLP.}
+\label{fig:m7-10b-retrain-adaptive}
+\label{fig:m7-10b-importance}
+\end{figure}
+
+\textbf{The headline result: the MLP shows \S\ref{sec:m7-8}'s memorisation failure mode earlier
+and more completely than RF, not less.} Every one of its three hardened combined-degradation
+curves \emph{rises} monotonically with perturbation -- 25\%: 0.828$\to$0.877; 50\%:
+0.810$\to$0.897; 100\%: 0.770$\to$0.896 -- the same signature \S\ref{sec:m7-8} found only at RF's
+100\% budget, here at every budget tested. Its median adaptive-evasion perturbation jumps to
+1.0000 at 25\% and stays there (Table~\ref{tab:m7-10b-adaptive}), and critically \textbf{it never
+reproduces RF's 25\%-budget backfire} (RF's median evasion effort \emph{drops} to 0.2499 before
+recovering; the MLP's never dips). A higher-capacity, continuously-weighted model does not avoid
+the augmentation-boundary-memorisation failure mode -- it engages that shortcut faster and more
+uniformly than an ensemble of axis-aligned trees does.
+
+\textbf{Feature-importance shift, on different schedules.} By permutation importance
+(Figure~\ref{fig:m7-10b-importance}), the MLP's top-5 reliance falls monotonically and sharply
+with budget -- 0.0971 $\to$ 0.0328 $\to$ 0.0251 $\to$ 0.0219, a 77\% reduction end to end. RF's own
+permutation-importance is \emph{non}-monotonic: 0.1170 $\to$ 0.1535 (a rise at 25\%) $\to$ 0.0818
+$\to$ 0.0177 -- consistent with, and helping explain, RF's 25\%-budget backfire: by this measure
+the narrowly-hardened RF becomes \emph{more} reliant on the attacked features at exactly the
+budget where it is also most fragile. Neither model solves robustness by discarding the top-5
+entirely, matching \S\ref{sec:m7-8}'s ``partial, not total'' finding and extending it to the MLP.
+
+\textbf{Conclusion: the fragility is in the features and the augmentation strategy, not the tree
+structure.} A tree-ensemble-specific artefact would predict a distributed neural representation
+responding differently to the same augmentation; it does the opposite, adopting the rising-curve
+signature at every budget including the one where RF instead backfires by a different mechanism.
+Both failure modes point to the same root cause: augmenting positives toward a bounded region of a
+fixed, low-dimensional feature space gives any sufficiently flexible model a shortcut easier to
+learn than the underlying behavioural signal. The MLP's one genuine architectural advantage is
+orthogonal to hardening (a smoother decision boundary, already harder to evade before any
+retraining); the fix this section implies is the same one \S\ref{sec:m7-8} already named --
+diversifying what the augmentation teaches -- not a change of model family.
+
+\subsection{Real-Data Transfer: ClaMP and EMBER}
+\label{sec:m7-7}
+
+\textbf{Why real-data evaluation matters.} M4b's 0.8422 balanced accuracy
+(\S\ref{sec:honeypot-eval}) is the detection ensemble scored on \texttt{honeypot.collector}'s own
+synthetic corpus -- the same session designed the generator and fit the classifier against it, so
+that number measures the generator-detector \emph{pair}, not whether the detector would recognise
+anything the generator did not anticipate. This section asks the question synthetic-only
+evaluation cannot answer: does the detector transfer to real behavioural features it has never
+seen, from programs it was not designed around? The detector used below is the identical fitted
+ensemble -- same seed, same committed corpus, never retrained.
+
+\textbf{Dataset.} The session brief named EMBER, CIC-MalMem-2022/CICMalDroid-2020 and
+MalwareBazaar, in that order. EMBER's actual feature dataset is a $\sim$2.4GB archive; this
+sandbox's measured throughput on a small test fetch ($\sim$40.6KB/s) projects a $\sim$17-hour
+download, infeasible in one session. The CIC datasets are gated behind a research-access request
+form, not a scriptable download. Used instead: \textbf{ClaMP} (Classification of Malware with PE
+headers, \texttt{github.com/urwithajit9/ClaMP}) -- 5210 real Windows PE files' static
+header-derived structural features, 2722 malicious and 2488 benign, openly published for exactly
+this kind of ML research use. Fetched once and committed at \texttt{data/external/clamp/} (1.28MB,
+sha256 recorded in its README) for full reproducibility, and used for \textbf{evaluation only}: it
+never fits or tunes anything in \texttt{honeypot/} or \texttt{detection/}.
+
+\textbf{The mapping table is itself the first finding.} $FT_{RW}$ (\S\ref{sec:honeypot}) is a
+\emph{dynamic behavioural} schema -- what a monitor observes a running program \emph{do}. ClaMP is
+\emph{static} -- header fields read off a file that is never executed. Table~\ref{tab:m77-mapping}
+shows what that mismatch produces: only the entropy group (3 of 22 features) has any real
+correspondence at all, because entropy is one of the few observables measurable both statically (a
+file's own byte distribution) and dynamically (the byte distribution of what a process writes).
+The other six groups -- filesystem, crypto API, process, network, persistence, kill-chain -- have
+\textbf{no} analogue in a dataset that never ran the sample, and are marked missing, handled
+exactly as \texttt{honeypot.features.build()} already handles an unobserved sensor: value $0.0$,
+\texttt{missing\_mask} bit set.
+
+\begin{table}[t]
+\centering
+\caption{$FT_{RW}$ features mapped from ClaMP, by group. 19 of 22 features have no analogue in a
+static PE-header dataset.}
+\label{tab:m77-mapping}
+\footnotesize
+\begin{tabular}{lccc}
+\hline
+\textbf{Group} & \textbf{Features} & \textbf{Mapped (direct/proxy)} & \textbf{Missing} \\
+\hline
+entropy & 3 & 3 & 0 \\
+filesystem & 5 & 0 & 5 \\
+crypto\_api & 3 & 0 & 3 \\
+process & 3 & 0 & 3 \\
+network & 3 & 0 & 3 \\
+persistence & 3 & 0 & 3 \\
+kill\_chain & 2 & 0 & 2 \\
+\hline
+\textbf{Total} & \textbf{22} & \textbf{3} & \textbf{19} \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Transfer result: not a partial degradation, a clean failure, and mildly worse than
+chance.} Before touching ClaMP, the script reproduces the established CSV-path baseline exactly
+(0.8408, \S\ref{sec:adversarial}'s sanity condition) as a check that the mapping code has not
+corrupted the fitted ensemble. Scored on all 5210 mapped ClaMP rows:
+$\mathrm{bal\_acc}=0.5000$, $\mathrm{precision}=0.0000$, $\mathrm{recall}=0.0000$,
+$\mathrm{mcc}=0.0000$, $\mathrm{pr\_auc}=0.4612$ (Figure~\ref{fig:m77-metrics}).
+$\mathrm{bal\_acc}=0.5000$ exactly is not a rounding coincidence: the ensemble predicts
+\emph{every} row, malicious and benign alike, as benign. More strikingly, $\mathrm{pr\_auc}=0.4612$
+sits \emph{below} this dataset's no-skill baseline (class prevalence $2722/5210=0.5225$) -- the
+continuous ensemble score is mildly anti-correlated with the true label here, not merely
+uninformative. The mechanism is legible: with 86\% of the feature space collapsed to a mapping
+artifact of zero, there is essentially nothing left for the profiles fitted on the synthetic
+corpus to discriminate on beyond three entropy features, and a mostly-zero vector apparently reads
+as closer to $NProf$ than $AProf$ under those fitted distributions. \textbf{This is a finding
+about the schema's dynamic-vs-static mismatch with the most tractable available real dataset, not
+evidence that the synthetic generator's own difficulty calibration is wrong} (DEV-27's 0.85
+Bayes-optimal ceiling) -- no dataset that never executed a sample could ground the other six
+feature groups, whatever the generator's own distributions looked like.
+
+\textbf{Distribution comparison: which synthetic features match reality.} Two-sample
+Kolmogorov-Smirnov, synthetic corpus vs.\ ClaMP-mapped, for the 3 features with a real analogue
+(Figure~\ref{fig:m77-dist}) -- the other 19 are a constant $0.0$ under the mapping, and a KS test
+against a constant characterises the mapping, not the generator, so it is not reported as a
+distributional claim:
+
+\begin{center}
+\scriptsize
+\begin{tabular}{lccc}
+\hline
+\textbf{Feature} & \textbf{$D$} & \textbf{$p$} & \textbf{syn.\ / real mean} \\
+\hline
+\texttt{write\_entropy\_mean} & 0.197 & $6.9\times10^{-53}$ & 5.63 / 6.36 \\
+\texttt{write\_entropy\_var} & 0.488 & $<10^{-300}$ & 0.59 / 3.52 \\
+\texttt{entropy\_delta} & 0.285 & $1.7\times10^{-111}$ & 2.00 / 3.00 \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{figs/fig8b_transfer_metrics.png}
+\includegraphics[width=0.49\linewidth]{figs/fig8a_entropy_distributions.png}
+\caption{Left: synthetic CSV-path baseline vs.\ ClaMP real-data transfer, same fitted ensemble.
+Right: synthetic vs.\ real (ClaMP-mapped) distributions, the 3 mapped entropy features.}
+\label{fig:m77-metrics}
+\label{fig:m77-dist}
+\end{figure}
+
+All three diverge significantly. Read cautiously, not as "the generator is wrong": ClaMP's entropy
+readings are whole-file and per-section entropy of arbitrary real PE binaries -- many of them
+large, compiled, resource-laden files with high baseline entropy regardless of malice -- while the
+synthetic features model entropy of write operations during a specific kill-chain episode, tuned
+to a 0.85 Bayes-ceiling difficulty budget for a deliberately hard classification problem. These are
+different measurement modalities compared on the closest available real analogue, not the same
+observable measured twice. One further caveat: $\sim$8--9\% of the synthetic corpus's
+\texttt{write\_entropy\_mean} values are the generator's own missing-value zero-fill, visibly
+inflating the low end of the synthetic histogram in Figure~\ref{fig:m77-dist} and modestly
+affecting, but not creating, the measured divergence.
+
+\textbf{Limitations.} The mapping is necessarily imperfect: static header fields are the closest
+real analogue available for entropy, and no real analogue exists at all for six of seven feature
+groups, so the effective comparison the detector faces is far narrower than the 22-dimensional
+space it was fit on. ClaMP's own labelling process (VirusTotal-report-based, per its own
+documentation) may differ in criteria and era from the ransomware-specific threat model
+$FT_{RW}$'s kill-chain groups were designed around -- ClaMP's malicious class is general malware,
+not specifically ransomware. The transfer gap measured here is therefore a statement about how far
+our generator's approximation reaches when most of its feature space cannot be exercised at all,
+not a general claim about honeypot-based ransomware detection.
+
+\textbf{A richer static dataset: EMBER.} EMBER2018 (\texttt{github.com/elastic/ember}) exposes far
+richer raw PE data than ClaMP -- a 256-bin whole-file byte histogram, every section's own entropy
+and read/write/execute flags, and a full per-DLL import table -- and \texttt{honeypot.
+ember\_mapping} (DEV-35) grounds 6 of 22 $FT_{RW}$ features against it (entropy 3/3, crypto\_api
+2/3, filesystem 1/5), double ClaMP's 3/22, verified line-by-line against the \texttt{elastic/ember}
+extractor source rather than assumed. The dataset (200,000 fully-labelled real PE files,
+sha256-verified) was scored against the identical fitted ensemble, evaluation-only, same posture
+as ClaMP.
+
+\begin{table}[t]
+\centering
+\caption{EMBER transfer vs.\ the ClaMP baseline (M7-7), same fitted ensemble.}
+\label{tab:m7-10a-transfer}
+\footnotesize
+\begin{tabular}{lccccc}
+\hline
+\textbf{Dataset} & \textbf{Mapped} & \textbf{Bal.\ Acc.} & \textbf{Prec.} & \textbf{Rec.} & \textbf{PR-AUC} \\
+\hline
+ClaMP (M7-7)  & 3/22 & 0.5000 & 0.0000 & 0.0000  & 0.4612 \\
+EMBER (M7-10a) & 6/22 & 0.5000 & 0.6667 & 0.00002 & 0.6301 \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Still exactly chance on the hard decision -- but the continuous score is no longer
+anti-correlated with truth.} Table~\ref{tab:m7-10a-transfer}: $\mathrm{bal\_acc}=0.5000$ again, not
+a coincidence -- the fitted \emph{NProf}/\emph{AProf} profiles place all but 3 of 200,000 rows on
+the benign side regardless of true label (2 of those 3 are true positives: recall $0.00002$,
+precision $0.6667$). The mechanism is the same one ClaMP exposed: 16 of 22 dimensions collapse to
+the structural-missing zero (\texttt{missing\_mask} constant across every row), and profiles fitted
+where 16/22 features are normally populated read a mostly-zero vector as ``benign'' almost
+universally. \textbf{What doubling the coverage fraction changes is the continuous score, not the
+hard call:} $\mathrm{pr\_auc}=0.6301$ sits above this dataset's balanced 0.50 no-skill line, where
+ClaMP's $\mathrm{pr\_auc}=0.4612$ sat \emph{below} its own 0.5225 no-skill line (M7-7) -- EMBER's
+ensemble score is weakly but genuinely informative about the true label; ClaMP's was mildly
+anti-correlated with it. Richer static grounding measurably helps the model's underlying
+confidence signal without moving the threshold decision it is discarded into.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.49\linewidth]{figs/fig10b_ember_transfer_metrics.png}
+\includegraphics[width=0.49\linewidth]{figs/fig10a_ember_feature_distributions.png}
+\caption{Left: synthetic baseline vs.\ ClaMP (M7-7) vs.\ EMBER transfer. Right: synthetic vs.\
+real (EMBER-mapped) distributions, the 6 mapped features.}
+\label{fig:m7-10a-metrics}
+\label{fig:m7-10a-dist}
+\end{figure}
+
+\textbf{Distribution comparison: EMBER diverges from the synthetic corpus more sharply than ClaMP
+did, on every mapped feature} (Figure~\ref{fig:m7-10a-dist}; full KS statistics in DEV-35 and
+\texttt{RESULTS.md}). The largest gaps (\texttt{write\_entropy\_var}, \texttt{crypto\_call\_rate},
+$D>0.6$) are partly a units mismatch rather than a substantive disagreement -- the synthetic
+generator's \texttt{crypto\_call\_rate} is drawn in calls-per-second units, EMBER's mapped value is
+a raw import \emph{count}, and only the two features' \emph{presence} is meaningfully comparable
+across that gap, not their raw scale.
+
+\textbf{The question this section set out to answer: does a richer static source close the
+schema's dynamic-vs-static gap?} No -- 11 of 22 features (process, network, persistence,
+kill-chain) stay unmapped regardless of dataset richness, because no PE-header, import, or section
+field can observe a process spawn, a network connection, or a kill-chain stage; those require
+execution, which is what makes a dataset dynamic in the first place. A richer \emph{static} source
+narrows the coverage gap (6/22 vs.\ 3/22) and improves the discarded continuous score, without
+changing the shape of the gap or the hard-decision transfer outcome.
+
+\section{Scalability Analysis}
+\label{sec:scalability}
+
+Two questions the paper's own \S VII benchmarks timing but never asks: how much on-chain storage
+does this design consume at realistic scale, and does its reported throughput actually reflect a
+system that scales.
+
+\subsection{Storage Cost (GAP-2)}
+\label{sec:storage}
+
+Section VII benchmarks consensus timing but never asks how much storage its own design consumes,
+or at what scale that stops being feasible. We compute this from values already measured
+elsewhere in this project -- the declared 4096B transaction payload (DEV-15), the measured 215B
+framing and 161B hybrid-encryption overhead per chunk (DEV-24), and the measured 1.14$\times$
+full-block overhead factor (header, Merkle root and canonical encoding, amortised over a 100-tx
+block, \S\ref{sec:5c}) -- rather than from new estimates; full arithmetic in
+\texttt{docs/STORAGE\_ANALYSIS.md}.
 
 \begin{table*}[t]
 \centering
-\small
-\begin{tabular}{lrrrr}
+\caption{On-chain storage growth, daily 1~MiB backups, 4 replicas. Every figure is arithmetic
+over \S\ref{sec:5c}'s measured overhead factor, not a new measurement.}
+\label{tab:storage}
+\footnotesize
+\begin{tabular}{lccc}
 \hline
-Strategy & Budget & Mahalanobis score & Clean-batch $p_{95}$ (matched $n$) & Prevented \\
+\textbf{Scenario} & \textbf{Per-node/yr} & \textbf{Cluster/yr ($\times$4)} & \textbf{Time to 1~TiB/node} \\
 \hline
-Label flip & 1--50\% & 0.32--0.57 & 0.24--0.55 & No \\
-Feature poison & 1--50\% & 0.28--0.50 & 0.24--0.55 & No \\
-Anchor injection & 1--50\% & 0.008--0.016 & 0.067--0.55 & No \\
+Small clinic (50 pts) & 20.3~GiB & 81.3~GiB & $\approx$50.4~yr \\
+Medium hospital (5{,}000 pts) & 1.98~TiB & 7.94~TiB & $\approx$6.05~mo \\
+Large network (50{,}000 pts) & 19.8~TiB & 79.4~TiB & $\approx$18.4~days \\
 \hline
 \end{tabular}
-\caption{Score ranges across all five budgets per strategy (full per-cell numbers: \texttt{RESULTS.md} M7-12). Label-flip/feature-poison scores exceed the matched noise floor at $n\geq36$ (budgets $\geq5\%$); anchor injection never does.}
-\label{tab:m7-12}
 \end{table*}
 
-\subsection{False-positive rate, and the new-family tension}
+At hospital scale, the paper's own on-chain design fills 1~TiB per replica in about six months
+under daily backups; at network scale, in under three weeks. Backup frequency is the larger lever
+of the two the paper leaves open: at the medium scenario, daily backups cost $\approx$7$\times$
+weekly and $\approx$30$\times$ monthly in chain growth for identical clinical content, a bigger
+effect than DEV-15's payload-size sweep found from a 16$\times$ range of payload sizes alone.
 
-Zero of 30 chunked, never-poisoned eval-corpus batches (25 rows each) triggered a false alarm at
-the shipped threshold. A documented, disclosed feature-space perturbation of real ransomware rows
--- scaling network/beacon features up and crypto/encryption features down, modelling a
-hypothetical family that exfiltrates rather than encrypts, never a new call into
-\texttt{honeypot/collector.py}'s own generator -- scored $1.2255$, roughly $17\times$ its own
-matched clean-batch $p_{95}$ ($0.070$), and was \emph{still not flagged} at the shipped threshold.
-This is the tension item 4 of the M7-12 brief asked for, measured rather than assumed: a threshold
-loose enough to catch that probe sits close enough to the label-flip/feature-poison noise range
-that it would also raise the false-positive rate on ordinary small clean batches -- the exact
-trade-off a real deployment would have to accept explicitly, not one this session resolved by
-picking a more flattering number.
+Against this, an on-chain-hash / off-chain-data design -- store only a content digest and a
+storage pointer on-chain, keep the encrypted payload in external storage -- preserves the same
+tamper-evidence the paper's Merkle-root-and-signature chain already provides (recomputing and
+comparing the digest catches off-chain tampering exactly as the paper's own immutability argument
+requires), at $\approx$504~bytes per backup regardless of payload size, against
+$\approx$1.14~MiB for a 1~MiB backup under the paper's design -- a $\approx$2{,}371$\times$
+reduction that widens further as backups get larger, since the hash-only cost is flat and the
+paper's is not. What it does not preserve is on-chain \emph{availability}: lose the off-chain
+store and the digest alone cannot reconstruct the backup, where the paper's design always can.
+We state this trade-off rather than resolving it, per this project's rule against silently
+revising the paper's design.
 
-\subsection{The architectural observation, and its cost}
+Compute is not the bottleneck this analysis surfaces: the large-network scenario's daily block
+count, at \S\ref{sec:5c}'s measured marginal per-block cost, comes to $\approx$4{,}045
+CPU-seconds/day ($\approx$4.7\% of a day) on the same 8~GB dev laptop -- comfortably inside its
+measured throughput ceiling, though nothing here measures a production cluster's network or disk
+behaviour, only this one machine's compute.
 
-Gating the check inside \texttt{check\_append()} is the right integration point because it is the
-last moment before immutability makes the decision permanent -- once committed, $BC_{SigRW}$'s own
-guarantee (\S\ref{sec:m7-11}) prevents removal. Reusing pBFT's existing $2f{+}1$ threshold, rather
-than inventing a new vote type, means a Tier-2 adversary who also controls one consensus replica
-still cannot force a commit past three independently-refusing honest replicas.
+\subsection{Throughput Does Not Scale With Chain Size (DEV-08)}
+\label{sec:dev08}
 
-That integration point has a cost this project had not paid before: \texttt{blockchain/
-transaction.py}'s own docstring states "miners validate blocks they cannot read; that is the
-point" -- $Sig_{RW}$ payloads are hybrid-encrypted to one recipient (DEV-01), and no replica held
-that key before this session. \texttt{ValidatedSigRWChain} requires one, which
-\S\ref{sec:threat-model} states as a new trust assumption (TA-6) rather than a detail: this
-defense narrows a confidentiality invariant that held since M2b. A second new assumption (TA-7):
-every honest replica must run the identical \texttt{DriftPolicy} to agree on whether to vote --
-untested against a policy-mismatched replica, stated as a limitation rather than assumed away.
+\S\ref{sec:5c}'s measurement is the scalability-relevant fact directly: per-block marginal cost is
+flat across cases 1 through 3 on both chains once cluster setup is excluded from the timed span
+(Table~\ref{tab:marginal}), and derived TPS is correspondingly flat rather than rising. A design
+whose own published throughput curve is the amortisation of a fixed setup cost over a growing
+block count, not a property of the consensus mechanism, does not get faster as the deployment
+grows -- the six published TPS values equal $\text{total\_tx}/\text{total\_time}$ exactly to four
+significant figures, and removing the fixed cost from the timed span removes the rise, exactly
+what an amortisation account predicts and what \S\ref{sec:5c-raft}'s independently-measured Raft
+comparison confirms is not an artifact of pBFT specifically either.
 
-\subsection{The gap is real, and this is a measured, partial answer to it}
+\section{Critique}
+\label{sec:critique}
 
-This defense is not in the paper's design, and its absence is a real gap -- \S\ref{sec:m7-11}
-demonstrated exactly how much that costs. It is also not a general fix: measured against the
-three strategies and five budgets already on record, it closes one case (a batch introducing
-feature values the corpus profile has never produced, submitted at enough scale against a mature
-history) and does not close the strategy M7-11 found most damaging, except as a side effect of
-batch composition an honest outbreak would trigger identically. A single record -- \S\ref{sec:m7-11}'s
-own permanence-demo shape -- is undetectable in principle at any threshold, since a batch of one
-has no averaging to suppress sampling noise. Reporting a solvable gap honestly, with the numbers
-that show exactly how far the solution reaches and where it stops, is the more useful contribution
-than reporting either "poisoning is unsolved" or "poisoning is solved."
+Five defects, ordered by severity rather than by the order we found them. They are the ones
+that rise to a methodological or architectural problem; a complete record of every smaller
+departure from the paper's published design, each with its own rationale, is maintained
+separately and is not reproduced here.
+
+\subsection{FLAW-2 -- framework/evaluation disconnect}
+\label{sec:flaw2}
+
+Algorithm 2 collects data from a ransomware honeypot and Algorithm 3 trains a detector on the
+resulting signatures and behavioural features -- properties of an executing, or emulated,
+program. Section VII then evaluates entirely on BitcoinHeist: address-level graph features
+(length, weight, count, looped, neighbours, income) of a Bitcoin address that has already
+received a ransom payment. These are different problems. Detecting a running ransomware program
+from its behaviour and forensically labelling a wallet address after the fact share no features,
+no data-generating process, and arguably not even the same notion of a positive instance -- one
+is prospective and behavioural, the other retrospective and financial. Nothing in \S IV-C or
+\S VII acknowledges the substitution.
+
+We built both pipelines rather than choosing one. The BitcoinHeist pipeline
+(\S\ref{sec:5a}--\S\ref{sec:5b}) reproduces the paper's actual published evaluation. The
+honeypot pipeline (\S\ref{sec:honeypot}, \S\ref{sec:honeypot-eval}) runs Algorithm 2's honeypot
+output through real Phase-2 consensus onto $BC_{SigRW}$, decrypts it back out, and trains
+Algorithm 3's four models on it -- the sequence the paper's own Fig.~3 draws. It produces a
+real, bounded result (0.8422 balanced accuracy, \S\ref{sec:honeypot-eval}). The paper's
+framework half, run end to end as specified, was never demonstrated by its authors; only the
+mismatched evaluation half was. FLAW-2 is therefore sharper than ``the paper evaluates on the
+wrong data'': the paper's own framework, when actually built and run, produces a defensible
+result that the paper itself never reports, choosing an unrelated dataset instead.
+
+\subsection{FLAW-4 -- evaluation methodology}
+
+Section VII resamples BitcoinHeist to 90\% ransomware before evaluating, without stating that the
+resample is bounded by the scarce class: only 41{,}413 ransomware rows exist in the cited
+2{,}916{,}697-row dataset, so a 90\%-ransomware sample can hold at most
+$41{,}413/0.9=46{,}014$ rows -- 1.6\% of the dataset described two paragraphs earlier. The
+published 98.98\% accuracy is a number from a $\sim$46K-row experiment, reported with nothing to
+mark that it is not the 2.9M-row one. Compounding this, the resulting class balance makes
+accuracy nearly free: a constant-positive classifier on this split scores 90.0\%
+(\S\ref{sec:5a}).
+
+\S\ref{sec:5a} and \S\ref{sec:m76} measure the consequence directly: reproducing the paper's own
+protocol exactly falls 4.56 accuracy points short of published, and an eight-hypothesis ablation
+across two sessions -- the two most plausible leakage sources first, then splitting criterion,
+resample strategy, single-split variance, feature engineering, and a programmatically-stacked
+worst case -- narrows that bound to 3.58 and then 1.51 points without closing it at any tested
+cell. We report the residual as unexplained, with a measured and considerably tightened bound,
+rather than attribute it to a cause we found no evidence for.
+
+\subsection{FLAW-5 -- the \S V-3 security claim}
+\label{sec:flaw5}
+
+Section V-3 argues that BSFR-SH resists 51\% attacks because it replaces proof-of-work with pBFT.
+The argument borrows PoW's 51\% threshold and applies it to a consensus mechanism with a
+different one: pBFT is safe only while fewer than $n/3$ of replicas are Byzantine
+($n\geq3f+1$). Moving from PoW to pBFT does not raise the fraction of the network an adversary
+must control -- it \emph{lowers} it, from just over one half to one third. At the paper's own
+deployment of four miner nodes, $f=1$: two colluding replicas (50\% of the cluster -- above the
+$f=1$ bound the cluster actually tolerates, and below the 51\% figure the paper cites as the
+threshold being defended against) can make two honest replicas commit different blocks at the
+same height. We demonstrate this directly rather than argue it: a test constructs exactly this
+scenario against our own pBFT implementation and asserts the fork occurs, at exactly the bound
+$f$ predicts and no tighter.
+
+The fair counter-argument, which \S V-3 could have made and does not, is that pBFT's threshold
+counts identities, not hash power, and in a permissioned deployment identities cannot be minted
+by an outside adversary -- a property we test separately, showing a swarm of unauthorised
+identities cannot form a certificate regardless of size. The defensible version of \S V-3's claim
+is therefore \emph{operational} -- ``an attacker must compromise two of our four named cloud
+servers'' -- not consensus-theoretic, and it gets \emph{weaker}, not stronger, in relative terms
+as a reason to prefer pBFT over PoW at a fixed and small node count.
+
+\subsection{DEV-26 -- preprocessing deletes the positive class}
+\label{sec:flaw-preprocess}
+
+Algorithm 2 line 3 pre-processes honeypot data and, in its entirety, ``removes the
+abnormalities.'' The literal reading is statistical outlier removal. On a corpus whose purpose is
+teaching a detector what ransomware looks like, that reading is self-defeating: ransomware
+behaviour is the minority class by construction -- it \emph{is} the abnormality -- so an
+outlier-removal step deletes exactly the samples the detector exists to learn from. Applied
+naively, Algorithm 2's own pre-processing step would hand Algorithm 3 a clean-looking dataset
+with the positive class silently gone, and \S VII would then report a plausible-looking accuracy
+computed on data that never saw an attack. We interpret ``abnormalities'' as sensor defects
+rather than unusual behaviour (\S\ref{sec:preprocessing}) and pin the alternative reading's
+failure mode with a direct test asserting that cleaning never removes the positive class.
+
+\subsection{DEV-08 -- TPS is Amortisation, not Throughput}
+
+Section VII-D presents TPS as a measured throughput property that improves as the chain grows
+across the paper's three cases. It is not: every published TPS value equals
+$\text{total\_tx}/\text{total\_time}$ exactly, and \S\ref{sec:dev08} measures the direct
+consequence -- once cluster setup is excluded from the timed span, marginal per-block cost and
+derived TPS are both flat, exactly what "the published rise is amortisation" predicts and what
+our own implementation lets us test directly rather than infer.
+
+\section{What the Paper Gets Right}
+
+Two of the paper's choices are execution defects, not premise defects, and the distinction
+matters for how it should be read. The two-chain architecture -- one chain for the ground truth a
+detector trains on, a separate chain for the backups a system restores from, never sharing node
+sets or state -- genuinely does separate detection integrity from recovery integrity: an
+adversary who compromises the mechanism protecting one does not thereby compromise the other. And
+the central idea that blockchain immutability can protect a detector's training data from
+tampering, in a domain where an attacker has every incentive to poison exactly that data if they
+can reach it, is sound, and is not the load-bearing idea of any of the four papers Table~II
+compares against. The paper's execution of that idea -- its evaluation methodology, its security
+argument for choosing pBFT, its preprocessing specification, and the connection between what it
+builds and what it measures -- has the five gaps above. Both are true, and a critique that lists
+only the five would misrepresent the paper's contribution as smaller than it is.
 
 \section{Conclusion}
 
@@ -2166,38 +2153,56 @@ independent private blockchains under real pBFT consensus, and both a faithful r
 the paper's published evaluation and the honeypot feature pipeline its own Phase 2/3 requires but
 never defines. Reproducing the paper's own methodology exactly, its headline detection result
 does not reproduce: our best model reaches 0.9442/0.9697 against a published 0.9898/0.990, and an
-ablation over both candidate leakage sources we identified narrows but does not close a
-3.58-point residual gap. We find five further, independent defects -- a disconnect between what the
-framework is designed to detect and what it is evaluated on, a degenerate and undisclosed
-evaluation split, a security argument that inverts pBFT's actual threshold relative to
-proof-of-work, a preprocessing specification that, read literally, deletes the class it exists to
-detect, and a reported throughput curve that is arithmetic amortisation rather than a measured
-property. Against this, the paper's central architectural idea -- two chains, separately
-protecting a detector's ground truth and a system's recoverability, from an adversary with every
-incentive to attack both -- is sound, and our own honeypot pipeline shows the framework can
-produce a real, bounded detection result (0.8422 balanced accuracy) once its undefined layer is
-actually built.
+eight-hypothesis ablation across two follow-up sessions narrows, without closing, a gap that
+tightens from 4.56 to 3.58 to 1.51 accuracy points. We find five further, independent defects --
+a disconnect between what the framework is designed to detect and what it is evaluated on, a
+degenerate and undisclosed evaluation split, a security argument that inverts pBFT's actual
+threshold relative to proof-of-work, a preprocessing specification that, read literally, deletes
+the class it exists to detect, and a reported throughput curve that is arithmetic amortisation
+rather than a measured property. Against this, the paper's central architectural idea -- two
+chains, separately protecting a detector's ground truth and a system's recoverability, from an
+adversary with every incentive to attack both -- is sound, and our own honeypot pipeline shows the
+framework can produce a real, bounded detection result (0.8422 balanced accuracy) once its
+undefined layer is actually built.
 
-What remains open: the 3.58-point gap between our best reproduction and the published figure has
-a measured lower bound but no identified cause -- neither address-as-feature nor split strategy,
-alone or together, explains it, and no further candidate was tested for lack of one. Of the five
-stretch extensions the project roadmap identified, four are built and reported above: a formal
-(Scyther) model of the session-establishment protocol (\S III-B), a storage-cost analysis for
-on-chain healthcare backups at realistic scale (\S V-F), adversarial feature-space evasion against
-the detector (\S VII), and a comparison against Raft as an alternative consensus protocol
-(\S VIII). A fifth, hybrid-blockchain support, is reported in \S IX, directly answering \S VIII of
-the paper itself, which names it as its own future work. One extension remains unpursued: an
-asynchronous pBFT variant with modelled network latency beyond the fixed delays
-\S IV-C already sweeps.
+Twelve extensions, built once that working system existed, tested the architectural idea itself
+rather than the paper's published numbers, across three analyses. \textbf{Security}
+(\S\ref{sec:security}): the four-tier threat model \S V never states; formal (Scyther)
+verification of our own session protocol (Tier 1); a pBFT-vs-Raft comparison finding a single
+Byzantine leader corrupts Raft's chain undetectably, which is the reason pBFT, not Raft, is the
+correct choice here -- a reason the paper never states (Tier 2); external anchoring against a
+simulated public chain, answering \S VIII's own stated future work (Tier 2--3); and a real,
+measured honeypot data-poisoning attack together with a drift-detection defense built and
+evaluated against it, closing the loop this project's own threat model opened. The defense
+finding is a genuine research contribution, not a critique: it catches the poisoning strategy
+predicted least catchable (an engineered class-boundary midpoint that, in a balanced corpus,
+coincides with the population mean) and misses the one predicted most catchable (label flipping,
+invisible to a feature-only detector by construction), at a false-positive cost measured rather
+than assumed. \textbf{Detection} (\S\ref{sec:detection-analysis}): the honeypot pipeline's own
+end-to-end result; adversarial feature-space evasion finding roughly a quarter of ransomware
+samples trivially evadable, and a hardening defense that works only at a real, non-trivial
+accuracy cost and only within a narrow training-budget window, confirmed non-tree-specific by an
+independent neural-network replication; and transfer evaluation against two real malware
+datasets (ClaMP, EMBER) finding the honeypot schema's dynamic behavioural design does not ground
+in either, because no static dataset can observe what only execution produces.
+\textbf{Scalability} (\S\ref{sec:scalability}): on-chain storage growth from clinical to
+network scale, and confirmation that the paper's own reported throughput curve does not scale
+the way it is presented as scaling. One extension remains unpursued: an asynchronous pBFT variant
+with modelled network latency beyond the fixed delays \S IV-C already sweeps.
 
-Taken together, the two findings point in the same direction rather than opposite ones. A paper
-whose evaluation methodology cannot be checked because its protocol is underspecified, and whose
-one checkable headline number does not reproduce even under the most literal reading of its own
-stated split, is a paper whose central empirical claim should not be relied on as published. That
-is a narrower conclusion than ``the framework does not work'': our own honeypot pipeline shows a
-version of Algorithm 3, trained on data Algorithm 2 actually specifies producing, detecting
-ransomware at a real, bounded, non-degenerate rate. The architecture is worth building on. The
-published numbers, as published, are not evidence that it works as well as claimed.
+Taken together, the three findings point in the same direction rather than opposite ones. A paper
+whose evaluation methodology cannot be checked because its protocol is underspecified, whose one
+checkable headline number does not reproduce even under the most literal reading of its own
+stated split, and whose central architectural idea -- once actually built, attacked, and
+defended -- turns out to have real, measured gaps its own security argument has no vocabulary to
+name, is a paper whose claims should not be relied on as published, at any of the three levels
+this report checked them. That is a narrower conclusion than ``the framework does not work'': our
+own honeypot pipeline shows a version of Algorithm 3, trained on data Algorithm 2 actually
+specifies producing, detecting ransomware at a real, bounded, non-degenerate rate, and our own
+defense against the poisoning attack this project also found shows that at least one of the
+architecture's real gaps is a solvable one, measured rather than merely named. The architecture
+is worth building on. The published numbers, as published, and the informal security argument, as
+argued, are not evidence that it works or defends as well as claimed.
 
 \begin{thebibliography}{9}
 
@@ -2239,6 +2244,18 @@ Digital Signature Algorithm (ECDSA),'' RFC~6979, IETF, Aug.\ 2013.
 C.~Cremers, ``The Scyther Tool: Verification, Falsification, and Analysis of Security
 Protocols,'' in \emph{Computer Aided Verification (CAV)}, LNCS vol.~5123, Springer, 2008,
 pp.~414--418.
+
+\bibitem{ongaro2014raft}
+D.~Ongaro and J.~Ousterhout, ``In Search of an Understandable Consensus Algorithm,'' in
+\emph{Proc.\ USENIX Annual Technical Conference (ATC)}, 2014, pp.~305--319.
+
+\bibitem{welford1962}
+B.~P.~Welford, ``Note on a Method for Calculating Corrected Sums of Squares and Products,''
+\emph{Technometrics}, vol.~4, no.~3, pp.~419--420, 1962.
+
+\bibitem{page1954}
+E.~S.~Page, ``Continuous Inspection Schemes,'' \emph{Biometrika}, vol.~41, no.~1/2,
+pp.~100--115, 1954.
 
 \end{thebibliography}
 

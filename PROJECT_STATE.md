@@ -4,45 +4,47 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-26 · **Milestone:** M7 stretch — M7-12 (statistical poisoning
-detection) done · **Sessions completed:** 28
+**Last updated:** 2026-09-26 · **Milestone:** M7 stretch complete; write-up restructured ·
+**Sessions completed:** 29
 
 ---
 
 ## One-line status
 
-M7-12 built and measured the defense M7-11 only predicted the shape of: a drift-detection gate on
-`BC_SigRW`'s pre-commit path, evaluated against all 15 of M7-11's (strategy, budget) cells.
+The report is restructured (17 chronological sections → 10: Introduction, Paper Summary,
+Implementation, Reproduction Results, Security Analysis, Detection Analysis, Scalability
+Analysis, Critique, What the Paper Gets Right, Conclusion) and recompiled; the next action on
+this project is presentation prep, not more extensions.
 
-- **`detection/drift.py`** (new): `DriftDetector` (Welford's online per-feature running stats,
-  two scoring methods — Mahalanobis RMS-aggregated batch-centroid distance, and Page-Hinkley over
-  that signal). No historical sample is ever stored, which is also why a full per-feature KS test
-  (needs the raw samples, not just their moments) was scoped out rather than built.
-- **`consensus/validated_commit.py`** (new): `ValidatedSigRWChain` overrides `Chain.check_append()`
-  for `BC_SigRW` only, so a replica that scores a batch as anomalous raises `ChainError` and is
-  rejected by pBFT's existing `2f+1` vote-counting — no new consensus message. `consensus/pbft.py`
-  gained one additive `Cluster.__init__(chain_factory=...)` parameter (default `Chain`, so
-  `BC_DTBU` is unaffected).
-- **Finding: the defense catches the strategy predicted least catchable, and misses the one
-  predicted most catchable.** Anchor-point injection's interpolated midpoint coincides with the
-  corpus's *population mean* in a class-balanced corpus — it scores *below* the same-size
-  clean-batch noise floor at every budget. Label flipping/feature poisoning score *above* the
-  noise floor at budgets ≥5%, but from batch *composition* (all-malicious rows), not label
-  content, which the detector structurally cannot see — an honest ransomware outbreak would
-  trigger the identical alarm. At the shipped, pre-registered threshold: 0/15 M7-11 cells
-  prevented, false-positive rate 0/30 clean batches, a "new family" probe (17x the clean p95) not
-  flagged either — the detection-vs-false-positive tension measured, not assumed.
-- **Two new trust assumptions** (`docs/THREAT_MODEL.md` TA-6: `BC_SigRW` replicas can now decrypt
-  `Sig_RW` payloads, narrowing "miners validate blocks they cannot read"; TA-7: every honest
-  replica must run the same `DriftPolicy`) and **one named architectural exception**
-  (`consensus/` → `detection/`, pinned in `test_module_boundaries.py`'s `CONSENSUS_DETECTION_ALLOWED`,
-  since `detection/drift.py` itself has zero internal dependencies).
-- `docs/DEVIATIONS.md` DEV-38. `docs/THREAT_MODEL.md` Gap 1's "post-commit detection... not
-  built" paragraph rewritten as "pre-commit detection, built and measured," plus TA-6/TA-7.
-  `RESULTS.md` "M7-12". `docs/ARCHITECTURE.md` §consensus updated.
+- **`docs/report/report.tex`**: rebuilt by exact-line-range extraction and reassembly, not
+  retyped — every number/table cell/finding traces to the same `RESULTS.md` line it did before.
+  Redundancy given exactly one home each: Raft's quantitative table moved to Reproduction Results
+  (next to pBFT's own timing), its qualitative Byzantine-leader finding to Security Analysis;
+  GAP-2 (storage) moved out of Critique (it was never one of the "five defects") into Scalability
+  Analysis; DEV-08/FLAW-4's Critique paragraphs shortened to interpretation + cross-reference, the
+  measured evidence stays in Reproduction Results/Scalability. Scyther verification moved from
+  Implementation (which keeps the design decision) to Security Analysis (Tier 1 evidence). Three
+  new bibliography entries (Raft, Welford, Page-Hinkley) for name-drops that had none.
+- **Seven figure pairs merged** (18 → 11 figure environments, both original labels kept per
+  merged float so no `\ref` broke). **One table condensed** (hybrid-anchor frequency sweep, 18
+  raw rows → 3-row summary, full data still cited to `RESULTS.md` M7-5). Two subsections
+  (D3 serialization-on supplement, Neural-vs-Tree) trimmed ~30-40% without losing a number.
+- **Finding: the report was already 25 pages before this session touched it** — the "16+" belief
+  driving the <20-page target was stale. Compiling the untouched original standalone confirmed
+  this. The naive reorganization pushed it to 27; this session's compression brought it back to
+  25 — even with everything, **not under 20**, because the document is genuinely dense (verified
+  page-by-page at 300 DPI: no wasted whitespace, floats already packed tight). Reaching 20 from
+  here needs cutting whole findings, not padding — see Next task.
+- **A real rendering defect was caught and fixed**, not shipped: tightening IEEEtran's float
+  separation lengths (a standard page-budget lever) caused a genuine text/table overlap,
+  reproduced across three clean rebuilds, bisected to that one preamble change, and removed
+  (it bought zero net pages anyway). Every one of the report's 25 pages was visually re-verified
+  clean after the fix.
+- Ada/EMBER: re-verified already closed (commit `70f9e3c`, `RESULTS.md` M7-10a) — no new Ada work
+  this session; this is the second session in a row to find this already done.
 
-`make test` (1661 passed: 14 drift + 4 validated-commit, new this session) and `make lint` (ruff +
-mypy --strict on `src`/`tests`) both green.
+`make test` (1661 passed) and `make lint` (ruff + mypy --strict) unaffected and confirmed green —
+this session touched only `docs/report/report.tex`.
 
 ---
 
@@ -50,33 +52,27 @@ mypy --strict on `src`/`tests`) both green.
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | `detection/drift.py`, `consensus/validated_commit.py` added this session |
-| `docs/report/report.pdf` | done, current | recompiled (`tectonic`), new §"Statistical Poisoning Detection" |
-| `docs/THREAT_MODEL.md` | done | TA-6/TA-7 added; Gap 1 updated with M7-12's measured results |
-| `scripts/m7_12_poisoning_defense.py` | done | ~5s local run; run_id `20260926T041840Z-670ec207` |
-| Everything else (M7-1 through M7-11's own deliverables) | done | unchanged |
-
-## Current numbers
-
-`RESULTS.md` "M7-12", run `20260926T041840Z-670ec207`. 0/15 M7-11 cells prevented at Mahalanobis
-threshold=3.0. Mahalanobis scores: label_flip 0.32-0.57, feature_poison 0.28-0.50,
-anchor_point_injection 0.008-0.016. Matched clean-batch noise floor p95 by size (n=7/36/72/
-143/358/353): 0.551/0.238/0.161/0.110/0.067/0.070. False-positive rate 0/30. New-family probe
-score 1.2255, not flagged. Real pBFT: 4/4 burst-commit scenarios (label-flip and anchor-shift,
-39-40 records, defended and undefended) committed against a 6-block honest history.
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session |
+| `docs/report/report.pdf` | done, restructured, 25 pages | recompiled (`tectonic`); every page visually verified; not under the 20-page target — see Risks |
+| Everything else (M7-1 through M7-12's own deliverables) | done | unchanged |
 
 ## Next task
 
-None forced — M7 is complete except the items below, none required. If continued, in priority
-order: (1) a size-adaptive drift threshold (informed by this session's own noise-floor-by-batch-
-size table) as the direct way to close the detection-vs-false-positive tension M7-12 measured
-rather than resolved; (2) a fuzz test for TA-7 (one replica running a mismatched `DriftPolicy`) —
-untested, only stated; (3) async pBFT with modelled network latency, the one remaining
-`docs/ROADMAP.md` M7 item from before M7-11/12.
+None forced. If a future session is asked to close the report's page-count gap specifically, in
+order of how much substance each option costs (cheapest first): (1) accept ~24-25 pages as
+accurate for twelve extensions' worth of measured content, and change the target instead of the
+report; (2) cut a whole confirmatory sub-experiment rather than trim more prose — the MLP-vs-RF
+architecture comparison and the EMBER half of the real-data-transfer section are the most
+independently-cuttable (each confirms rather than introduces a headline finding), each needing a
+`docs/DEVIATIONS.md`-style note that it was cut for length, not retracted; (3) move detailed
+per-cell tables (M7-6's hypothesis sweep, the 12-row pBFT-vs-Raft matrix) to a
+supplementary/appendix file, keeping only summary tables in the main body — the pattern this
+session already applied to the hybrid-anchoring frequency sweep.
 
 ## Blockers
 
-None.
+None. The report compiles and renders correctly at its current length; the 20-page target is
+unmet but blocks nothing else.
 
 `data/raw/` is present in this environment already; a genuinely fresh clone still needs
 `make data` (~56 minutes) first.
@@ -85,7 +81,7 @@ None.
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q11 | Is the report's length sufficient, or should it be trimmed? | report sign-off | reviewer judgement |
+| Q11 | Is the report's length (25pp) acceptable for submission, or does it need the deeper, substance-costing cuts described in "Next task"? | report sign-off | reviewer/instructor judgement |
 
 ## Carried debt
 
@@ -98,11 +94,9 @@ None.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 tested eight hypotheses, narrowed the gap to 1.51pt; report states the residual as measured-and-bounded |
-| M7-7's/M7-10a's bal_acc=0.5000 could be misread as "the framework doesn't work" rather than a schema-grounding finding | undersells the synthetic-corpus result and the framework's design | DEV-34/DEV-35 and the report state explicitly this is a static-vs-dynamic grounding finding, and note the PR-AUC nuance |
-| M7-8's/M7-10b's hardening-backfire findings could be read as "adversarial retraining/neural nets don't work" | undersells the real robustness gain measured at other budgets | `RESULTS.md`/report state both effects explicitly, side by side with the budgets that do help |
-| M7-11's "anchor-point injection improves accuracy at low budget" could be read as "poisoning is safe" | undersells label flipping's monotonic collapse and the permanence finding | `RESULTS.md`/report/DEV-37 lead with label flipping before noting anchor injection's anomaly |
-| M7-12's "0/15 cells prevented" could be read as "the defense doesn't work" rather than "this specific threshold, chosen before measurement, is conservative, and loosening it has a measured false-positive cost" | undersells that the mechanism does work exactly where the array-level analysis says it should (large, novel-feature batches against mature history) | DEV-38/`RESULTS.md`/`docs/THREAT_MODEL.md` all lead with the anchor-point-injection inversion finding and the noise-floor table before the headline 0/15, and state the threshold as a measured tension, not a failure |
-| Two Claude Code sessions ran on this repo concurrently during M7-10 (M7-9, M7-10); nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — flagging as a standing risk; re-read a file immediately before writing to it if a long gap occurred since it was first read |
+| M7-12's "0/15 cells prevented" could be read as "the defense doesn't work" | undersells that the mechanism works exactly where predicted (large, novel-feature batches against mature history) | DEV-38/`RESULTS.md`/report all lead with the anchor-point-injection inversion finding before the headline 0/15 |
+| The report is 25 pages, not the requested under-20 | a page-limited venue/rubric may reject it as-is | PROJECT_STATE.md/session file state the finding and the three ranked options honestly rather than silently shipping either an over-length report or one hollowed out to hit a number |
+| Two Claude Code sessions ran on this repo concurrently during M7-10; nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — flagging as a standing risk; re-read a file immediately before writing to it if a long gap occurred since it was first read |
 
 ---
 
