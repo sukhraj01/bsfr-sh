@@ -985,3 +985,63 @@ DEV-37, `docs/THREAT_MODEL.md` Gap 1 (updated), report §"Honeypot Data Poisonin
 
 Figures: `results/figures/fig11a_poisoning_degradation.png`, sidecar
 `results/logs/20260925T193933Z-3d53aee9.json`.
+
+## M7-12 — statistical poisoning detection: the defense M7-11 measured the absence of (2026-09-26)
+
+`scripts/m7_12_poisoning_defense.py --seed 20260912`, run_id `20260926T041840Z-670ec207`,
+sidecar `results/logs/20260926T041840Z-670ec207.json`. Baseline reproduces M7-3/M7-11's 0.8408
+exactly. `detection/drift.py` (`DriftDetector`: Welford running stats, Mahalanobis + Page-Hinkley
+scoring) and `consensus/validated_commit.py` (`ValidatedSigRWChain`, gates `Chain.check_append()`
+for `BC_SigRW` only) measured against exactly M7-11's three strategies and five budgets, plus a
+false-positive rate, a matched-batch-size noise floor, a "new ransomware family" probe, and two
+real pBFT commits. Full discussion: `docs/THREAT_MODEL.md` Gap 1's "pre-commit detection, built
+and measured" subsection; `docs/DEVIATIONS.md` DEV-38.
+
+```
+2026-09-26 | detection/honeypot-m7-12-drift-defense | label_flip @1% budget, n_poisoned=7 | prevented=False maha_score=0.5693 ph_score=0.0000 | undefended_bal_acc=0.8258 defended_bal_acc=0.8258 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | label_flip @5% budget, n_poisoned=36 | prevented=False maha_score=0.3660 ph_score=0.0000 | undefended_bal_acc=0.8158 defended_bal_acc=0.8158 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | label_flip @10% budget, n_poisoned=72 | prevented=False maha_score=0.3244 ph_score=0.0000 | undefended_bal_acc=0.8151 defended_bal_acc=0.8151 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | label_flip @20% budget, n_poisoned=143 | prevented=False maha_score=0.3236 ph_score=0.0000 | undefended_bal_acc=0.7873 defended_bal_acc=0.7873 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | label_flip @50% budget, n_poisoned=358 | prevented=False maha_score=0.3256 ph_score=0.0000 | undefended_bal_acc=0.6825 defended_bal_acc=0.6825 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | feature_poison @1% budget, n_poisoned=7 | prevented=False maha_score=0.5015 ph_score=0.0000 | undefended_bal_acc=0.8327 defended_bal_acc=0.8327 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | feature_poison @5% budget, n_poisoned=36 | prevented=False maha_score=0.3229 ph_score=0.0000 | undefended_bal_acc=0.8354 defended_bal_acc=0.8354 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | feature_poison @10% budget, n_poisoned=72 | prevented=False maha_score=0.2828 ph_score=0.0000 | undefended_bal_acc=0.8248 defended_bal_acc=0.8248 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | feature_poison @20% budget, n_poisoned=143 | prevented=False maha_score=0.3271 ph_score=0.0000 | undefended_bal_acc=0.8255 defended_bal_acc=0.8255 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | feature_poison @50% budget, n_poisoned=358 | prevented=False maha_score=0.3268 ph_score=0.0000 | undefended_bal_acc=0.8109 defended_bal_acc=0.8109 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | anchor_point_injection @1% budget, n_poisoned=7 | prevented=False maha_score=0.0162 ph_score=0.0000 | undefended_bal_acc=0.8355 defended_bal_acc=0.8355 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | anchor_point_injection @5% budget, n_poisoned=36 | prevented=False maha_score=0.0084 ph_score=0.0000 | undefended_bal_acc=0.8452 defended_bal_acc=0.8452 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | anchor_point_injection @10% budget, n_poisoned=72 | prevented=False maha_score=0.0083 ph_score=0.0000 | undefended_bal_acc=0.8427 defended_bal_acc=0.8427 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | anchor_point_injection @20% budget, n_poisoned=143 | prevented=False maha_score=0.0078 ph_score=0.0000 | undefended_bal_acc=0.8415 defended_bal_acc=0.8415 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-drift-defense | anchor_point_injection @50% budget, n_poisoned=358 | prevented=False maha_score=0.0085 ph_score=0.0000 | undefended_bal_acc=0.8365 defended_bal_acc=0.8365 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-false-positive-rate | 30 clean eval-corpus batches of 25 rows | mahalanobis_fpr=0.0000 page_hinkley_fpr=0.0000 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-noise-floor | 300 clean eval-corpus batches of n=7 rows | p50=0.3496 p95=0.5510 max=1.2204 | measured | 20260926T041840Z-670ec207 | M7-12, same-size comparison for the sweep cell at this n
+2026-09-26 | detection/honeypot-m7-12-noise-floor | 300 clean eval-corpus batches of n=36 rows | p50=0.1637 p95=0.2375 max=0.2837 | measured | 20260926T041840Z-670ec207 | M7-12, same-size comparison for the sweep cell at this n
+2026-09-26 | detection/honeypot-m7-12-noise-floor | 300 clean eval-corpus batches of n=72 rows | p50=0.1200 p95=0.1612 max=0.2097 | measured | 20260926T041840Z-670ec207 | M7-12, same-size comparison for the sweep cell at this n
+2026-09-26 | detection/honeypot-m7-12-noise-floor | 300 clean eval-corpus batches of n=143 rows | p50=0.0839 p95=0.1099 max=0.1422 | measured | 20260926T041840Z-670ec207 | M7-12, same-size comparison for the sweep cell at this n
+2026-09-26 | detection/honeypot-m7-12-noise-floor | 300 clean eval-corpus batches of n=358 rows | p50=0.0550 p95=0.0670 max=0.0755 | measured | 20260926T041840Z-670ec207 | M7-12, same-size comparison for the sweep cell at this n
+2026-09-26 | detection/honeypot-m7-12-noise-floor | 300 clean eval-corpus batches of n=353 rows | p50=0.0560 p95=0.0699 max=0.0889 | measured | 20260926T041840Z-670ec207 | M7-12, same-size comparison for the sweep cell at this n
+2026-09-26 | detection/honeypot-m7-12-new-family | 353 rows, features scaled | mahalanobis_detected=False score=1.2255 | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-real-commit | label_flip_burst_undefended, 6 honest blocks seeded, 39 poisoned records in one burst | height_before=6 height_after=7 committed=True | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-real-commit | anchor_shift_burst_undefended, 6 honest blocks seeded, 40 poisoned records in one burst | height_before=6 height_after=7 committed=True | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-real-commit | label_flip_burst_defended, 6 honest blocks seeded, 39 poisoned records in one burst | height_before=6 height_after=7 committed=True | measured | 20260926T041840Z-670ec207 | M7-12
+2026-09-26 | detection/honeypot-m7-12-real-commit | anchor_shift_burst_defended, 6 honest blocks seeded, 40 poisoned records in one burst | height_before=6 height_after=7 committed=True | measured | 20260926T041840Z-670ec207 | M7-12
+```
+
+**Finding: the defense catches the strategy predicted least catchable, and misses the one
+predicted most catchable.** Anchor-point injection scores *below* the matched-size clean-batch
+noise floor at every budget (e.g. 0.0078 vs. clean p95 0.11 at n=143) — its interpolated midpoint
+sits almost exactly at the population mean in a roughly class-balanced corpus, the sharpest
+possible case of "sophistication and detectability are not the same axis" this project has
+measured. Label flipping and feature poisoning score *above* the matched noise floor at
+budgets >=5% — not because a label was read (the detector cannot see labels at all), but because
+an all-malicious batch's feature composition differs from the profile's usual mix; an honest,
+unusually ransomware-heavy batch would trigger the identical signal. At the shipped, conservative
+threshold (chosen before any of this was measured), 0 of 15 cells were actually prevented, and
+neither the new-family probe (score 17x the clean p95) nor either real 39-40-record pBFT burst
+was rejected — false-positive rate stayed at 0/30, the tension the brief asked for measured
+directly rather than assumed. Real single-record commits (M7-11's own permanence-demo shape) are
+undetectable in principle: `n=1` has no averaging to suppress noise, and the noise floor only
+grows as batches shrink.
+
+Figures: `results/figures/fig12_drift_defense_comparison.png`, sidecar
+`results/logs/20260926T041840Z-670ec207.json`.

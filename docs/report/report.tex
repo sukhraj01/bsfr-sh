@@ -2039,6 +2039,126 @@ validity" distinction \S\ref{sec:threat-model}'s coverage matrix already needed 
 $Sig_{RW}$/$FT_{RW}$'s own integrity-vs-truth caveat -- Gap 1 is that distinction's sharpest
 consequence, not a new one.
 
+\section{Statistical Poisoning Detection}
+\label{sec:m7-12}
+
+\S\ref{sec:m7-11} measured the attack Gap 1 named: a validly-signed poisoned $Sig_{RW}$ record
+commits to $BC_{SigRW}$ exactly as cleanly as an honest one, because \texttt{Chain.check\_append}'s
+five checks are all structural or cryptographic. This section builds and measures the defense
+Gap 1 predicted the shape of but never implemented -- a genuine research contribution, not a
+reproduction of the paper or a critique of it, since Algorithm 2 has no semantic validation step
+to reproduce or critique in the first place.
+
+\subsection{The mechanism: batch-level drift, gated into the existing vote}
+
+\texttt{detection.drift.DriftDetector} keeps a per-replica running per-feature profile
+(\texttt{RunningStats}, Welford's online algorithm -- no historical sample is ever stored or
+re-read) and scores an incoming batch two ways: \textbf{Mahalanobis}, a diagonal, RMS-aggregated
+standardized distance of the batch centroid from the running mean; and \textbf{Page-Hinkley}, a
+classical streaming mean-shift test applied to that same scalar signal, for slow cumulative drift
+across many small batches. A full per-feature Kolmogorov-Smirnov test needs the historical sample
+\emph{values}, not just their moments, so it was scoped out rather than built. This is
+deliberately \emph{not} per-sample outlier detection -- DEV-26 already rules that out for the
+honeypot's own design, since a single unusual sample can be genuine, newly-observed ransomware
+behaviour, not poison.
+
+\texttt{consensus.validated\_commit.ValidatedSigRWChain} subclasses \texttt{Chain} and overrides
+\texttt{check\_append()} -- the one place \texttt{consensus/pbft.py}'s own docstring says block
+validity is decided ("Consensus decides whether, \texttt{Chain} decides valid") -- to run the
+detector over the block's decrypted $Sig_{RW}$ batch after the five existing checks pass. A
+replica that detects drift raises \texttt{ChainError} and is rejected by the \emph{existing} pBFT
+vote-counting exactly like a bad signature would be: no new consensus message, no change to
+\texttt{Replica}'s state machine. \texttt{Cluster.\_\_init\_\_} gained one additive,
+backward-compatible \texttt{chain\_factory} parameter (default \texttt{Chain}) so $BC_{DTBU}$'s
+commit path is unaffected.
+
+\subsection{Defended vs.\ undefended: all 15 of \S\ref{sec:m7-11}'s cells}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig12_drift_defense_comparison.png}
+\caption{Defended (Mahalanobis-gated) vs.\ undefended balanced accuracy, all three strategies,
+five budgets each.}
+\label{fig:m7-12-comparison}
+\end{figure}
+
+\textbf{The defense catches the strategy predicted least catchable, and misses the one predicted
+most catchable.} Anchor-point injection's interpolated class-boundary midpoint coincides, in a
+roughly class-balanced corpus, with the \emph{population mean} -- it scores \emph{below} the
+same-size clean-batch noise floor at every budget measured (e.g.\ $0.008$ vs.\ a clean $p_{95}$ of
+$0.11$ at $n{=}143$), the sharpest measured case yet of "sophistication and detectability are not
+the same axis." Label flipping and feature poisoning score \emph{above} the matched noise floor at
+budgets $\geq5\%$ -- not because the detector reads labels (it structurally cannot; $FT_{RW}$ and
+\texttt{label} are separate fields by design), but because an all-malicious batch's feature
+\emph{composition} differs from the profile's usual mix. An honest, unusually ransomware-heavy
+batch -- a real outbreak, not an attack -- would trigger the identical alarm.
+
+At the threshold this session shipped (Mahalanobis RMS $\geq 3.0$, chosen before any of the above
+was measured and left unmoved after), \textbf{0 of the 15 cells were actually prevented}: every
+defended-column number in Table~\ref{tab:m7-12} equals the undefended one, because nothing crossed
+the bar. This is not "the defense does not work" -- see the false-positive analysis below for why
+the bar was not simply lowered.
+
+\begin{table*}[t]
+\centering
+\small
+\begin{tabular}{lrrrr}
+\hline
+Strategy & Budget & Mahalanobis score & Clean-batch $p_{95}$ (matched $n$) & Prevented \\
+\hline
+Label flip & 1--50\% & 0.32--0.57 & 0.24--0.55 & No \\
+Feature poison & 1--50\% & 0.28--0.50 & 0.24--0.55 & No \\
+Anchor injection & 1--50\% & 0.008--0.016 & 0.067--0.55 & No \\
+\hline
+\end{tabular}
+\caption{Score ranges across all five budgets per strategy (full per-cell numbers: \texttt{RESULTS.md} M7-12). Label-flip/feature-poison scores exceed the matched noise floor at $n\geq36$ (budgets $\geq5\%$); anchor injection never does.}
+\label{tab:m7-12}
+\end{table*}
+
+\subsection{False-positive rate, and the new-family tension}
+
+Zero of 30 chunked, never-poisoned eval-corpus batches (25 rows each) triggered a false alarm at
+the shipped threshold. A documented, disclosed feature-space perturbation of real ransomware rows
+-- scaling network/beacon features up and crypto/encryption features down, modelling a
+hypothetical family that exfiltrates rather than encrypts, never a new call into
+\texttt{honeypot/collector.py}'s own generator -- scored $1.2255$, roughly $17\times$ its own
+matched clean-batch $p_{95}$ ($0.070$), and was \emph{still not flagged} at the shipped threshold.
+This is the tension item 4 of the M7-12 brief asked for, measured rather than assumed: a threshold
+loose enough to catch that probe sits close enough to the label-flip/feature-poison noise range
+that it would also raise the false-positive rate on ordinary small clean batches -- the exact
+trade-off a real deployment would have to accept explicitly, not one this session resolved by
+picking a more flattering number.
+
+\subsection{The architectural observation, and its cost}
+
+Gating the check inside \texttt{check\_append()} is the right integration point because it is the
+last moment before immutability makes the decision permanent -- once committed, $BC_{SigRW}$'s own
+guarantee (\S\ref{sec:m7-11}) prevents removal. Reusing pBFT's existing $2f{+}1$ threshold, rather
+than inventing a new vote type, means a Tier-2 adversary who also controls one consensus replica
+still cannot force a commit past three independently-refusing honest replicas.
+
+That integration point has a cost this project had not paid before: \texttt{blockchain/
+transaction.py}'s own docstring states "miners validate blocks they cannot read; that is the
+point" -- $Sig_{RW}$ payloads are hybrid-encrypted to one recipient (DEV-01), and no replica held
+that key before this session. \texttt{ValidatedSigRWChain} requires one, which
+\S\ref{sec:threat-model} states as a new trust assumption (TA-6) rather than a detail: this
+defense narrows a confidentiality invariant that held since M2b. A second new assumption (TA-7):
+every honest replica must run the identical \texttt{DriftPolicy} to agree on whether to vote --
+untested against a policy-mismatched replica, stated as a limitation rather than assumed away.
+
+\subsection{The gap is real, and this is a measured, partial answer to it}
+
+This defense is not in the paper's design, and its absence is a real gap -- \S\ref{sec:m7-11}
+demonstrated exactly how much that costs. It is also not a general fix: measured against the
+three strategies and five budgets already on record, it closes one case (a batch introducing
+feature values the corpus profile has never produced, submitted at enough scale against a mature
+history) and does not close the strategy M7-11 found most damaging, except as a side effect of
+batch composition an honest outbreak would trigger identically. A single record -- \S\ref{sec:m7-11}'s
+own permanence-demo shape -- is undetectable in principle at any threshold, since a batch of one
+has no averaging to suppress sampling noise. Reporting a solvable gap honestly, with the numbers
+that show exactly how far the solution reaches and where it stops, is the more useful contribution
+than reporting either "poisoning is unsolved" or "poisoning is solved."
+
 \section{Conclusion}
 
 We built a complete, from-scratch implementation of BSFR-SH's five algorithms, both of its

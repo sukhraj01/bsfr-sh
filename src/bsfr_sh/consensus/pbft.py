@@ -188,6 +188,18 @@ class Honest:
 HONEST: Final = Honest()
 
 
+class ChainFactory(Protocol):
+    """What `Cluster.__init__` calls once per replica to build that replica's `Chain`.
+
+    `Chain` itself satisfies this (its `policy` parameter is keyword-only, matching the call
+    below) — the default value below reproduces the pre-M7-12 behaviour exactly. M7-12's
+    `consensus.validated_commit.build_validated_sigrw_chain_factory` is the other implementation,
+    used only for `BC_SigRW` clusters that opt into pre-commit drift validation.
+    """
+
+    def __call__(self, name: str, *, policy: ChainPolicy | None) -> Chain: ...
+
+
 @dataclass(frozen=True)
 class Rejection:
     """A message a replica refused, and why."""
@@ -801,6 +813,7 @@ class Cluster:
         submitters: Mapping[str, PublicKey],
         chain_policy: ChainPolicy | None = None,
         start_time: float = 0.0,
+        chain_factory: ChainFactory = Chain,
     ) -> None:
         if len(keys) != policy.replicas:
             raise ConsensusError(
@@ -823,7 +836,7 @@ class Cluster:
         )
         self.replicas: dict[str, Replica] = {}
         for rid in self.membership.ids:
-            chain = Chain(chain_name, policy=chain_policy)
+            chain = chain_factory(chain_name, policy=chain_policy)
             chain.adopt_genesis(genesis)
             self.replicas[rid] = Replica(
                 replica_id=rid,

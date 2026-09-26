@@ -224,6 +224,22 @@ The paper states none of these. Listed here because every result above is condit
    in practice (a more realistic deployment posture), the single-feature and combined-evasion
    numbers are the more representative figures, and the detector is considerably harder to evade
    than the adaptive-attack headline alone would suggest.
+6. **(M7-12) `BC_SigRW` replicas can decrypt the `Sig_RW`/`FT_RW` payloads they vote on.** Added
+   by the drift-detection defense (Gap 1, below), and a real widening of trust, not a detail:
+   `blockchain/transaction.py`'s own docstring states the invariant this narrows — "Miners in M2b
+   validate blocks they cannot read; that is the point." `Sig_RW` payloads are hybrid-encrypted to
+   one recipient (DEV-01); a semantic check over plaintext features cannot run without plaintext
+   features, so `consensus.validated_commit.ValidatedSigRWChain` requires a decryption key for
+   every `BC_SigRW` replica that runs it. This assumption does not extend to `BC_DTBU`, whose
+   replicas remain exactly as blind as before (DEV-38).
+7. **(M7-12) Every honest `BC_SigRW` replica runs the same drift policy and sees batches in the
+   same order.** The latter already follows from pBFT's total order within one chain; the former
+   does not follow from anything — it is a new, independent assumption `detection.drift.
+   DriftPolicy` introduces. A replica with a different threshold, a different decryption
+   capability, or a profile that has silently diverged from its peers' disagrees with them about
+   whether to vote, and an adversary who can induce that disagreement can exploit it (this is not
+   measured; DEV-38 states it as a stated-but-untested limitation, matching this section's own
+   convention of naming assumptions the paper — or, here, the defense — does not itself verify).
 
 ---
 
@@ -292,12 +308,62 @@ gap: it appends, nothing removes.
 structural or cryptographic, none semantic. A correctly formatted, correctly signed poisoned
 sample passes every existing validation check.
 
-*Post-commit detection.* Not built, and named as a real gap rather than fixed (OUT OF SCOPE for
-M7-11): honest nodes independently maintaining feature distributions and flagging statistical
-outliers in new contributions could in principle catch anchor-point-style poisoning (it visibly
-clusters near the class boundary) but not label flipping (its features are real, only the label
-lies) — and the mechanism itself would need cross-node feature-space agreement, a research
-problem this project does not attempt to solve.
+*Pre-commit detection, built and measured (M7-12).* M7-11 named this gap without building it,
+predicting (before measuring) that "outlier detection... could in principle catch anchor-point-
+style poisoning... but not label flipping." Measured, the prediction is exactly backwards.
+`detection.drift.DriftDetector` plus `consensus.validated_commit.ValidatedSigRWChain` (DEV-38)
+implement *batch*-level distributional drift detection — not the per-sample outlier check M7-11's
+prediction and DEV-26 both correctly rule out — gated into `Chain.check_append()` itself, the one
+place `consensus/pbft.py`'s own docstring says block validity is decided, so a replica that
+detects drift withholds its prepare/commit vote through the existing `2f+1` threshold arithmetic,
+with no new consensus message type. Measured against exactly M7-11's three strategies and five
+budgets (`RESULTS.md` M7-12, `scripts/m7_12_poisoning_defense.py`):
+
+* **Anchor-point injection — predicted catchable, measured invisible at every budget.** Its
+  engineered midpoint between the two class centroids sits, in a roughly class-balanced corpus,
+  almost exactly at the *population* mean — the batch that is supposed to look most like an
+  attack looks the least anomalous of the three, scoring *below* the same-size clean-batch noise
+  floor at every budget measured (e.g. 0.0078 vs. a clean p95 of 0.11 at n=143).
+* **Label flipping — predicted invisible, measured statistically distinguishable from equally-
+  sized clean noise at budgets >=5%, in isolation.** A batch of only the mislabelled real
+  ransomware rows scores above the matched-size clean-batch noise floor (0.33 vs. a clean p95 of
+  0.24 at n=36) — not because the label lied, which the detector cannot see (features and labels
+  are decoupled, `honeypot/features.py`'s own schema), but because an all-malicious batch's
+  feature *composition* differs from the profile's usual benign/malicious mix. The same signal
+  would fire on an honest batch that happened to be unusually ransomware-heavy — an outbreak, not
+  an attack — which is this defense's own version of item below's new-family tension, sharpened:
+  it cannot distinguish "mislabelled" from "unusually pure," only "unusual."
+* **Feature poisoning** behaves like label flipping (moderate, composition-driven scores, not a
+  genuine distributional shift), consistent with M7-11's own finding that this strategy is mild
+  because its injected rows are literally resampled from already-observed benign feature values.
+* **The real end-to-end pBFT demonstration (small, ~35-sample honest history, the realistic
+  early-chain case) did not reject either a label-flip or an anchor-shift burst of 39-40 records**
+  at the conservative threshold this session shipped (Mahalanobis RMS >= 3.0, chosen before any
+  of the above was measured, and left unmoved after — lowering it to match the array-level
+  finding would also raise the false-positive rate on equally-small legitimate batches, which
+  is exactly the tension item 4 below states, not a threshold that was simply mistuned).
+* **A single record (M7-11's own permanence-demo shape) is undetectable in principle, at any
+  threshold.** Batch-level testing has no averaging to lean on at `n=1`; the noise floor at `n=7`
+  already needs a same-size clean-batch score as high as 1.14, and shrinks further as `n` grows —
+  the defense's own design (deliberately batch-level, per DEV-26) is structurally blindest at
+  exactly the smallest, least-visible submission an adversary can make.
+
+**Honest summary: this is a real, working, measured defense against exactly one thing —**
+**a poisoning batch that introduces feature values the corpus has never produced before — and**
+**it is not a fix for Gap 1 in general.** It closes the anchor-point-style case M7-11 predicted it
+would close and M7-9 left unbuilt; it does not close label flipping (M7-11's *most damaging*
+strategy) except as an accidental side effect of batch composition that a legitimate outbreak
+would trigger identically; and it adds two new trust assumptions (§3, TA-6/TA-7) the paper's own
+confidentiality design ("miners validate blocks they cannot read") did not need before this
+session. False-positive rate on clean batches: 0/30 chunked eval-corpus batches at the shipped
+threshold; 0/1 new-family probe (a documented, disclosed feature-space perturbation, not a call
+into `honeypot/collector.py`'s generator) also did not fire, despite scoring 17x the matched
+clean-batch p95 — the tension item 4 of the M7-12 brief asked for, measured rather than assumed:
+a threshold loose enough to catch that probe is loose enough to start firing on ordinary small
+batches too. The mechanism itself (batches, not samples; cross-node feature-space agreement
+avoided by gating a check every replica already runs independently before the same vote) would
+need cross-node feature-space agreement, a research problem this project does not attempt to
+solve beyond stating it as TA-7's own limitation.
 
 *Hybrid anchoring (M7-5) does not help.* Anchoring verifies integrity of already-committed data
 over time; poisoning is a validly signed, validly consensus-approved commitment in the first
@@ -350,9 +416,13 @@ specifically, is that some metadata is meant to be externally visible).
 - `docs/PAPER_NOTES.md` §V — the five claims this document replaces with a structured argument.
 - `docs/DEVIATIONS.md` DEV-02 (session protocol), DEV-14 (Scyther, M7-1), DEV-20 (reduced view
   change), DEV-32 (Raft comparison, M7-4), DEV-33 (hybrid chain, M7-5), DEV-27/DEV-34 (honeypot
-  representativeness, M7-7).
+  representativeness, M7-7), DEV-37 (honeypot poisoning, M7-11), DEV-38 (drift-detection defense
+  and its trust assumptions, M7-12).
 - `RESULTS.md` M7-3 (adversarial attack), M7-4 (Raft comparison), M7-5 (hybrid anchoring), M7-7
-  (real-malware transfer), M7-8 (adversarial retraining).
+  (real-malware transfer), M7-8 (adversarial retraining), M7-11 (honeypot poisoning), M7-12
+  (drift-detection defense).
+- `scripts/m7_12_poisoning_defense.py`, `src/bsfr_sh/detection/drift.py`,
+  `src/bsfr_sh/consensus/validated_commit.py` — the defense measured above.
 - `verification/README.md` — the full Scyther claims table and stated limitations (Tier 1).
 - `docs/report/report.tex` §"Threat Model" — the shorter, matrix-and-gaps-focused version of this
   document, written for the report's own reader rather than as a standalone reference.

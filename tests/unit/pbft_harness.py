@@ -26,9 +26,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from bsfr_sh.blockchain.block import BlockDraft
-from bsfr_sh.blockchain.chain import BC_DTBU, build_genesis
+from bsfr_sh.blockchain.chain import BC_DTBU, Chain, build_genesis
 from bsfr_sh.blockchain.transaction import BackupPayload, Transaction, encrypt_backup
-from bsfr_sh.consensus.pbft import Cluster, PBFTPolicy, Replica
+from bsfr_sh.consensus.pbft import ChainFactory, Cluster, PBFTPolicy, Replica
 from bsfr_sh.consensus.protocol import (
     ClientRequest,
     Commit,
@@ -75,6 +75,7 @@ def make_cluster(
     seed: int = 7,
     policy: PBFTPolicy = POLICY,
     submitters: Mapping[str, PublicKey] | None = None,
+    chain_factory: ChainFactory = Chain,
 ) -> Cluster:
     keys = replica_keys(ids)
     genesis = build_genesis(owner_id=ids[0], private_key=keys[ids[0]], timestamp=GENESIS_TIME)
@@ -87,6 +88,7 @@ def make_cluster(
         policy=policy,
         seed=seed,
         submitters=submitters,
+        chain_factory=chain_factory,
     )
 
 

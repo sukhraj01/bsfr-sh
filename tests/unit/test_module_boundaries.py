@@ -30,6 +30,15 @@ PY_FILES = sorted(SRC.rglob("*.py"))
 #: It benchmarks a third-party library's own signing path, never anything of ours.
 HASHLIB_ALLOWED = {"bench/ecdsa_backends.py", "crypto/hashing.py"}
 
+#: M7-12: `consensus/validated_commit.py` is a deliberate, single, named exception to "consensus
+#: depends only on crypto/blockchain/util" (CLAUDE.md §3). Pre-commit drift validation for
+#: `BC_SigRW` has to call `detection.drift.DriftDetector` — there is no version of "score this
+#: block's batch for distributional drift before voting" that does not need the detector.
+#: `detection.drift` itself has zero internal dependencies (pure numpy/stdlib), so this is one
+#: shallow, one-directional edge, not a cycle, and it is named here rather than the rule quietly
+#: bending; `docs/ARCHITECTURE.md` §consensus and DEV-38 state the same exception.
+CONSENSUS_DETECTION_ALLOWED = {"consensus/validated_commit.py"}
+
 
 def _rel(path: Path) -> str:
     return path.relative_to(SRC).as_posix()
@@ -113,6 +122,8 @@ def test_consensus_depends_only_on_crypto_blockchain_and_util(path: Path) -> Non
         return
     internal = {mod for mod in _imported_paths(_tree(path)) if mod.startswith("bsfr_sh")}
     allowed = ("bsfr_sh.crypto", "bsfr_sh.blockchain", "bsfr_sh.util", "bsfr_sh.consensus")
+    if rel in CONSENSUS_DETECTION_ALLOWED:
+        allowed = (*allowed, "bsfr_sh.detection")
     offenders = {mod for mod in internal if not mod.startswith(allowed)}
     assert not offenders, f"{rel} imports {sorted(offenders)}"
     if rel == "consensus/network.py":

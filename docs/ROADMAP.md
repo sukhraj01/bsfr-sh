@@ -2,8 +2,9 @@
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
-**Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11) delivered;
-async pBFT with modelled network latency is the one remaining, not-required item**
+**Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11) and its
+statistical drift-detection defense (M7-12) delivered; async pBFT with modelled network latency
+is the one remaining, not-required item**
 
 ---
 
@@ -333,6 +334,21 @@ existing baseline convention). Variance is reported and the repeat count follows
       both stated as gaps, not built/fixed (OUT OF SCOPE: no defense implementation, no changes
       to the chain). `scripts/m7_11_honeypot_poisoning.py`, `RESULTS.md` M7-11,
       `docs/THREAT_MODEL.md` Gap 1 updated, report §"Honeypot Data Poisoning" (2026-09-26)
+- [x] **M7-12 — statistical poisoning detection: the defense M7-11 measured the absence of.**
+      `detection/drift.py` (Welford running stats, Mahalanobis + Page-Hinkley batch scoring) and
+      `consensus/validated_commit.py` (`ValidatedSigRWChain` gates `Chain.check_append()` for
+      `BC_SigRW` only) measured against all 15 of M7-11's cells: catches the strategy predicted
+      least catchable (anchor-point injection scores *below* the matched clean-batch noise floor
+      at every budget — its midpoint sits at the population mean) and misses the one predicted
+      most catchable (label flipping/feature poisoning score above the noise floor at >=5% budget,
+      but from batch composition, not label content, which the detector cannot see) — 0/15 cells
+      actually prevented at the shipped, pre-registered threshold. False-positive rate 0/30 clean
+      batches; a "new ransomware family" probe scored 17x the clean p95 without being flagged —
+      the detection-vs-false-positive tension measured, not assumed. Two new trust assumptions
+      (`docs/THREAT_MODEL.md` TA-6 decryption, TA-7 shared policy) and one named layering
+      exception (`consensus/` -> `detection/`, pinned in `test_module_boundaries.py`).
+      `scripts/m7_12_poisoning_defense.py`, `RESULTS.md` M7-12, `docs/DEVIATIONS.md` DEV-38,
+      `docs/THREAT_MODEL.md` Gap 1 updated (2026-09-26)
 
 ---
 

@@ -1566,3 +1566,108 @@ label-distribution correctness per strategy, determinism, originals never mutate
 `tests/unit/test_m7_11_honeypot_poisoning.py` (end-to-end against the committed corpus — CSV-path
 baseline reproduction, zero-budget degenerate case per strategy, expected row counts/label
 distributions, eval set never perturbed, 100%-budget label-flip leaves zero positive rows).
+
+### DEV-38 · ADD · Statistical poisoning detection: the defense DEV-37/M7-11 measured the absence
+### of, and what it actually closes (M7-12)
+
+**Paper:** n/a — Algorithm 2 has no semantic validation step at all; this is a defense M7-9's
+threat model named as a possible mitigation (Gap 1) and M7-11 predicted the shape of, without
+building or measuring either.
+
+**What was built.** `detection/drift.py` (`DriftDetector`, `RunningStats`, `DriftPolicy`,
+`DriftReport`): a per-replica running per-feature profile (Welford's online mean/variance, no
+historical sample ever stored) scored two ways — Mahalanobis (diagonal, RMS-aggregated
+standardized batch-centroid distance) and Page-Hinkley (a streaming mean-shift test over the
+Mahalanobis signal itself, for slow cumulative drift). A full per-feature KS test (the brief's
+third option) needs the historical sample *values*, not just their moments, so it was not
+implemented — a scope choice made explicit here, not a silent omission.
+`consensus/validated_commit.py` (`ValidatedSigRWChain`, `build_validated_sigrw_chain_factory`):
+a `Chain` subclass that runs the detector inside `check_append()` — the one place
+`consensus/pbft.py`'s own docstring says block validity is decided ("Consensus decides whether,
+`Chain` decides valid") — so a replica that detects drift raises `ChainError` and is rejected by
+the existing pBFT vote-counting exactly like a bad signature would be. `consensus/pbft.py` itself
+gained one additive, backward-compatible change: `Cluster.__init__` takes an optional
+`chain_factory` (default `Chain`, so `BC_DTBU`'s commit path — and every existing caller that
+does not pass it — is byte-for-byte unchanged; OUT OF SCOPE forbade touching that path).
+
+**Problem 1 — this is a deliberate, named exception to CLAUDE.md §3's layering rule.**
+"`consensus/` depends only on `crypto/` and `blockchain/`" is a real, previously-unbroken,
+test-pinned rule (`tests/unit/test_module_boundaries.py::
+test_consensus_depends_only_on_crypto_blockchain_and_util`). Pre-commit drift validation for
+`BC_SigRW` cannot exist without `consensus/validated_commit.py` calling
+`detection.drift.DriftDetector` — there is no version of "score this block's batch before voting"
+that avoids it. Rather than loosen the rule silently, the test itself now names the one file
+permitted the extra edge (`CONSENSUS_DETECTION_ALLOWED`), with the reasoning inline: `detection/
+drift.py` has zero internal dependencies of its own (pure numpy/stdlib), so this is one shallow,
+one-directional edge, not a cycle, and every other file under `consensus/` is held to the
+original rule exactly as before. `docs/ARCHITECTURE.md` §consensus states the same exception.
+
+**Problem 2 — the defense as specified needs plaintext features, and consensus replicas are
+not supposed to have them.** `blockchain/transaction.py`'s own docstring states the design
+invariant this narrows: "Miners in M2b validate blocks they cannot read; that is the point."
+`Sig_RW`/`FT_RW` payloads are hybrid-encrypted to one recipient (DEV-01); nothing before this
+session gave a `BC_SigRW` replica a decryption key. `ValidatedSigRWChain` requires one (a new
+constructor parameter, `decrypt_keys`), which is a real widening of trust, stated as
+`docs/THREAT_MODEL.md` Trust Assumption 6 — not a detail to leave implicit. A transaction none of
+the supplied keys open is skipped, not raised on (`extract_feature_batch`): the defense validates
+what it *can* read.
+
+**Problem 3 — a second new trust assumption, about agreement rather than access.** Every honest
+replica must run the same `DriftPolicy` (threshold, method, `min_history`) to agree on whether to
+vote — pBFT's total order already guarantees they see batches in the same sequence, but nothing
+guarantees they run the same policy, and a replica that does not agrees with its peers about
+nothing. `docs/THREAT_MODEL.md` Trust Assumption 7. Not tested against a policy-mismatched
+replica; stated as a limitation, per this session's own convention of naming what is unverified
+rather than leaving it implicit.
+
+**Measured, `scripts/m7_12_poisoning_defense.py --seed 20260912`, `RESULTS.md` M7-12,
+`results/logs/20260926T041840Z-670ec207.json`** — against exactly M7-11's three strategies and
+five budgets, plus a false-positive rate, a "new ransomware family" probe, and two real pBFT
+commits. Full discussion: `docs/THREAT_MODEL.md` Gap 1's own "pre-commit detection, built and
+measured" subsection carries the numbers; summarized here for the deviation record:
+
+* **0 of 15 M7-11 cells prevented at the shipped threshold** (Mahalanobis RMS >= 3.0, chosen
+  before any measurement below and left unmoved after). Anchor-point injection scores *below* the
+  matched-size clean-batch noise floor at every budget — its engineered class-boundary midpoint
+  coincides, in a roughly balanced corpus, with the population mean, making the "most
+  sophisticated" attack the least visible to a whole-population distributional test, exactly
+  inverting M7-11's own unbuilt prediction. Label flipping and feature poisoning score
+  *moderately above* the same-size clean-batch noise floor at budgets >=5% — not because the
+  detector reads labels (it cannot; `honeypot/features.py`'s schema keeps them separate), but
+  because an all-malicious batch's feature composition differs from the profile's usual mix. The
+  same signal fires on an honest, unusually ransomware-heavy batch — an outbreak, not an attack.
+* **False-positive rate: 0/30** chunked eval-corpus batches (25 rows each) at the shipped
+  threshold. **New-family probe: not flagged**, despite scoring ~17x the matched clean-batch p95
+  (1.2255 vs. 0.070) — the tension the brief's item 4 asked for, measured: a threshold loose
+  enough to catch that probe would also raise the false-positive rate on equally small, genuinely
+  clean batches, which the noise-floor table (`RESULTS.md` M7-12) makes concrete rather than
+  assumed.
+* **Real pBFT commits: both a 39-record label-flip burst and a 40-record anchor-shift burst
+  committed under a small (~35-sample), realistic early-chain history, defended and undefended
+  alike.** A single record (M7-11's own permanence-demo shape) is undetectable in principle at
+  any threshold — `n=1` has no averaging to suppress sampling noise, and the noise floor only
+  grows as `n` shrinks (a same-size clean batch at `n=7` can score as high as 1.14). This is the
+  defense's sharpest limitation: it is blindest at exactly the smallest submission an adversary
+  can make, and M7-11's own demonstration happened to be exactly that size.
+
+**Honest verdict, stated once so it is not read as either "solved" or "useless."** This is a
+real, working, measured mechanism against one specific thing: a poisoning batch that introduces
+feature values the corpus profile has never produced before, submitted in a large-enough burst
+against a large-enough history. It is not a general fix for Gap 1. Two new trust assumptions were
+added to get even that; one deliberate architectural-layering exception was named to build it;
+and the measurement that would have let this entry claim more (a lower, more sensitive threshold)
+was run, and it would also have raised the false-positive rate on ordinary small clean batches —
+reported as the actual tension it is, not resolved by picking a more flattering number.
+
+**Impact on reproduction:** none — new capability, no paper target touched, `BC_DTBU`'s commit
+path unchanged, M7-11's own attack code untouched (OUT OF SCOPE).
+Figures: `results/figures/fig12_drift_defense_comparison.png`.
+Tests: `tests/unit/test_drift.py` (14 tests: constant stream never flags drift, an injected
+shifted batch is detected by both methods, offending-feature naming, threshold monotonicity,
+`score_batch` never mutates state, cold-start returns no drift, input validation),
+`tests/unit/test_validated_commit.py` (4 tests: feature extraction decrypts/skips correctly, a
+defended cluster commits clean batches with zero drift events, a defended cluster rejects a
+batch an undefended cluster commits — bounded run, see the module's own note that an all-honest
+cluster unanimously refusing one request stalls via view-change escalation rather than failing
+cleanly, a pre-existing property of `consensus/pbft.py`'s reduced view change, DEV-20, not
+something this session introduced or fixed).

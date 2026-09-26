@@ -1,0 +1,434 @@
+{
+  "config_hash": "7d2c9dfb3b4c7afd5891c4987fb1d823eac24a01c46030621542c52d9d53f959",
+  "config_hash_scheme": 2,
+  "drift_policies": {
+    "chunk_size": 25,
+    "mahalanobis": {
+      "feature_threshold": 3.0,
+      "min_history_batches": 5,
+      "threshold": 3.0
+    },
+    "page_hinkley": {
+      "min_history_batches": 5,
+      "ph_delta": 0.5,
+      "ph_threshold": 6.0
+    }
+  },
+  "false_positive_rate": {
+    "mahalanobis": 0.0,
+    "n_batches": 30,
+    "page_hinkley": 0.0
+  },
+  "figures": [
+    "results/figures/fig12_drift_defense_comparison.png"
+  ],
+  "git_rev": "fe5fcfb",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "new_family": {
+    "features_scaled_down": [
+      "crypto_call_rate",
+      "key_generation_events",
+      "write_entropy_mean"
+    ],
+    "features_scaled_up": [
+      "c2_beacon_count",
+      "dns_entropy",
+      "outbound_burst_rate"
+    ],
+    "mahalanobis": {
+      "detected": false,
+      "offending_features": [
+        "dns_entropy"
+      ],
+      "score": 1.2254712388402642,
+      "threshold": 3.0
+    },
+    "n_rows": 353,
+    "page_hinkley": {
+      "detected": false,
+      "score": 0.5317923356203949,
+      "threshold": 6.0
+    }
+  },
+  "noise_floor_by_batch_size": {
+    "143": {
+      "max": 0.14222278140635455,
+      "p50": 0.08388002238316936,
+      "p95": 0.1099117656032049
+    },
+    "353": {
+      "max": 0.08886071674334876,
+      "p50": 0.05597867430975839,
+      "p95": 0.06990394051590301
+    },
+    "358": {
+      "max": 0.07551045326505994,
+      "p50": 0.0550192318776517,
+      "p95": 0.06701791011424084
+    },
+    "36": {
+      "max": 0.28373343921992134,
+      "p50": 0.16367416560078207,
+      "p95": 0.23747393971989753
+    },
+    "7": {
+      "max": 1.2203721539765908,
+      "p50": 0.3496123024536454,
+      "p95": 0.5509782343298525
+    },
+    "72": {
+      "max": 0.20973232601308833,
+      "p50": 0.1200087782856083,
+      "p95": 0.16116032548403622
+    }
+  },
+  "original_metrics": {
+    "balanced_accuracy": 0.8408464109597253,
+    "mcc": 0.6821684412447128,
+    "pr_auc": 0.9110693406779685,
+    "precision": 0.8414985590778098,
+    "recall": 0.8271954674220963
+  },
+  "purpose": "M7-12 -- statistical poisoning detection: drift-detection defense measured against M7-11's three poisoning strategies, plus false-positive rate and two real pBFT commits",
+  "real_commits": {
+    "anchor_shift_burst_defended": {
+      "committed": true,
+      "defended": true,
+      "error": null,
+      "height_after": 7,
+      "height_before": 6,
+      "n_history_blocks": 6,
+      "n_poisoned_records": 40
+    },
+    "anchor_shift_burst_undefended": {
+      "committed": true,
+      "defended": false,
+      "error": null,
+      "height_after": 7,
+      "height_before": 6,
+      "n_history_blocks": 6,
+      "n_poisoned_records": 40
+    },
+    "label_flip_burst_defended": {
+      "committed": true,
+      "defended": true,
+      "error": null,
+      "height_after": 7,
+      "height_before": 6,
+      "n_history_blocks": 6,
+      "n_poisoned_records": 39
+    },
+    "label_flip_burst_undefended": {
+      "committed": true,
+      "defended": false,
+      "error": null,
+      "height_after": 7,
+      "height_before": 6,
+      "n_history_blocks": 6,
+      "n_poisoned_records": 39
+    }
+  },
+  "run_id": "20260926T041840Z-670ec207",
+  "seed": 20260912,
+  "sweep": {
+    "anchor_point_injection": {
+      "0.01": {
+        "defended_bal_acc": 0.8354617263965706,
+        "defended_delta": -0.0053846845631547735,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.016224717739337216,
+          "threshold": 3.0
+        },
+        "n_poisoned": 7,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8354617263965706,
+        "undefended_delta": -0.0053846845631547735
+      },
+      "0.05": {
+        "defended_bal_acc": 0.8451893820165775,
+        "defended_delta": 0.004342971056852107,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.008449203795087927,
+          "threshold": 3.0
+        },
+        "n_poisoned": 36,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8451893820165775,
+        "undefended_delta": 0.004342971056852107
+      },
+      "0.1": {
+        "defended_bal_acc": 0.842731237915374,
+        "defended_delta": 0.001884826955648622,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.008294174764859432,
+          "threshold": 3.0
+        },
+        "n_poisoned": 72,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.842731237915374,
+        "undefended_delta": 0.001884826955648622
+      },
+      "0.2": {
+        "defended_bal_acc": 0.8415021658647721,
+        "defended_delta": 0.0006557549050467681,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.007833631713794911,
+          "threshold": 3.0
+        },
+        "n_poisoned": 143,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8415021658647721,
+        "undefended_delta": 0.0006557549050467681
+      },
+      "0.5": {
+        "defended_bal_acc": 0.8364921983902154,
+        "defended_delta": -0.004354212569509963,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.00848774061439848,
+          "threshold": 3.0
+        },
+        "n_poisoned": 358,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8364921983902154,
+        "undefended_delta": -0.004354212569509963
+      }
+    },
+    "feature_poison": {
+      "0.01": {
+        "defended_bal_acc": 0.8327225444789184,
+        "defended_delta": -0.008123866480806985,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.5014636181154464,
+          "threshold": 3.0
+        },
+        "n_poisoned": 7,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8327225444789184,
+        "undefended_delta": -0.008123866480806985
+      },
+      "0.05": {
+        "defended_bal_acc": 0.8353568056117631,
+        "defended_delta": -0.005489605347962279,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.3229310367981117,
+          "threshold": 3.0
+        },
+        "n_poisoned": 36,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8353568056117631,
+        "undefended_delta": -0.005489605347962279
+      },
+      "0.1": {
+        "defended_bal_acc": 0.8247747950297526,
+        "defended_delta": -0.01607161592997275,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.28277408803946835,
+          "threshold": 3.0
+        },
+        "n_poisoned": 72,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8247747950297526,
+        "undefended_delta": -0.01607161592997275
+      },
+      "0.2": {
+        "defended_bal_acc": 0.8255242292069487,
+        "defended_delta": -0.015322181752776665,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.32712925317119274,
+          "threshold": 3.0
+        },
+        "n_poisoned": 143,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8255242292069487,
+        "undefended_delta": -0.015322181752776665
+      },
+      "0.5": {
+        "defended_bal_acc": 0.8108802853845347,
+        "defended_delta": -0.029966125575190627,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.32677233093885966,
+          "threshold": 3.0
+        },
+        "n_poisoned": 358,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8108802853845347,
+        "undefended_delta": -0.029966125575190627
+      }
+    },
+    "label_flip": {
+      "0.01": {
+        "defended_bal_acc": 0.8258277500487132,
+        "defended_delta": -0.015018660911012116,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.5692562393036705,
+          "threshold": 3.0
+        },
+        "n_poisoned": 7,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8258277500487132,
+        "undefended_delta": -0.015018660911012116
+      },
+      "0.05": {
+        "defended_bal_acc": 0.8158190566122577,
+        "defended_delta": -0.025027354347467612,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.365986040489839,
+          "threshold": 3.0
+        },
+        "n_poisoned": 36,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8158190566122577,
+        "undefended_delta": -0.025027354347467612
+      },
+      "0.1": {
+        "defended_bal_acc": 0.8150696224350615,
+        "defended_delta": -0.025776788524663807,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.3244297074495415,
+          "threshold": 3.0
+        },
+        "n_poisoned": 72,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.8150696224350615,
+        "undefended_delta": -0.025776788524663807
+      },
+      "0.2": {
+        "defended_bal_acc": 0.7873143276825997,
+        "defended_delta": -0.053532083277125664,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.3235703185175893,
+          "threshold": 3.0
+        },
+        "n_poisoned": 143,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.7873143276825997,
+        "undefended_delta": -0.053532083277125664
+      },
+      "0.5": {
+        "defended_bal_acc": 0.6825097051725947,
+        "defended_delta": -0.15833670578713066,
+        "mahalanobis": {
+          "detected": false,
+          "offending_features": [],
+          "score": 0.3256427640040796,
+          "threshold": 3.0
+        },
+        "n_poisoned": 358,
+        "page_hinkley": {
+          "detected": false,
+          "score": 0.0,
+          "threshold": 6.0
+        },
+        "prevented": false,
+        "undefended_bal_acc": 0.6825097051725947,
+        "undefended_delta": -0.15833670578713066
+      }
+    }
+  },
+  "wall_seconds": 4.298197583004367
+}

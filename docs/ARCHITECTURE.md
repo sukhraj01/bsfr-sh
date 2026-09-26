@@ -202,6 +202,24 @@ checks them covariantly (a concrete `dict[str, Replica]` never satisfies an inva
 compaction/membership changes/snapshotting, one entry in flight, no retransmission) and the
 Byzantine-leader finding: `consensus/raft.py`'s module docstring and DEV-32.
 
+**`consensus/validated_commit.py` (M7-12, DEV-38).** Pre-commit semantic validation for
+`BC_SigRW`, answering `docs/THREAT_MODEL.md` Gap 1 (measured, not fixed in general — see the
+threat model's own numbers). `ValidatedSigRWChain` subclasses `Chain` and overrides
+`check_append()` to run `detection.drift.DriftDetector` over the block's decrypted `Sig_RW` batch
+after the five structural/cryptographic checks pass, so a replica that detects drift raises
+`ChainError` and is rejected by the existing pBFT vote-counting — no new message type, no change
+to `Replica`'s state machine. `pbft.py`'s only change is `Cluster.__init__` taking an optional
+`chain_factory: ChainFactory` (a `Protocol`, default `Chain`), so `BC_DTBU` clusters and every
+caller that does not pass one are unaffected. **This is the one place `consensus/` depends on
+`detection/`** — a deliberate, named exception to this section's own dependency rule, pinned in
+`tests/unit/test_module_boundaries.py`'s `CONSENSUS_DETECTION_ALLOWED`. `detection/drift.py`
+itself has zero internal dependencies (pure numpy/stdlib), so the edge is one shallow,
+one-directional dependency, not a cycle, and no other file under `consensus/` gets the exception.
+The module also widens a previously-absolute invariant this same doc's §blockchain and
+`blockchain/transaction.py` both state — "miners validate blocks they cannot read" — to "these
+particular miners can, for this one chain": `ValidatedSigRWChain` needs a decryption key per
+replica to score plaintext features, `docs/THREAT_MODEL.md` Trust Assumption 6.
+
 ---
 
 ## `honeypot/` — the layer the paper omits (GAP-3)
