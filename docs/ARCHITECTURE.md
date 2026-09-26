@@ -220,6 +220,29 @@ The module also widens a previously-absolute invariant this same doc's §blockch
 particular miners can, for this one chain": `ValidatedSigRWChain` needs a decryption key per
 replica to score plaintext features, `docs/THREAT_MODEL.md` Trust Assumption 6.
 
+**`consensus/commit_reveal.py` (M7-14, DEV-40).** A protocol-level defense against the same
+Gap 1 `validated_commit.py` addresses, aimed at the one strategy statistical drift detection
+cannot catch (anchor-point injection, M7-12): deny the adversary the current round's honest
+distribution before it commits its own batch. `Commitment`/`Reveal`/`CommitRevealRound` implement
+Phases 1-2 (commit `H(batch || blinding_factor)` over the *entire* batch via
+`SignatureRecordPayload.to_bytes()`, then reveal-and-verify; a node that fails to reveal or whose
+reveal does not match is excluded, reported in `RoundResult` rather than raised) and
+`WithholdTracker` decides permanent exclusion after repeated withholding. This module depends only
+on `crypto`/`blockchain`/`util` — `validated_commit.py`'s dependency on `detection/` remains the
+one named exception to this section's dependency rule, not widened here — so Phase 3 (merge the
+verified batches, hand them to the existing pBFT pipeline) lives one layer up, in
+`framework.commit_reveal_pipeline.submit_with_commit_reveal`, which calls `_block_pipeline.run`
+unmodified. `configs/chain.yaml`'s `consensus.commit_reveal.{enabled, max_consecutive_withholds}`
+is the config-flag switch between direct submission and commit-reveal submission a caller reads
+(no change to `pbft.py` or `_block_pipeline.py` themselves). **Measured, not just built**: against
+M7-11's own three strategies and five budgets, with the adversary constrained to a historical-only
+view, the protocol's effect on anchor-point injection's measured damage is statistically
+indistinguishable from zero on this project's corpus — the corpus's stationary, low-dimensional
+profiles (DEV-27) let a historical-only centroid estimate converge almost as fast as a
+full-information one. The protocol itself behaves exactly as specified (22 unit tests, 1 real-pBFT
+integration test); what is bounded, not achieved, is its practical protective value against this
+specific corpus — DEV-40 and `docs/THREAT_MODEL.md` Gap 1 state the full result.
+
 ---
 
 ## `honeypot/` — the layer the paper omits (GAP-3)

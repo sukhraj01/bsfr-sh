@@ -39,6 +39,18 @@ consensus:
                                   #   the fast, unserialised bus. `bench.harness` turns this on so
                                   #   Figs. 6(a)-(d) pay the real encode/decode cost DEV-30
                                   #   quantified from an estimate instead of assuming it.
+  commit_reveal:                  # DECLARED — M7-14/DEV-40. Protocol-level defense against
+                                  #   honeypot poisoning that depends on seeing the current
+                                  #   round's honest distribution before crafting a batch (Gap 1,
+                                  #   DEV-37/DEV-38's anchor-point-injection finding). BC_SigRW
+                                  #   only — BC_DTBU backup data has no distributional attack
+                                  #   surface, so it is never wrapped in this protocol.
+    enabled: false                 #   Off by default: direct submission (`_block_pipeline.run`)
+                                  #   unless a caller explicitly opts into
+                                  #   `framework.commit_reveal_pipeline.submit_with_commit_reveal`.
+    max_consecutive_withholds: 3   #   DEV-40 item 4c: matches consensus's own f=1-at-n=4
+                                  #   tolerance (`miner_nodes`/`faulty_nodes_f` above) rather than
+                                  #   an independently chosen number.
   raft:                           # DECLARED — M7-4/DEV-32. The comparison protocol, not the
                                   #   paper's own (PAPER §VII names only pBFT). `miner_nodes` above
                                   #   is reused as Raft's node count; nothing here is re-literalled

@@ -4,41 +4,44 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-26 · **Milestone:** M7 stretch complete (M7-13 delivered) ·
-**Sessions completed:** 30
+**Last updated:** 2026-09-27 · **Milestone:** M7 stretch complete (M7-14 delivered) ·
+**Sessions completed:** 31
 
 ---
 
 ## One-line status
 
-M7-13 (dynamic-behavioral real-malware transfer) is delivered: `MalbehavD-V1` (real Cuckoo-sandbox
-execution traces) grounds 12/22 `FT_RW` features across 5/7 groups — double EMBER's 6/22,
-quadruple ClaMP's 3/22, and the first dataset to reach process/network/persistence at all — yet
-transfer is still exactly `bal_acc=0.5000`, now diagnosed precisely rather than just measured
-again: the fitted ensemble's prediction on all 2,570 real rows is a single constant class,
-provably not because real signal is absent (a within-dataset Mann-Whitney check, no synthetic data
-involved, finds 9/12 mapped features separate real malware from real benign at p<1e-4) but because
-`honeypot.collector`'s count features are calibrated to an unbounded ransomware episode
-(thousands-scale means) while MalbehavD-V1's Cuckoo traces are capped at 175 total API calls
-(single-digit real means) — a scale-calibration mismatch, not an absence of dynamic signal.
+M7-14 (commit-then-reveal defense against honeypot poisoning) is delivered: `consensus.
+commit_reveal` + `framework.commit_reveal_pipeline` implement a two-phase commit/reveal/merge
+protocol, correctly built and behaviourally verified (22 unit tests, 1 real-pBFT integration
+test), but its measured effect on anchor-point injection — the one M7-11 strategy M7-12's drift
+detector cannot catch — is statistically indistinguishable from zero on this project's corpus (an
+8-repeat robustness check: mean `damage_prevented` -0.0013 to +0.0055, zero inside one standard
+deviation at every budget, at both an 85%- and a 15%-historical partition). Why, measured not
+assumed: `honeypot.collector`'s profiles are stationary, low-dimensional mixtures, and even ~106
+historical positive rows already estimate the population centroid almost as well as the full
+corpus does, so denying the adversary the current round costs it almost nothing it could not
+already infer from history.
 
-- **Dataset search dominated the session.** All four candidates the session brief named were
-  checked and ruled out for distinct, verified reasons (not assumed from the brief's own
-  descriptions, which were themselves wrong in one case): BODMAS's brief-given URL doesn't exist,
-  and the real repo turns out to be static (same LIEF pipeline as EMBER) despite the brief calling
-  it dynamic; CICMalDroid-2020 is gated behind a personal-information research-access form;
-  MalwareBazaar/Triage now require account creation; a public Cuckoo instance did not respond.
-  `github.com/mpasco/MalbehavD-V1` — freely downloadable, MIT-licensed, no registration — was
-  found and used instead. Full account in `docs/DEVIATIONS.md` DEV-39 and this session's file.
-- **Per-group permutation importance (real_drop=0.0000 for every one of the 7 groups) is what
-  revealed the saturation** — without it, this session would only have re-confirmed "0.5000
-  again" with no more insight than ClaMP/EMBER already gave.
-- `data/external/malbehavd/` (2.3MB CSV + README) committed for full reproducibility, same posture
-  as ClaMP's committed CSV.
-- `docs/report/report.tex` §"Real-Data Transfer" extended with a MalbehavD-V1 subsection (coverage
-  table + diagnosis + one merged figure); recompiles clean, still 25 pages (no regression).
+- **The protocol itself works exactly as specified** — commitment binding/tamper-detection, round
+  exclusion, canonical merge, `WithholdTracker` permanent exclusion (deterministic: exactly round
+  3 of 6 for an always-withholding adversary at `max_consecutive_withholds=3`), and `f=1` crash
+  tolerance through a real pBFT commit are all measured directly, not just unit-tested in
+  isolation.
+- **Collusion is bounded, not just deferred**: two colluding nodes at `n=4` already exceeds pBFT's
+  own `f<n/3` tolerance, so commit-reveal adds no new trust assumption for that failure mode — a
+  genuinely good property, stated as one rather than buried among limitations. It does add one new
+  trust assumption elsewhere (no out-of-band batch leakage before reveal, Trust Assumption 8).
+- **Combined with M7-12's drift detector: nothing newly caught.** Every defended anchor-point
+  cell's Mahalanobis score (0.012-0.017) is still ~2 orders of magnitude below the 3.0 alarm
+  threshold, consistent with the sweep's own null finding.
+- `configs/chain.yaml` gained `consensus.commit_reveal.{enabled, max_consecutive_withholds}` — the
+  config-flag switch between direct and commit-reveal submission.
+- Report extended (§"Commit-Then-Reveal: A Protocol-Level Defense", plus abstract/intro/conclusion
+  updates reflecting 14 extensions and both poisoning defenses); recompiles clean at **26 pages**
+  (was 25 after M7-13 — see Risks).
 
-`make test` (1693 passed, +21 new mapping tests) and `make lint` (ruff + mypy --strict) green.
+`make test-all` (1746 passed) and `make lint` (ruff + mypy --strict) green.
 
 ---
 
@@ -46,42 +49,41 @@ involved, finds 9/12 mapped features separate real malware from real benign at p
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session except new `honeypot.malbehavd_mapping` module |
-| Real-malware transfer evaluation | done, 3 datasets | ClaMP (3/22, DEV-34), EMBER (6/22, DEV-35), MalbehavD-V1 (12/22, 5/7 groups, DEV-39) — all `bal_acc=0.5000`, MalbehavD-V1 adds the first precise failure-mechanism diagnosis |
-| `docs/report/report.pdf` | done, 25 pages | extended this session, recompiles clean |
-| Everything else (M7-1 through M7-12's own deliverables) | done | unchanged |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | this session adds `consensus.commit_reveal` + `framework.commit_reveal_pipeline` |
+| Honeypot poisoning: attack (M7-11) + two independent defenses | done | statistical (M7-12, DEV-38, catches anchor-point-shaped batches in principle, misses label-flip) + protocol-level (M7-14, DEV-40, correctly built, measured-null effect on this corpus) |
+| Real-malware transfer evaluation | done, 3 datasets | ClaMP (3/22), EMBER (6/22), MalbehavD-V1 (12/22, DEV-39) — unchanged this session |
+| `docs/report/report.pdf` | done, 26 pages | extended this session, recompiles clean |
+| Everything else (M7-1 through M7-13's own deliverables) | done | unchanged |
 
 ## Next task
 
-None forced. Two options exist if a future session is asked to act on this one's findings, neither
-required:
+None forced. If a future session wants to act on this one's own findings, in order of interest:
 
-1. **Act on M7-13's own "actionable for future work" finding**: re-calibrate
-   `honeypot.collector`'s count-feature distributions (`files_touched`, `renames`, `crypto_calls`,
-   and the seven Poisson-count features) to a bounded-observation-window regime instead of their
-   current unbounded-episode scale, then re-run `scripts/m7_{7,10a,13}_*.py` unchanged to see
-   whether any real dataset's transfer result moves off 0.5000. This is a generator change — needs
-   its own `docs/DEVIATIONS.md` entry before landing, per CLAUDE.md's "never silently fix."
-2. Close the report's page-count gap (25pp vs. the original <20pp target) — see prior sessions'
-   ranked options in `sessions/2026-09-26-03-report-restructure-and-ember-check.md` if this
-   becomes a priority; unchanged by this session, which added a bounded, single-subsection amount
-   of report content, not more than the existing margin absorbed.
+1. **Test commit-reveal on a corpus where it should actually bind**: this session's null result is
+   scoped to `honeypot.collector`'s stationary, ~106+-positive-row-converges profiles. A synthetic
+   corpus with genuine concept drift, higher feature dimensionality relative to sample size, or a
+   much smaller absolute historical sample would be the regime to test whether the protocol's
+   measured protection changes — a new experiment, not a fix to this session's code.
+2. Act on M7-13's own generator-recalibration suggestion (unchanged, carried from last session).
+3. Close the report's page-count gap (26pp vs. the original <20pp target) — ranked options in
+   `sessions/2026-09-26-03-report-restructure-and-ember-check.md`; this session added one bounded
+   subsection plus small abstract/intro/conclusion edits, consistent with prior sessions' own
+   modest, content-driven growth.
 
 ## Blockers
 
 None. `data/raw/` is present in this environment already; a genuinely fresh clone still needs
 `make data` (~56 minutes) first.
 
-**Standing limitation, not a blocker, worth not re-investigating from scratch:** CICMalDroid-2020
-and MalwareBazaar/Triage remain unusable by any future session unless the user personally creates
-the relevant account or submits the access request — this session confirmed both are gated by
-external identity verification this sandbox cannot and should not complete unilaterally.
+**Standing limitation, not a blocker:** CICMalDroid-2020 and MalwareBazaar/Triage remain unusable
+by any future session unless the user personally creates the relevant account or submits the
+access request (carried from the M7-13 session, unchanged).
 
 ## Open questions
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q11 | Is the report's length (25pp) acceptable for submission, or does it need the deeper, substance-costing cuts `sessions/2026-09-26-03-...md` describes? | report sign-off | reviewer/instructor judgement |
+| Q11 | Is the report's length (26pp) acceptable for submission, or does it need the deeper, substance-costing cuts `sessions/2026-09-26-03-...md` describes? | report sign-off | reviewer/instructor judgement |
 
 ## Carried debt
 
@@ -94,9 +96,10 @@ external identity verification this sandbox cannot and should not complete unila
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 tested eight hypotheses, narrowed the gap to 1.51pt; report states the residual as measured-and-bounded |
-| M7-12's "0/15 cells prevented" could be read as "the defense doesn't work" | undersells that the mechanism works exactly where predicted (large, novel-feature batches against mature history) | DEV-38/`RESULTS.md`/report all lead with the anchor-point-injection inversion finding before the headline 0/15 |
+| M7-12's "0/15 cells prevented" could be read as "the defense doesn't work" | undersells that the mechanism works exactly where predicted | DEV-38/`RESULTS.md`/report all lead with the anchor-point-injection inversion finding before the headline 0/15 |
 | M7-13's 0.5000-despite-12/22-coverage could be read as "the dynamic dataset added nothing" | undersells the actual finding (proven real signal, precisely diagnosed scale mismatch) | DEV-39/`RESULTS.md`/report all lead with the within-dataset Mann-Whitney proof before the headline 0.5000 |
-| The report is 25 pages, not the requested under-20 | a page-limited venue/rubric may reject it as-is | PROJECT_STATE.md/session files state the finding and ranked options honestly rather than silently shipping either an over-length report or one hollowed out to hit a number |
+| M7-14's null result could be read as "commit-reveal doesn't work" or, worse, silently spun as a win | either misreads a correctly-built, correctly-verified protocol as broken, or overclaims protection the numbers don't support | DEV-40/`RESULTS.md`/report all lead with "the protocol behaves exactly as specified" (22+1 tests) before the honest "measured effect is statistically indistinguishable from zero," and state the specific corpus property (fast centroid convergence) that explains why, rather than a vague "it didn't work" |
+| The report is 26 pages, not the requested under-20 | a page-limited venue/rubric may reject it as-is | PROJECT_STATE.md/session files state the finding and ranked options honestly rather than silently shipping either an over-length report or one hollowed out to hit a number |
 | Two Claude Code sessions ran on this repo concurrently during M7-10; nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — flagging as a standing risk; re-read a file immediately before writing to it if a long gap occurred since it was first read |
 
 ---

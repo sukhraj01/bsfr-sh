@@ -240,6 +240,16 @@ The paper states none of these. Listed here because every result above is condit
    whether to vote, and an adversary who can induce that disagreement can exploit it (this is not
    measured; DEV-38 states it as a stated-but-untested limitation, matching this section's own
    convention of naming assumptions the paper — or, here, the defense — does not itself verify).
+8. **(M7-14) A committing node does not leak its batch out-of-band before revealing.** The
+   cryptographic commitment (`consensus.commit_reveal`) proves, after the fact, that a node did
+   not *revise* its batch once seen — it cannot stop a node that already told a colluding
+   adversary its contents through some channel the protocol has no visibility into (a side
+   channel, a compromised operator, a shared logging system). This is the same assumption every
+   commit-reveal scheme in the cryptographic literature carries and is not specific to this
+   implementation, but it is new to this project (DEV-40) and is why failure mode (b) — collusion
+   — is bounded by pBFT's own `f<n/3`, not eliminated by the cryptography: two colluding nodes at
+   `n=4` already exceeds what consensus tolerates, so this assumption's practical exposure is no
+   wider than Trust Assumption 1's.
 
 ---
 
@@ -365,6 +375,55 @@ avoided by gating a check every replica already runs independently before the sa
 need cross-node feature-space agreement, a research problem this project does not attempt to
 solve beyond stating it as TA-7's own limitation.
 
+*Protocol-level pre-commit denial, built and measured, and honestly bounded (M7-14).* M7-12's own
+finding above — anchor-point injection is invisible to statistical drift detection because its
+engineered midpoint is computable directly from the current round's honest distribution — points
+at a protocol-level fix rather than a better statistic: deny the adversary that visibility before
+it commits. `consensus.commit_reveal` (DEV-40) implements exactly that — a two-phase commit/
+reveal/merge protocol wrapping `framework._block_pipeline` unchanged, with a `WithholdTracker` for
+permanent exclusion of an always-withholding participant. Measured against the identical three
+strategies and five budgets, with the adversary constrained to a historical-only view (`scripts/
+m7_14_commit_reveal_defense.py`):
+
+* **The protocol behaves exactly as specified** — commitment binding (tamper detection, no
+  count-only or label-only commitments), round exclusion (non-reveal, mismatch, no-commitment),
+  canonical deterministic merge, and `f=1` crash tolerance through a real pBFT commit are all
+  measured directly (22 unit tests, 1 real-consensus integration test).
+* **Its effect on anchor-point injection's measured damage is statistically indistinguishable
+  from zero on this corpus**, at both an 85%-historical (mature-chain) and a 15%-historical
+  (early-chain) partition, confirmed by an 8-repeat robustness check (mean `damage_prevented`
+  -0.0013 to +0.0055, one standard deviation 0.0010-0.0034 at every budget — zero sits inside that
+  band throughout). The reason is measured, not assumed: `honeypot.collector`'s profiles are
+  stationary, low-dimensional mixtures (DEV-27), and even ~106 historical positive rows already
+  estimate the population centroid almost as precisely as the full ~700-row corpus would, so
+  withholding the current round denies the adversary almost nothing it could not already infer.
+* **Failure mode (a), repeated rounds:** no monotonic strengthening across 10 sequential rounds —
+  the same null finding, for the same reason, confounded by the accumulating corpus's own growth
+  (a caveat stated, not hidden).
+* **Failure mode (b), collusion, is a genuinely good property, not a limitation:** two colluding
+  nodes at `n=4` already exceeds pBFT's own `f<n/3` tolerance, so commit-reveal adds no new trust
+  assumption beyond consensus's existing one (Trust Assumption 8 above states the one assumption
+  it *does* add — no out-of-band leakage before reveal — which is orthogonal to collusion).
+* **Failure mode (c), withholding, is deterministic and measured:** an always-withholding
+  adversary is permanently excluded at exactly round 3 of a 6-round simulation, matching the
+  configured `max_consecutive_withholds=3` — a liveness cost, incurred immediately every round
+  regardless of when permanent exclusion triggers, never a safety cost.
+* **Combined with M7-12's drift detector (item 5): no cell newly crosses the Mahalanobis
+  threshold.** Every defended anchor-point cell scores 0.0118-0.0169, barely different from
+  M7-12's own 0.0078-0.0162, both roughly two orders of magnitude below the 3.0 alarm threshold —
+  consistent with the sweep's own null finding, since a defense that did not move the adversary's
+  centroid estimate cannot move a statistic computed from it either.
+
+**Honest verdict:** this is a real, correctly-implemented protocol-level mechanism, not a
+statistics-layer heuristic, and it adds no new trust assumption beyond `f<n/3` for the failure
+mode (collusion) it was most naturally worried about. What it does not do, measured rather than
+assumed, is meaningfully protect *this project's specific corpus* against anchor-point injection —
+the corpus's centroids converge too fast, from too little historical data, for "the adversary must
+guess wrong" to actually occur at any tested history size. This bounds the defense's practical
+value to corpora with genuine concept drift or much smaller absolute sample sizes than the ~100+
+positive rows tested here — a different, more specific claim than "commit-reveal defeats
+anchor-point injection," and the one the measurements actually support.
+
 *Hybrid anchoring (M7-5) does not help.* Anchoring verifies integrity of already-committed data
 over time; poisoning is a validly signed, validly consensus-approved commitment in the first
 place, not post-commit tampering. The anchor faithfully records the poisoned block exactly as
@@ -417,12 +476,15 @@ specifically, is that some metadata is meant to be externally visible).
 - `docs/DEVIATIONS.md` DEV-02 (session protocol), DEV-14 (Scyther, M7-1), DEV-20 (reduced view
   change), DEV-32 (Raft comparison, M7-4), DEV-33 (hybrid chain, M7-5), DEV-27/DEV-34 (honeypot
   representativeness, M7-7), DEV-37 (honeypot poisoning, M7-11), DEV-38 (drift-detection defense
-  and its trust assumptions, M7-12).
+  and its trust assumptions, M7-12), DEV-40 (commit-reveal defense and its trust assumption,
+  M7-14).
 - `RESULTS.md` M7-3 (adversarial attack), M7-4 (Raft comparison), M7-5 (hybrid anchoring), M7-7
   (real-malware transfer), M7-8 (adversarial retraining), M7-11 (honeypot poisoning), M7-12
-  (drift-detection defense).
+  (drift-detection defense), M7-14 (commit-reveal defense).
 - `scripts/m7_12_poisoning_defense.py`, `src/bsfr_sh/detection/drift.py`,
-  `src/bsfr_sh/consensus/validated_commit.py` — the defense measured above.
+  `src/bsfr_sh/consensus/validated_commit.py` — the drift-detection defense measured above.
+- `scripts/m7_14_commit_reveal_defense.py`, `src/bsfr_sh/consensus/commit_reveal.py`,
+  `src/bsfr_sh/framework/commit_reveal_pipeline.py` — the commit-reveal defense measured above.
 - `verification/README.md` — the full Scyther claims table and stated limitations (Tier 1).
 - `docs/report/report.tex` §"Threat Model" — the shorter, matrix-and-gaps-focused version of this
   document, written for the report's own reader rather than as a standalone reference.

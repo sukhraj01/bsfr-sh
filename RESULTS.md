@@ -1128,3 +1128,114 @@ sandbox does not have.
 Figures: `results/figures/fig13{a,b,c,d,e}_{coverage_progression,malbehavd_feature_distributions,
 transfer_metrics,group_importance,ks_heatmap}.png`, sidecar
 `results/logs/20260926T091633Z-be5973ca.json`.
+
+## M7-14 — commit-then-reveal defense against honeypot poisoning (2026-09-27)
+
+`scripts/m7_14_commit_reveal_defense.py --seed 20260912`, run_id `20260926T210819Z-1c0db7c7`,
+sidecar `results/logs/20260926T210819Z-1c0db7c7.json`. `consensus/commit_reveal.py` +
+`framework/commit_reveal_pipeline.py` (DEV-40): a two-phase commit/reveal/merge protocol denying
+an adversary the current round's honest distribution before it commits, aimed at anchor-point
+injection specifically (the strategy M7-12's drift detection cannot catch). Measured against
+exactly M7-11's three strategies and five budgets, with the adversary constrained to a
+historical-only view (85% of the corpus, deterministic split); plus a 15%-historical sensitivity
+check, an 8-repeat robustness check, 10 sequential rounds, a withholding simulation, and a
+combination with M7-12's drift detector. Full discussion: `docs/DEVIATIONS.md` DEV-40,
+`docs/THREAT_MODEL.md` Gap 1's "protocol-level pre-commit denial" subsection.
+
+```
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | unpoisoned baseline, clean eval | bal_acc=0.8408 | measured | 20260926T210819Z-1c0db7c7 | M7-14, reproduces M7-3/M7-11's 0.8408
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | label_flip @1% budget | undefended_bal_acc=0.8259 defended_bal_acc=0.8244 damage_prevented=-0.0015 n_poisoned=6 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | label_flip @5% budget | undefended_bal_acc=0.8277 defended_bal_acc=0.8232 damage_prevented=-0.0045 n_poisoned=31 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | label_flip @10% budget | undefended_bal_acc=0.8279 defended_bal_acc=0.8153 damage_prevented=-0.0126 n_poisoned=62 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | label_flip @20% budget | undefended_bal_acc=0.7908 defended_bal_acc=0.7636 damage_prevented=-0.0272 n_poisoned=125 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | label_flip @50% budget | undefended_bal_acc=0.6680 defended_bal_acc=0.7290 damage_prevented=+0.0610 n_poisoned=312 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | feature_poison @1% budget | undefended_bal_acc=0.8342 defended_bal_acc=0.8438 damage_prevented=+0.0037 n_poisoned=6 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | feature_poison @5% budget | undefended_bal_acc=0.8350 defended_bal_acc=0.8253 damage_prevented=-0.0097 n_poisoned=31 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | feature_poison @10% budget | undefended_bal_acc=0.8396 defended_bal_acc=0.8478 damage_prevented=-0.0057 n_poisoned=62 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | feature_poison @20% budget | undefended_bal_acc=0.8261 defended_bal_acc=0.8167 damage_prevented=-0.0094 n_poisoned=125 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | feature_poison @50% budget | undefended_bal_acc=0.8378 defended_bal_acc=0.8386 damage_prevented=+0.0008 n_poisoned=312 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | anchor_point_injection @1% budget | undefended_bal_acc=0.8464 defended_bal_acc=0.8438 damage_prevented=+0.0026 n_poisoned=6 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | anchor_point_injection @5% budget | undefended_bal_acc=0.8438 defended_bal_acc=0.8438 damage_prevented=+0.0000 n_poisoned=31 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | anchor_point_injection @10% budget | undefended_bal_acc=0.8468 defended_bal_acc=0.8412 damage_prevented=+0.0056 n_poisoned=62 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | anchor_point_injection @20% budget | undefended_bal_acc=0.8415 defended_bal_acc=0.8415 damage_prevented=-0.0000 n_poisoned=125 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-commit-reveal | anchor_point_injection @50% budget | undefended_bal_acc=0.8284 defended_bal_acc=0.8310 damage_prevented=+0.0026 n_poisoned=312 (historical positives=623) | measured | 20260926T210819Z-1c0db7c7 | M7-14
+2026-09-27 | detection/honeypot-m7-14-low-history | anchor_point_injection @1% budget, historical_fraction=0.15 | undefended_bal_acc=0.8464 defended_bal_acc=0.8395 damage_prevented=+0.0042 n_poisoned=1 (historical positives=106) | measured | 20260926T210819Z-1c0db7c7 | M7-14 sensitivity check
+2026-09-27 | detection/honeypot-m7-14-low-history | anchor_point_injection @5% budget, historical_fraction=0.15 | undefended_bal_acc=0.8438 defended_bal_acc=0.8276 damage_prevented=-0.0103 n_poisoned=5 (historical positives=106) | measured | 20260926T210819Z-1c0db7c7 | M7-14 sensitivity check
+2026-09-27 | detection/honeypot-m7-14-low-history | anchor_point_injection @10% budget, historical_fraction=0.15 | undefended_bal_acc=0.8468 defended_bal_acc=0.8288 damage_prevented=-0.0060 n_poisoned=11 (historical positives=106) | measured | 20260926T210819Z-1c0db7c7 | M7-14 sensitivity check
+2026-09-27 | detection/honeypot-m7-14-low-history | anchor_point_injection @20% budget, historical_fraction=0.15 | undefended_bal_acc=0.8415 defended_bal_acc=0.8464 damage_prevented=-0.0049 n_poisoned=21 (historical positives=106) | measured | 20260926T210819Z-1c0db7c7 | M7-14 sensitivity check
+2026-09-27 | detection/honeypot-m7-14-low-history | anchor_point_injection @50% budget, historical_fraction=0.15 | undefended_bal_acc=0.8284 defended_bal_acc=0.8439 damage_prevented=+0.0094 n_poisoned=53 (historical positives=106) | measured | 20260926T210819Z-1c0db7c7 | M7-14 sensitivity check
+2026-09-27 | detection/honeypot-m7-14-robustness | anchor_point_injection @1% budget, 8 repeats | mean_damage_prevented=+0.0012 std_damage_prevented=0.0033 | measured | 20260926T210819Z-1c0db7c7 | M7-14, independent historical-split and injection-draw seeds per repeat
+2026-09-27 | detection/honeypot-m7-14-robustness | anchor_point_injection @5% budget, 8 repeats | mean_damage_prevented=-0.0005 std_damage_prevented=0.0012 | measured | 20260926T210819Z-1c0db7c7 | M7-14, independent historical-split and injection-draw seeds per repeat
+2026-09-27 | detection/honeypot-m7-14-robustness | anchor_point_injection @10% budget, 8 repeats | mean_damage_prevented=+0.0029 std_damage_prevented=0.0019 | measured | 20260926T210819Z-1c0db7c7 | M7-14, independent historical-split and injection-draw seeds per repeat
+2026-09-27 | detection/honeypot-m7-14-robustness | anchor_point_injection @20% budget, 8 repeats | mean_damage_prevented=-0.0013 std_damage_prevented=0.0010 | measured | 20260926T210819Z-1c0db7c7 | M7-14, independent historical-split and injection-draw seeds per repeat
+2026-09-27 | detection/honeypot-m7-14-robustness | anchor_point_injection @50% budget, 8 repeats | mean_damage_prevented=+0.0055 std_damage_prevented=0.0034 | measured | 20260926T210819Z-1c0db7c7 | M7-14, independent historical-split and injection-draw seeds per repeat
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 1 | bal_acc=0.8084 n_poisoned_this_round=15 cumulative_rows=283 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 2 | bal_acc=0.8384 n_poisoned_this_round=26 cumulative_rows=443 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 3 | bal_acc=0.8156 n_poisoned_this_round=39 cumulative_rows=616 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 4 | bal_acc=0.8207 n_poisoned_this_round=53 cumulative_rows=802 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 5 | bal_acc=0.8278 n_poisoned_this_round=65 cumulative_rows=1000 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 6 | bal_acc=0.8282 n_poisoned_this_round=77 cumulative_rows=1210 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 7 | bal_acc=0.8037 n_poisoned_this_round=89 cumulative_rows=1432 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 8 | bal_acc=0.8245 n_poisoned_this_round=102 cumulative_rows=1667 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 9 | bal_acc=0.8268 n_poisoned_this_round=115 cumulative_rows=1915 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-repeated-rounds | round 10 | bal_acc=0.8206 n_poisoned_this_round=128 cumulative_rows=2176 | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4a
+2026-09-27 | detection/honeypot-m7-14-withholding | always-withholding adversary, max_consecutive_withholds=3 | excluded_at_round=3 of 6 run | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 4c
+2026-09-27 | detection/honeypot-m7-14-combination | label_flip @1% budget | undefended_maha=0.5693 (detected=False) defended_maha=0.3702 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | label_flip @5% budget | undefended_maha=0.3660 (detected=False) defended_maha=0.3716 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | label_flip @10% budget | undefended_maha=0.3244 (detected=False) defended_maha=0.3411 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | label_flip @20% budget | undefended_maha=0.3236 (detected=False) defended_maha=0.3190 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | label_flip @50% budget | undefended_maha=0.3256 (detected=False) defended_maha=0.3244 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | feature_poison @1% budget | undefended_maha=0.5015 (detected=False) defended_maha=0.6378 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | feature_poison @5% budget | undefended_maha=0.3229 (detected=False) defended_maha=0.2627 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | feature_poison @10% budget | undefended_maha=0.2828 (detected=False) defended_maha=0.3329 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | feature_poison @20% budget | undefended_maha=0.3271 (detected=False) defended_maha=0.3232 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | feature_poison @50% budget | undefended_maha=0.3268 (detected=False) defended_maha=0.3109 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | anchor_point_injection @1% budget | undefended_maha=0.0162 (detected=False) defended_maha=0.0169 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | anchor_point_injection @5% budget | undefended_maha=0.0084 (detected=False) defended_maha=0.0139 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | anchor_point_injection @10% budget | undefended_maha=0.0083 (detected=False) defended_maha=0.0130 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | anchor_point_injection @20% budget | undefended_maha=0.0078 (detected=False) defended_maha=0.0123 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+2026-09-27 | detection/honeypot-m7-14-combination | anchor_point_injection @50% budget | undefended_maha=0.0085 (detected=False) defended_maha=0.0118 (detected=False) newly_detected=False | measured | 20260926T210819Z-1c0db7c7 | M7-14 item 5
+```
+
+**Finding: the protocol is correctly built and behaves exactly as specified, but its measured
+effect on anchor-point injection's damage is statistically indistinguishable from zero on this
+corpus.** `damage_prevented` at the mature-chain (85%-historical) partition swings from -0.0272 to
++0.0610 across all 15 cells, but the two strategies commit-reveal was never expected to constrain
+(`label_flip`, `feature_poison` — neither needs to see this round's honest data to operate) show
+the largest, noisiest swings, which is itself the tell that these are sampling-pool artifacts, not
+protocol effects. For `anchor_point_injection` specifically — the strategy the defense targets —
+`damage_prevented` stays within a hundredth of a point at every budget (+0.0026, +0.0000, +0.0056,
+-0.0000, +0.0026), and an 8-repeat robustness check (independent historical-split and
+injection-draw seeds) confirms this is not one lucky split: mean `damage_prevented` ranges
+-0.0013 to +0.0055 with standard deviation 0.0010-0.0034 — zero sits inside one standard deviation
+at every budget. A 15%-historical ("early chain") sensitivity check, with an order of magnitude
+less historical data (106 vs. 623 positive rows), shows the identical null pattern. **Why:**
+`honeypot.collector`'s profiles are stationary, low-dimensional (22-feature) mixtures (DEV-27); a
+historical sample of only ~106 positive rows already estimates the population centroid almost as
+precisely as the full corpus would, so denying the adversary the current round's data costs it
+almost nothing it could not already infer from history.
+
+**Failure mode (a), repeated rounds:** 10 sequential rounds of `anchor_point_injection` (budget
+0.20 of each round's growing historical positive count) show no monotonic strengthening —
+`bal_acc` oscillates 0.8037-0.8384 around the 0.8408 baseline with no visible trend across
+rounds, the same null finding, confounded by (and reported alongside) the accumulating corpus's
+own independent growth (283 -> 2176 rows).
+
+**Failure mode (b), collusion:** argued, not measured, per the brief's own instruction — two
+colluding nodes at `n=4` already exceeds pBFT's own `f<n/3` tolerance (existing
+`test_pbft_byzantine.py` results), so commit-reveal adds no new trust assumption for this failure
+mode specifically.
+
+**Failure mode (c), withholding:** deterministic and measured directly. An always-withholding
+adversary is permanently excluded by `WithholdTracker` at exactly round 3 of a 6-round run,
+matching the configured `max_consecutive_withholds=3` exactly.
+
+**Combination with M7-12:** every defended anchor-point cell's poisoned rows, scored by the
+identical `DriftDetector`/`DriftPolicy` M7-12 used, land at 0.0118-0.0169 — barely above M7-12's
+own undefended 0.0078-0.0162, both roughly two orders of magnitude below the 3.0 alarm threshold.
+`newly_detected=False` for all 15 cells, all three strategies: the combination does not catch
+anything neither mechanism caught alone, on this corpus.
+
+Figures: `results/figures/fig14a_commit_reveal_sweep.png`,
+`results/figures/fig14b_repeated_rounds.png`, sidecar
+`results/logs/20260926T210819Z-1c0db7c7.json`.

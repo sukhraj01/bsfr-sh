@@ -28,21 +28,24 @@ paper specifies but never defines. Reproducing the paper's own evaluation protoc
 model reaches 0.9442 accuracy / 0.9697 F1 -- 4.56 points below the published figure; an
 eight-hypothesis ablation over every candidate methodological explanation we could identify
 narrows, but does not close, a residual gap that tightens from 3.58 to 1.51 points. Beyond
-reproduction, twelve extensions build three analyses the paper never attempts. A
+reproduction, fourteen extensions build three analyses the paper never attempts. A
 \emph{security} analysis: formal verification of our own session protocol, a pBFT-vs-Raft
 consensus comparison, external anchoring against a simulated public chain, a four-tier threat
-model, and a measured honeypot data-poisoning attack together with a drift-detection defense for
-it -- the defense catches the poisoning strategy predicted least catchable and misses the one
-predicted most catchable, at a measured false-positive cost. A \emph{detection} analysis: the
-honeypot pipeline's real end-to-end result, adversarial feature-space evasion and a partial
-defense against it tested across two model architectures, and transfer evaluation against two
-real malware datasets. And a \emph{scalability} analysis of on-chain storage growth and
-throughput. We further identify five independent defects spanning the paper's evaluation
-methodology, security argument, and preprocessing specification. The framework's central idea --
-chain-protecting a detector's ground truth and a system's backups from the same adversary -- is
-sound; several of the paper's supporting claims measurably are not, and the extensions built here
-show that idea can be attacked, and in one case only partially defended, in ways the paper's own
-security argument never considers.
+model, and a measured honeypot data-poisoning attack together with two independent defenses for
+it -- a statistical one that catches the poisoning strategy predicted least catchable and misses
+the one predicted most catchable, at a measured false-positive cost, and a protocol-level
+commit-then-reveal defense, correctly built and behaviourally verified, whose measured protection
+against that same missed strategy is statistically indistinguishable from zero on our corpus. A
+\emph{detection} analysis: the honeypot pipeline's real end-to-end result, adversarial
+feature-space evasion and a partial defense against it tested across two model architectures, and
+transfer evaluation against three real malware datasets, one of them genuinely dynamic. And a
+\emph{scalability} analysis of on-chain storage growth and throughput. We further identify five
+independent defects spanning the paper's evaluation methodology, security argument, and
+preprocessing specification. The framework's central idea -- chain-protecting a detector's ground
+truth and a system's backups from the same adversary -- is sound; several of the paper's
+supporting claims measurably are not, and the extensions built here show that idea can be
+attacked, and only partially defended even by mechanisms built specifically to close the gap, in
+ways the paper's own security argument never considers.
 \end{abstract}
 \section{Introduction}
 
@@ -88,17 +91,20 @@ truth and a system's backups protects both from an adversary with every incentiv
 either. Testing that claim needs a working system to attack, which reproduction under the
 paper's own protocol does not by itself provide: the paper's evaluation runs entirely on
 BitcoinHeist address features, not on anything a ransomware operator, a compromised cloud server,
-or a network attacker actually controls. \textbf{Twelve extensions}, built once the working
+or a network attacker actually controls. \textbf{Fourteen extensions}, built once the working
 system existed, supply that missing half, organized into three analyses beyond reproduction and
 critique. \S\ref{sec:security} is a \emph{security} analysis the paper never attempts: it
 constructs the four-tier threat model \S V's five informal paragraphs never state, formally
 verifies our own session-establishment protocol against a Dolev-Yao adversary, measures pBFT
 against Raft to ask whether the paper's own deployment needs Byzantine tolerance at all, adds
 external anchoring against a simulated public chain so a private chain's operators cannot rewrite
-history undetected, and measures a real honeypot data-poisoning attack together with a
-drift-detection defense built and evaluated against it -- a genuine research contribution, not a
-critique, that finds the defense catches exactly the poisoning strategy predicted least
-catchable and misses the one predicted most catchable. \S\ref{sec:detection-analysis} is a
+history undetected, and measures a real honeypot data-poisoning attack together with two
+independent defenses built and evaluated against it -- a statistical one (a genuine research
+contribution, not a critique, that finds the defense catches exactly the poisoning strategy
+predicted least catchable and misses the one predicted most catchable) and a protocol-level
+commit-then-reveal defense (\S\ref{sec:m7-14}) that behaves exactly as designed yet measurably
+does not degrade the one strategy it targets on our corpus, for a reason this project measures
+rather than assumes. \S\ref{sec:detection-analysis} is a
 \emph{detection} analysis the paper's own \S VII never runs, because it evaluates on data no
 ransomware author could ever produce: the honeypot pipeline's real end-to-end result once its
 undefined layer is actually built, adversarial feature-space evasion against the resulting
@@ -1276,6 +1282,75 @@ has no averaging to suppress sampling noise. Reporting a solvable gap honestly, 
 that show exactly how far the solution reaches and where it stops, is the more useful contribution
 than reporting either "poisoning is unsolved" or "poisoning is solved."
 
+\subsection{Commit-Then-Reveal: A Protocol-Level Defense}
+\label{sec:m7-14}
+
+\S\ref{sec:m7-12} explained \emph{why} statistical drift detection cannot catch anchor-point
+injection: its engineered midpoint is computable directly from the current round's honest
+distribution, and in a roughly class-balanced corpus that midpoint sits almost exactly at the
+population mean. The fix that finding points at is protocol-level, not statistical: deny the
+adversary that visibility before it commits. \texttt{consensus.commit\_reveal} implements a
+two-phase commit/reveal/merge protocol -- each contributing node commits to
+$H(\mathrm{batch}_l \Vert r_l)$ over its \emph{entire} batch (every feature value, via
+\texttt{SignatureRecordPayload.to\_bytes()} -- a count-only or label-only commitment would let an
+adversary commit to a size and fill in anything at reveal) before any other node's contribution
+is visible; reveals are verified against their commitments, and a node that withholds or reveals a
+mismatch is excluded from the round, reported rather than raised, so one bad participant cannot
+abort an otherwise-healthy round. \texttt{framework.commit\_reveal\_pipeline} hands the merged,
+verified batch to the existing block pipeline unmodified -- \texttt{consensus/pbft.py} and
+\texttt{\_block\_pipeline.py} are byte-for-byte unchanged.
+
+\textbf{The protocol behaves exactly as specified.} Commitment tamper detection, round exclusion
+(non-reveal, mismatch, missing commitment), canonical deterministic merging, and \texttt{f=1}
+crash tolerance through a real pBFT commit are all measured directly (22 unit tests, one
+real-consensus integration test). An always-withholding adversary is permanently excluded at
+exactly round 3 of a 6-round simulation, matching the configured threshold precisely.
+
+\textbf{Its measured effect on anchor-point injection's damage is statistically indistinguishable
+from zero on this corpus.} Constraining the adversary to a historical-only view (85\% of the
+corpus, the current round's honest 15\% withheld until reveal) and re-running M7-11's exact
+three-strategy, five-budget sweep: \texttt{damage\_prevented} for anchor-point injection stays
+within a hundredth of a point at every budget ($+0.0026$, $+0.0000$, $+0.0056$, $-0.0000$,
+$+0.0026$). An 8-repeat robustness check (independent historical-split and injection-draw seeds)
+confirms this is not one lucky split -- the mean sits within one standard deviation of zero at
+every budget ($-0.0013$ to $+0.0055$, $\sigma=0.0010$--$0.0034$) -- and a 15\%-historical
+("early-chain") sensitivity check, an order of magnitude less historical data, shows the identical
+null pattern. \texttt{label\_flip}/\texttt{feature\_poison} show larger, noisier swings (up to
+$-0.0325$ in one run), but this is sampling-pool noise, not a protocol effect: neither strategy
+needs this round's honest data to operate in the first place (\texttt{label\_flip} relabels the
+adversary's own collected samples; \texttt{feature\_poison} resamples from whatever benign pool it
+has), so commit-reveal was never expected to constrain them.
+
+\textbf{Why the null result, measured rather than assumed:} \texttt{honeypot.collector}'s profiles
+are stationary, low-dimensional (22-feature) mixtures (DEV-27) -- a historical sample of only
+$\approx$106 positive rows already estimates the population centroid almost as precisely as the
+full $\approx$700-row corpus would, so withholding the current round costs the adversary almost
+nothing it could not already infer from history. Ten sequential commit-reveal rounds (the
+adversary's historical view, including its own prior poison, growing each round) show no
+monotonic strengthening either -- the same mechanism, the same null result. Combined with M7-12's
+drift detector: every defended anchor-point cell scores $0.012$--$0.017$, barely above M7-12's own
+undefended $0.008$--$0.016$, both two orders of magnitude below the $3.0$ alarm threshold --
+nothing is newly caught, consistent with the estimate barely having moved.
+
+\textbf{Collusion is bounded, not merely deferred.} Two colluding nodes sharing batches before
+committing would restore the adversary's visibility, but at $n{=}4$ this requires corrupting a
+second replica, which already exceeds pBFT's own $f<n/3$ tolerance (\S\ref{sec:threat-tiers}).
+Commit-reveal therefore adds no new trust assumption for this failure mode beyond consensus's
+existing one -- it does add one genuinely new assumption elsewhere (\S\ref{sec:threat-model},
+Trust Assumption 8): a committing node must not leak its batch out-of-band before revealing,
+which no cryptographic commitment can prevent on its own.
+
+\textbf{Honest verdict.} The protocol is correctly built, adds essentially no new attack surface,
+and behaves exactly as designed. What it does not do, measured rather than assumed, is
+meaningfully protect \emph{this project's specific corpus} against anchor-point injection: the
+corpus's centroids converge from too little historical data for "the adversary must guess wrong"
+to actually occur at any tested scale. The paper's own architecture commits data before validating
+its semantic content at all; commit-reveal adds a validation step that uses the protocol's own
+structure (who saw what, and when) rather than requiring replicas to understand the data's
+meaning -- a defense with real conceptual reach, whose demonstrated reach on this corpus is
+narrower than its motivating argument alone would suggest. Full numbers: \texttt{RESULTS.md} M7-14;
+mechanism and trust assumption: DEV-40.
+
 \subsection{Coverage Matrix and Gaps}
 \label{sec:threat-model}
 
@@ -2228,20 +2303,26 @@ adversary with every incentive to attack both -- is sound, and our own honeypot 
 framework can produce a real, bounded detection result (0.8422 balanced accuracy) once its
 undefined layer is actually built.
 
-Twelve extensions, built once that working system existed, tested the architectural idea itself
+Fourteen extensions, built once that working system existed, tested the architectural idea itself
 rather than the paper's published numbers, across three analyses. \textbf{Security}
 (\S\ref{sec:security}): the four-tier threat model \S V never states; formal (Scyther)
 verification of our own session protocol (Tier 1); a pBFT-vs-Raft comparison finding a single
 Byzantine leader corrupts Raft's chain undetectably, which is the reason pBFT, not Raft, is the
 correct choice here -- a reason the paper never states (Tier 2); external anchoring against a
 simulated public chain, answering \S VIII's own stated future work (Tier 2--3); and a real,
-measured honeypot data-poisoning attack together with a drift-detection defense built and
-evaluated against it, closing the loop this project's own threat model opened. The defense
-finding is a genuine research contribution, not a critique: it catches the poisoning strategy
-predicted least catchable (an engineered class-boundary midpoint that, in a balanced corpus,
-coincides with the population mean) and misses the one predicted most catchable (label flipping,
-invisible to a feature-only detector by construction), at a false-positive cost measured rather
-than assumed. \textbf{Detection} (\S\ref{sec:detection-analysis}): the honeypot pipeline's own
+measured honeypot data-poisoning attack together with two independent defenses built and
+evaluated against it, closing the loop this project's own threat model opened. The statistical
+defense's finding is a genuine research contribution, not a critique: it catches the poisoning
+strategy predicted least catchable (an engineered class-boundary midpoint that, in a balanced
+corpus, coincides with the population mean) and misses the one predicted most catchable (label
+flipping, invisible to a feature-only detector by construction), at a false-positive cost measured
+rather than assumed. The protocol-level commit-then-reveal defense (\S\ref{sec:m7-14}), built
+specifically to close that missed case, behaves exactly as designed -- yet measurably does not
+degrade anchor-point injection's damage on our corpus, because the corpus's stationary,
+low-dimensional profiles let a historical-only centroid estimate converge almost as fast as a
+full-information one; a correctly-built defense whose real-world reach turned out narrower than
+its own motivating argument, measured rather than assumed either way. \textbf{Detection}
+(\S\ref{sec:detection-analysis}): the honeypot pipeline's own
 end-to-end result; adversarial feature-space evasion finding roughly a quarter of ransomware
 samples trivially evadable, and a hardening defense that works only at a real, non-trivial
 accuracy cost and only within a narrow training-budget window, confirmed non-tree-specific by an
@@ -2264,10 +2345,13 @@ name, is a paper whose claims should not be relied on as published, at any of th
 this report checked them. That is a narrower conclusion than ``the framework does not work'': our
 own honeypot pipeline shows a version of Algorithm 3, trained on data Algorithm 2 actually
 specifies producing, detecting ransomware at a real, bounded, non-degenerate rate, and our own
-defense against the poisoning attack this project also found shows that at least one of the
-architecture's real gaps is a solvable one, measured rather than merely named. The architecture
-is worth building on. The published numbers, as published, and the informal security argument, as
-argued, are not evidence that it works or defends as well as claimed.
+statistical defense against the poisoning attack this project also found shows that at least one
+of the architecture's real gaps is partially solvable, measured rather than merely named -- while
+the protocol-level defense built for the case the statistical one misses shows that "correctly
+built" and "measurably protective" are not the same claim, and a project honest with itself
+reports both. The architecture is worth building on. The published numbers, as published, and the
+informal security argument, as argued, are not evidence that it works or defends as well as
+claimed.
 
 \begin{thebibliography}{9}
 

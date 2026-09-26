@@ -3,8 +3,9 @@
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 **Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11), its
-statistical drift-detection defense (M7-12), and dynamic-behavioral real-data transfer (M7-13)
-delivered; async pBFT with modelled network latency is the one remaining, not-required item**
+statistical drift-detection defense (M7-12), dynamic-behavioral real-data transfer (M7-13), and a
+commit-reveal protocol defense (M7-14) delivered; async pBFT with modelled network latency is the
+one remaining, not-required item**
 
 ---
 
@@ -365,6 +366,27 @@ existing baseline convention). Variance is reported and the repeat count follows
       were checked and ruled out for verified reasons before this fifth option was found and used.
       `scripts/m7_13_malbehavd_transfer.py`, `RESULTS.md` M7-13, `docs/DEVIATIONS.md` DEV-39,
       report §"Real Malware Transfer Evaluation" extended (2026-09-26)
+- [x] **M7-14 — commit-then-reveal defense against honeypot poisoning.**
+      `consensus/commit_reveal.py` (`Commitment`/`Reveal`/`CommitRevealRound`/`WithholdTracker`)
+      plus `framework/commit_reveal_pipeline.py` (`submit_with_commit_reveal`, wrapping
+      `_block_pipeline.run` unmodified) implement a two-phase commit/reveal/merge protocol denying
+      an adversary the current round's honest distribution before it must commit its own batch —
+      targeting anchor-point injection specifically, the one M7-11 strategy M7-12's drift
+      detection cannot catch. Measured against M7-11's three strategies/five budgets with the
+      adversary constrained to a historical-only view: the protocol behaves exactly as specified
+      (22 unit tests, 1 real-pBFT integration test — commitment binding, exclusion, `f=1` crash
+      tolerance), but its measured effect on anchor-point injection's damage is statistically
+      indistinguishable from zero on this corpus (8-repeat robustness check, mean
+      `damage_prevented` -0.0013 to +0.0055, both an 85%- and a 15%-historical partition) — this
+      corpus's stationary, low-dimensional profiles let a historical-only centroid estimate
+      converge nearly as fast as a full-information one. Collusion is bounded by pBFT's own
+      `f<n/3` (no new trust assumption); withholding is deterministic (permanent exclusion at
+      exactly round 3 of 6, matching the configured threshold); combined with M7-12's drift
+      detector, no cell newly crosses the alarm threshold. `configs/chain.yaml`'s
+      `consensus.commit_reveal.{enabled, max_consecutive_withholds}` is the config-flag switch.
+      `scripts/m7_14_commit_reveal_defense.py`, `RESULTS.md` M7-14, `docs/DEVIATIONS.md` DEV-40,
+      `docs/THREAT_MODEL.md` Gap 1 updated + Trust Assumption 8 added, report §"Honeypot Data
+      Poisoning" extended (2026-09-27)
 
 ---
 

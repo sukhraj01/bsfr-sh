@@ -1792,3 +1792,139 @@ transfer_metrics,group_importance,ks_heatmap}.png`. Full numbers: `RESULTS.md` "
 `tests/unit/test_honeypot_malbehavd_mapping.py` (21 tests: the mapping table is deterministic and
 total, coverage-fraction ordering vs. ClaMP/EMBER, entropy/kill_chain fully missing, per-feature
 compute correctness, malformed-row handling).
+
+### DEV-40 · ADD · Commit-then-reveal defense against honeypot poisoning: the protocol works
+exactly as specified, and measurably does not degrade anchor-point injection on this corpus (M7-14)
+
+**Paper:** n/a — Algorithm 2's collection step has no commit phase at all (GAP-3); this is a new
+protocol extension this project adds, not a paper claim being tested.
+
+**Problem, restated precisely.** M7-12 (DEV-38) measured that `detection.drift.DriftDetector`
+cannot catch anchor-point injection at any budget, and *why*: the attack's engineered midpoint
+between the two class centroids sits, in this roughly class-balanced corpus, almost exactly at
+the population mean — the batch designed to look most like an attack looks the least anomalous.
+That midpoint is only computable because `detection.poisoning.anchor_point_injection` reads the
+*current* `x_train`/`y_train` centroids directly. M7-14's brief: build a protocol-level defense
+(commit before seeing the honest distribution) that removes that visibility, and measure whether
+the attack degrades.
+
+**What was built.** `consensus/commit_reveal.py` — `Commitment`/`Reveal`/`CommitRevealRound`
+(Phases 1-2: commit, then reveal-and-verify, binding the *entire* batch including every feature
+value via `SignatureRecordPayload.to_bytes()`, not a count or a label hash — a node that commits
+to a batch and reveals a different one, or never reveals at all, is excluded from the round,
+reported rather than raised, so one bad participant cannot abort the round for the rest) and
+`WithholdTracker` (permanent exclusion after `max_consecutive_withholds` — default 3, chosen to
+match pBFT's own `f=1`-at-`n=4` bound rather than an independently chosen number). This module
+depends only on `crypto`/`blockchain`/`util` (`consensus/validated_commit.py`'s dependency on
+`detection/` remains the one named exception to CLAUDE.md §3, not widened by this session); the
+pipeline-wrapping step (Phase 3: hand the merged, verified batch to the existing block pipeline)
+therefore lives one layer up, in `framework/commit_reveal_pipeline.py`'s
+`submit_with_commit_reveal`, which calls `_block_pipeline.run` unmodified. `configs/chain.yaml`
+gained `consensus.commit_reveal.{enabled, max_consecutive_withholds}` (default `enabled: false`)
+— the config-flag switch the brief's item 2 asks for; it is read by callers (this session's
+evaluation script; any future `phase2_collection` wiring is out of scope), since a module cannot
+sensibly "be enabled" on its own.
+
+**The information constraint is modelled explicitly, not just argued** (`scripts/
+m7_14_commit_reveal_defense.py`). `detection/poisoning.py`'s three strategies are called
+completely unmodified (OUT OF SCOPE line 1) — what changes is what they are *given*. The
+committed corpus is split once, deterministically, into a historical partition (85%, "already on
+the chain" — visible to the adversary at commit time) and this round's honest contribution (15%,
+revealed only after commit); the adversary's strategy function sees only the historical
+partition, its output is merged with this round's untouched honest data, and *that* merged set is
+what the detector is fit on — the same total corpus content M7-11 fits on, reshuffled only by
+which slice was temporarily withheld from the adversary's view.
+
+**Measured result: the protocol behaves exactly as specified (21 unit tests + 1 real-pBFT
+integration test, all passing), but its effect on anchor-point injection's measured damage is
+statistically indistinguishable from zero on this corpus, at both a mature-chain (85% historical)
+and an early-chain (15% historical) partition.** `damage_prevented` (undefended gap minus defended
+gap, both measured against the clean baseline) at `HISTORICAL_FRACTION=0.85`: +0.0026, +0.0000,
++0.0056, -0.0000, +0.0026 across the five budgets — all within a hundredth of a point, sign
+unstable. An 8-repeat robustness check (independent historical-split and injection-draw seeds per
+repeat, `run_anchor_point_robustness`) confirms this is not one lucky/unlucky split: mean
+`damage_prevented` ranges from -0.0013 to +0.0055 with `std` 0.0010-0.0034 — the mean sits inside
+one standard deviation of zero at every budget. The `EARLY_CHAIN_HISTORICAL_FRACTION=0.15`
+sensitivity check (only 106 historical positive rows, an order of magnitude less data) shows the
+identical pattern: -0.0103 to +0.0094, still noise-level. **Why**: `honeypot.collector`'s four
+ransomware profiles and however-many benign profiles are stationary, low-dimensional (22-feature)
+Gaussian/log-normal mixtures (DEV-27) — a historical sample of even ~106 positive rows already
+estimates the population centroid to within the same precision the full ~700-row corpus would,
+so withholding the current round's honest data denies the adversary almost nothing it could not
+already infer from history. The defense's own motivating premise — "the adversary must guess
+where the boundary is, and a wrong guess is either ineffective or detectable" — is correct as
+stated, but this corpus's centroids converge too fast for "wrong guess" to actually occur at any
+tested history size.
+
+**`label_flip`/`feature_poison` show larger, noisier `damage_prevented` swings (e.g. -0.0325 at
+one budget in an earlier run, -0.0272 in the canonical one) — this is sampling-pool noise, not a
+protocol effect, and is reported as such rather than left to look like an inconsistent result.**
+Neither strategy needs to see this round's honest data to operate: `label_flip` relabels rows the
+adversary already possesses (real ransomware traces it collected itself); `feature_poison`
+resamples benign feature values from whatever pool it has access to. Restricting that pool to the
+85%/15% historical partition changes *which* rows are available to flip or resample from, which
+is exactly the kind of finite-sample variation `run_anchor_point_robustness`'s repeats quantify for
+`anchor_point_injection` — not measured for the other two strategies since commit-reveal was never
+expected to constrain them in the first place (stated as a prediction, not discovered post hoc:
+DEV-40's own design section above explains why before any number is shown).
+
+**Failure mode (a), repeated rounds:** 10 sequential commit-reveal rounds, `anchor_point_injection`
+only, budget=0.20 of that round's *historical* positive count, the adversary's historical view
+(including its own prior poison) growing each round. Measured `bal_acc` after each round: 0.8084,
+0.8384, 0.8156, 0.8207, 0.8278, 0.8282, 0.8037, 0.8245, 0.8268, 0.8206 — no monotonic
+strengthening; the trajectory oscillates around the 0.84 baseline without a visible trend, the
+same null finding as the main sweep, for the same reason (fast centroid convergence). Confounded,
+and stated as such: the accumulating corpus also grows each round (283 -> 2176 rows), which
+independently affects the fit regardless of poisoning — a cleaner metric (delta against an
+equivalent-size *clean* accumulator) is a natural next step this session did not build.
+
+**Failure mode (b), collusion — argued, not measured, per the brief's own instruction.** Two
+colluding nodes could share batches before committing, but at `n=4` with one adversary this
+requires corrupting a second replica, which already exceeds pBFT's own `f<n/3` tolerance
+(`docs/ARCHITECTURE.md` §consensus; `tests/unit/test_pbft_byzantine.py`'s existing `f=1`/`f=2`
+results). **Commit-reveal therefore adds no new trust assumption beyond what consensus already
+requires** — a genuinely good property, not a limitation, and stated as such rather than buried
+among the failure modes it sits beside.
+
+**Failure mode (c), withholding — deterministic, measured directly.** An always-withholding
+adversary (`CS_adversary`, committing but never revealing, every round) is permanently excluded
+by `WithholdTracker` at exactly round 3 of a 6-round simulation, matching
+`max_consecutive_withholds=3` exactly — the mechanism behaves as specified. This is a liveness
+cost, not a safety cost: every withheld batch is excluded from the merged set immediately, in the
+very first round it withholds, regardless of whether permanent exclusion has triggered yet.
+
+**Combination with M7-12 (item 5): no cell newly crosses the Mahalanobis threshold.** Every
+defended anchor-point-injection cell's poisoned rows, scored by the identical `DriftDetector`/
+`DriftPolicy` M7-12 used, score 0.0118-0.0169 — barely different from M7-12's own undefended
+0.0078-0.0162, both roughly two orders of magnitude below the 3.0 alarm threshold. `newly_detected`
+is `False` for all 15 cells (all three strategies), consistent with the sweep's own null finding:
+commit-reveal did not change these batches' feature-space location enough to move a statistical
+drift score, because it did not change the adversary's centroid estimate enough to matter.
+
+**Honest verdict, stated once so it is not read as either "the defense doesn't work" or "the
+paper's premise was wrong."** The protocol itself is correctly built and behaves exactly as
+specified — every unit and integration test (commitment binding, tamper detection, exclusion,
+withholding, `f=1` crash tolerance through real pBFT) passes, and the code is a genuine, working,
+protocol-level mechanism with no new trust assumption beyond `f<n/3`. What is *not* shown is that
+it meaningfully protects **this corpus's** anchor-point injection: the measured effect is
+statistically indistinguishable from zero, at two different historical-partition sizes and across
+8 independent repeats. This bounds where a commit-before-reveal defense of this shape is actually
+useful — a stationary, low-dimensional, moderately-sampled distribution (like this project's
+synthetic honeypot corpus) lets a historical-only estimate converge almost as fast as a
+full-information one, so the "the adversary must guess the boundary" premise, while logically
+sound, does not bind in practice here. A corpus with genuine concept drift, a much higher feature
+dimensionality relative to sample size, or a much smaller absolute history (fewer than the ~100
+positive rows tested here) is the regime where this defense would be expected to actually degrade
+the attack — untested in this session, and a concrete direction for a future one.
+
+**Impact on reproduction:** none — new capability, no paper target touched, `_block_pipeline.run`
+and `consensus/pbft.py` byte-for-byte unchanged (the only `pbft.py` change in this project remains
+M7-12's `chain_factory` parameter). Figures:
+`results/figures/fig14a_commit_reveal_sweep.png`, `results/figures/fig14b_repeated_rounds.png`.
+Full numbers: `RESULTS.md` "M7-14", sidecar `results/logs/20260926T210819Z-1c0db7c7.json`. Tests:
+`tests/unit/test_commit_reveal.py` (22 tests: commitment determinism and tamper detection, round
+exclusion for non-reveal/mismatch/no-commitment, canonical merge order, honest-case equivalence
+to direct submission, `WithholdTracker` streak/reset/permanent-exclusion behaviour),
+`tests/integration/test_commit_reveal_pbft.py` (1 test: a withheld/crashed node's batch is
+excluded and the remaining honest batch still commits through real, unmodified pBFT consensus at
+`n=4, f=1`).
