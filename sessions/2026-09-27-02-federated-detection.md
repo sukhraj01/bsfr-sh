@@ -161,4 +161,4 @@ sessions past the original <20pp target (was 26pp after M7-14).
 - [x] `RESULTS.md` appended, one line per run
 - [x] `docs/ROADMAP.md` boxes ticked
 - [x] `docs/DEVIATIONS.md` updated if the paper was departed from (DEV-41)
-- [ ] Committed, message explains *why*
+- [x] Committed, message explains *why*
