@@ -1862,6 +1862,76 @@ architectural, not just training a wider draw -- ensemble diversity over feature
 loss that penalises reliance on any single small feature group, neither of which this session's
 scope covers.
 
+\subsection{Exact Minimum Adversarial Perturbation}
+\label{sec:m7-17}
+
+\S\ref{sec:adversarial}'s adaptive-evasion search finds the minimum perturbation fraction that
+flips each row by a 101-point grid plus bisection to $10^{-4}$ -- an approximation that can miss a
+narrow flip region between grid points. \textbf{Why the approximation error matters}: the 10th
+percentile is the number an examiner remembers as "the fraction of ransomware trivially evadable,"
+and \S\ref{sec:m7-8}'s retraining conclusions rest on comparing adaptive-evasion medians across
+budgets -- if the approximation is loose, both could be wrong in either direction.
+
+\textbf{Method.} $DM_{CSl}$'s decision is nearest-profile membership on the soft-vote average of
+\emph{four} heterogeneous models (\texttt{random\_forest}, \texttt{decision\_tree},
+\texttt{logistic\_regression}, \texttt{k\_nearest\_neighbours}), not a random-forest-only
+majority vote. Three admit an exact treatment along the same ray \S\ref{sec:adversarial} already
+searches: each tree's predicted class is piecewise-constant in the perturbation fraction $t$, with
+breakpoints exactly where a moving feature crosses a split threshold on the sample's current
+decision path (found by walking the tree and re-deriving the path after every crossing); the
+logistic model's decision boundary is affine in $t$, solved in closed form. The fourth,
+\texttt{k\_nearest\_neighbours}, would require enumerating pairwise crossings between the query's
+distance curve and all $\sim$1467 training points -- $O(n_{\text{train}}^2)$ per sample -- judged
+disproportionate to this session's time budget and not attempted. The exact
+\texttt{random\_forest}/\texttt{decision\_tree}/\texttt{logistic\_regression} breakpoints are
+merged with a dense grid (finer than the original 101 points) to bound any residual
+\texttt{k\_nearest\_neighbours}-only crossing, then bisected to $10^{-6}$ -- by construction never
+looser than the original search.
+
+\textbf{Updated percentiles: the approximation error was small, and \S\ref{sec:adversarial}'s
+conclusions hold.} Exact median \textbf{0.306} vs.\ the original search's \textbf{0.321}
+(-1.5 points); p10/p90 move by under 0.2 points. 65 of 353 rows (18.4\%) are proven-optimal exact
+results; the original search was $\geq$10 percentage points loose for only 4 of 353 rows (1.1\%),
+all \texttt{k\_nearest\_neighbours}-driven. None of the 28 rows that never flip under the original
+search actually flip under exact search -- that floor is confirmed, not a coarse-grid artifact.
+Figure~\ref{fig:m7-17-histogram} overlays both distributions; they are visually almost identical,
+consistent with the small measured shift.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.75\linewidth]{figs/fig_m7_17_exact_vs_binary_search_histogram.png}
+\caption{Minimum perturbation to evade, original detector: the original 101-point-grid search
+vs.\ the exact/near-exact method. The distributions are close, matching the 1.5-point median
+shift.}
+\label{fig:m7-17-histogram}
+\end{figure}
+
+\textbf{Implications for \S\ref{sec:m7-8}: the 25\%/50\%-budget findings are unchanged; the
+100\%-budget "never flips" claim needed correcting, not overturning.} Re-measuring \S\ref{sec:m7-8}'s
+three hardened models with the exact method: the 25\%-budget backfire and 50\%-budget
+bound-memorisation medians match the original search to under 0.01 percentage points. The
+100\%-budget model's reported median of \textbf{1.000} ("never flips") is technically wrong but
+practically right: exact search finds 177 of 353 rows (50.1\%) \emph{do} flip -- an 80.95-point
+median shift, exceeding this session's 5-point retraining-revisit threshold. Verified directly
+against the real ensemble (not the search machinery itself), 176 of those 177 revert to the
+correct verdict one perturbation step later -- median dip width \textbf{0.38\%} of the evasion
+range, versus \textbf{39.6\%} for the real flips the original (unhardened) model shows. The
+100\%-budget model's decision surface is riddled with hundreds of one-sample-wide, unexploitable
+adversarial windows near the augmented boundary, not a stable evasion region: no rational attacker
+in \S\ref{sec:adversarial}'s threat model (tuning observable behaviour, not gradient access to
+this exact fitted forest) could land inside a window roughly 1 part in 250 wide. This is direct,
+quantitative evidence \emph{for} \S\ref{sec:m7-8}'s own "memorises the evasion boundary, not a
+deeper representation" reading -- a genuinely smooth, generalising decision function does not have
+that many razor-thin holes in it -- not evidence against it. No new retraining was run despite the
+shift crossing the revisit threshold: the existing 100\%-budget model was not retrained or
+altered, the shift is fully explained by measurement precision, and \S\ref{sec:m7-8}'s
+\emph{practical} robustness conclusion is unchanged. Figure~\ref{fig:m7-8-pareto} is deliberately
+not redrawn from the raw exact-median numbers alone -- plotting the 100\%-budget point at
+"robustness 0.190" would be numerically true but would misrepresent the trade-off to a reader who
+does not also see the stability breakdown above; a stability-adjusted robustness metric (minimum
+\emph{stable} perturbation, under which the 100\%-budget point would sit far to the robust end,
+since only 1 of its 178 real flips is stable) is a natural follow-up this session does not build.
+
 \subsubsection{Neural vs.\ Tree-Based Detector: Architecture or Features?}
 \label{sec:m7-10b}
 

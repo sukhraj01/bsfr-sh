@@ -2130,3 +2130,88 @@ into a fixed-width numpy string array silently truncates it — fixed by working
 `detection/detector.py`, `detection/profiles.py`, or any `consensus/`/`mitigation/` module.
 Figure: `results/figures/fig_m7_16_family_confusion.png`. Full numbers: `RESULTS.md` "M7-16",
 sidecar `results/logs/20260927T071228Z-8d52159c.json`.
+
+### DEV-43 · ADD · Exact minimum adversarial perturbation: the brief assumed a random-forest
+### classifier, `DM_CSl` is a four-model ensemble, and the 100%-budget "never flips" claim needed
+### correcting, not overturning (M7-17)
+
+**Paper:** n/a — adversarial evasion is entirely our own extension (DEV-27/M7-3). This entry is
+about tightening M7-3's own measurement method, not the paper.
+
+**The session brief's method does not fit `DM_CSl` as built, and that had to be resolved before
+writing any code.** The brief (§1) is written for a pure random-forest classifier: "walk the
+tree's decision path... the minimum perturbation that flips the MAJORITY vote." `DM_CSl`'s actual
+decision (`detection.detector.DetectionModule.decide`, and `run_adversarial_robustness.py`'s own
+docstring: *"the ensemble, not a single model's `.predict()`"*) is nearest-`NProf`/`AProf`-
+membership on the soft-vote average of **four** heterogeneous `configs/ml.yaml` models —
+`random_forest`, `decision_tree`, `logistic_regression`, `k_nearest_neighbours` — not a
+random-forest-only hard vote. Three of the four admit an exact treatment along M7-3's fixed
+top-5-simultaneous ray (`detection.exact_adversarial.tree_flip_t`/`lr_flip_t`); the fourth,
+`k_nearest_neighbours`, would require enumerating pairwise crossings between the query point's
+distance curve and all ~1467 training points' — `O(n_train^2)` per sample, ~1.05M pairs — judged
+disproportionate to this session's time budget on an 8GB dev box (CLAUDE.md §6) and not attempted.
+`exact_min_perturbation` therefore evaluates `DM_CSl`'s real decision at every
+`random_forest`/`decision_tree`/`logistic_regression` breakpoint plus a dense grid (finer than
+M7-3's 101 points) to bound any residual `k_nearest_neighbours`-only crossing, then bisects to
+`1e-6` — exact where a tree/LR breakpoint is the true cause (65/353 rows, 18.4%, on the original
+model), bounded-but-not-proven-optimal otherwise. By construction this can never report a *larger*
+minimum than M7-3's own search (verified: `test_exact_min_perturbation_never_exceeds_binary_search`,
+and the driver script hard-fails if any of the 353 real rows violate it).
+
+**Two real implementation bugs surfaced and were fixed before any number could be trusted, both
+from treating a decision tree's evaluation as pure float64 arithmetic when it is not.** (1) sklearn
+routes tree splits with `<=`, so a sample sitting *exactly* on a threshold has not yet crossed it —
+the naive "return the algebraic root" implementation reported `t=inf` ("never flips") for trees
+that provably do flip by `t=1.0`, caught by the brief's own exhaustive-verification test
+requirement (`test_tree_flip_t_is_exact_for_every_tree_on_every_sample`) applying `tree_flip_t`'s
+own reported `t` and checking sklearn's `.predict()` actually changed. (2) sklearn's compiled tree
+traversal casts `X` to **float32** before comparing to the (float64) threshold; a threshold
+crossing computed in full float64 precision can land within float32's ~1.2e-7 relative rounding
+of the stored threshold, so a naive comparison silently disagrees with what `.predict()` actually
+does. Fixed by reproducing the cast (`goes_left`) and nudging past a crossing in feature-value
+space (proportional to the threshold's own magnitude), not `t`-space, so the nudge survives
+casting regardless of how large or small the crossing's `denom` is.
+
+**The brief's own greedy majority-vote heuristic (§1c) is confirmed unsound on the real forest, not
+just "an approximation" in the abstract — measured directly.** `greedy_majority_t` assumes a tree,
+once flipped, stays flipped as `t` increases to 1.0; true for a depth-1 stump (nowhere to route
+back through), false for `DM_CSl`'s actual multi-level trees, which split on a moving feature more
+than once along a path. On 5 sampled positive rows, 5-12 of the ~50 trees selected as "cheap enough
+to have flipped by `t_star`" had flipped *back* by `t_star` (verified against real per-tree
+`.predict()` calls), so the true flipped count (38-59/100) sometimes falls short of the intended
+majority (50). Kept in `detection.exact_adversarial.greedy_majority_t` because the brief asks for
+it as a labelled approximation; `exact_min_perturbation` does not use it, and
+`test_detection_exact_adversarial.py` documents the failure with a real-forest test rather than
+asserting a guarantee the function cannot make.
+
+**Finding, measured on the original (M7-3) model: the approximation error was small, and M7-3's
+conclusions hold.** Exact median 0.3063 vs. binary search's 0.3213 (-1.5pt); p10/p90 move by
+<0.2pt. The binary search was >=10 percentage points loose for only 4/353 rows (1.1%), all
+`k_nearest_neighbours`-driven. None of M7-3's 28 "never flips" survivors actually flip under exact
+search.
+
+**Finding, measured on M7-8's hardened models: 25%/50% unchanged, 100% needed correcting.** The
+25%-budget backfire and 50%-budget memorisation medians match to <0.01 percentage point. The
+100%-budget model's reported median=1.0 ("never flips") is **technically wrong but practically
+right**: exact search finds 177/353 rows (50.1%) DO flip, but verified directly against the real
+ensemble, 176 of those 177 revert to the correct verdict one step later (median dip width 0.38% of
+the perturbation range, vs. 39.6% for the real flips M7-3's own original model shows) — a decision
+surface riddled with hundreds of one-sample-wide, unexploitable adversarial windows near the
+augmented boundary, not a stable evasion region. This is direct, quantitative evidence *for*
+M7-8's own "memorises the evasion boundary, not a deeper representation" reading (a genuinely
+smooth, generalising decision function does not have that many razor-thin holes in it), not against
+it. The 80.95-point median shift exceeds the session brief's 5-point retraining-revisit threshold;
+no new retraining was run — the existing 100%-budget model was not retrained or altered, the shift
+is fully explained by measurement precision, and the qualitative robustness conclusion is
+unchanged. `results/figures/fig9d_pareto_clean_vs_robustness.png` (M7-8) is deliberately **not**
+redrawn from the raw exact-median numbers alone: doing so would plot the 100%-budget point at
+"robustness 0.19," which is numerically the true minimum but would misrepresent the trade-off to
+any reader who does not also see the stability breakdown. A stability-adjusted robustness metric
+(e.g. minimum *stable* perturbation, which would place the 100%-budget point far to the robust
+end — only 1/178 of its real flips are stable) is a natural follow-up this session does not build.
+
+**Impact on reproduction:** none — `detection/detector.py`, `honeypot/collector.py`, and every
+paper-facing number are untouched; this only re-measures an existing, non-paper extension (DEV-27)
+more precisely. `detection/exact_adversarial.py` (new module), `scripts/m7_17_exact_min_perturbation.py`.
+Figure: `results/figures/fig_m7_17_exact_vs_binary_search_histogram.png`. Full numbers:
+`RESULTS.md` "M7-17", sidecar `results/logs/20260927T171603Z-1d279ea9.json`.

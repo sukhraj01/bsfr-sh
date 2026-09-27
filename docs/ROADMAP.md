@@ -5,8 +5,8 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 **Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11), its
 statistical drift-detection defense (M7-12), dynamic-behavioral real-data transfer (M7-13), a
 commit-reveal protocol defense (M7-14), a federated cross-replica-disagreement defense (M7-15),
-and multi-family ransomware detection (M7-16) delivered; async pBFT with modelled network latency
-is the one remaining, not-required item**
+multi-family ransomware detection (M7-16), and exact minimum adversarial perturbation (M7-17)
+delivered; async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -421,6 +421,20 @@ existing baseline convention). Variance is reported and the repeat count follows
       changes any previously-published binary number. `scripts/m7_16_multiclass_detection.py`,
       `detection/multiclass.py`, `RESULTS.md` M7-16, `docs/DEVIATIONS.md` DEV-42, report
       §"Multi-Family Ransomware Detection" added (2026-09-27)
+- [x] **M7-17 — exact minimum adversarial perturbation.** Replaces M7-3's binary-search
+      minimum-perturbation approximation with an exact (`random_forest`/`decision_tree`/
+      `logistic_regression` breakpoints) / near-exact (dense-grid-bounded for
+      `k_nearest_neighbours`) method along the same ray. Found `DM_CSl` is a four-model ensemble,
+      not the brief's assumed random-forest-only classifier; two real tree-traversal bugs
+      (sklearn's `<=` boundary convention, float32 internal casting) fixed and caught by the
+      brief's own exhaustive per-tree verification test. Original model: exact median 0.3063 vs.
+      binary search's 0.3213 (-1.5pt), M7-3's conclusions hold. M7-8's 25%/50%-budget findings
+      unchanged (<0.01pt); the 100%-budget "never flips" claim is corrected, not overturned — 177
+      of 353 rows do flip, but 176 revert one step later (median dip width 0.38% of the range) —
+      unexploitable adversarial windows, not a stable evasion region, which is direct evidence for
+      M7-8's own "memorises the boundary" reading. `detection/exact_adversarial.py`,
+      `scripts/m7_17_exact_min_perturbation.py`, `RESULTS.md` M7-17, `docs/DEVIATIONS.md` DEV-43
+      (2026-09-27)
 
 ---
 

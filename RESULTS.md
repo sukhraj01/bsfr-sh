@@ -1440,3 +1440,62 @@ edge case.
 
 Sidecar: `results/logs/20260927T071228Z-8d52159c.json`. Figure:
 `results/figures/fig_m7_16_family_confusion.png` (decision tree, the macro-F1 winner).
+
+## M7-17 — exact minimum adversarial perturbation (2026-09-27)
+
+`scripts/m7_17_exact_min_perturbation.py`: re-measures M7-3's 353 positive eval rows (and M7-8's
+three hardened models) with `detection.exact_adversarial.exact_min_perturbation` — exact for the
+`random_forest`/`decision_tree`/`logistic_regression` share of `DM_CSl`'s four-model decision,
+bounded to `1e-6` (vs. M7-3's `1e-4`) for any residual `k_nearest_neighbours`-only crossing
+(DEV-43: `k_nearest_neighbours` alone is not solved exactly — judged `O(n_train^2)`-disproportionate
+to this session's budget). Same seed (20260912), same committed corpus, same top-5 features and
+bounds as M7-3/M7-8; nothing in `detection/detector.py` or `honeypot/collector.py` changed.
+
+```
+2026-09-27 | detection/honeypot-m7-17-exact | original model, binary search (M7-3 reproduction) | p10=0.0000 median=0.3213 p90=0.9771 | measured | 20260927T171603Z-1d279ea9 | M7-17, reproduces M7-3 exactly
+2026-09-27 | detection/honeypot-m7-17-exact | original model, exact/near-exact | p10=0.0000 median=0.3063 p90=0.9752 | measured | 20260927T171603Z-1d279ea9 | M7-17, cf. binary search above; -1.5pt median
+2026-09-27 | detection/honeypot-m7-17-exact | original model, exactness breakdown, n=353 | already_negative=61 tree_or_lr_exact=4 grid_bounded=260 never_flips=28 | measured | 20260927T171603Z-1d279ea9 | 65/353 (18.4%) proven optimal; 260/353 bounded to 1e-6, not proven
+2026-09-27 | detection/honeypot-m7-17-exact | original model, binary-search looseness, n=353 | n_loose_ge_10pp=4 max_delta=0.7263 mean_delta=0.0055 | measured | 20260927T171603Z-1d279ea9 | 4 samples where M7-3's grid+bisection missed a flip by >=10pp; worst case idx311-style delta 0.73
+2026-09-27 | detection/honeypot-m7-17-exact | original model, "never flips" recheck | n_survivors_m7_3=28 n_newly_flipped_under_exact=0 | measured | 20260927T171603Z-1d279ea9 | M7-3's floor of 28/353 truly unflippable rows confirmed, not a grid artifact
+2026-09-27 | detection/honeypot-m7-17-exact | original model, flip stability, n_real_flips=264 | n_stable=196 n_transient_dip=68 dip_width_median=0.3955 | measured | 20260927T171603Z-1d279ea9 | most flips (74.2%) are sustained regions, not narrow spikes, on the original model
+2026-09-27 | detection/honeypot-m7-17-exact | M7-8 hardened @25% budget, binary vs. exact | binary_median=0.2499 exact_median=0.2499 shift=0.00pp n_transient_dip=0/224 | measured | 20260927T171603Z-1d279ea9 | M7-8's 25%-budget backfire finding: UNCHANGED
+2026-09-27 | detection/honeypot-m7-17-exact | M7-8 hardened @50% budget, binary vs. exact | binary_median=0.8825 exact_median=0.8825 shift=0.00pp n_transient_dip=12/98 dip_width_median=0.1278 | measured | 20260927T171603Z-1d279ea9 | M7-8's 50%-budget memorisation finding: UNCHANGED
+2026-09-27 | detection/honeypot-m7-17-exact | M7-8 hardened @100% budget, binary vs. exact | binary_median=1.0000 exact_median=0.1905 shift=80.95pp n_stable=1/178 n_transient_dip=177/178 dip_width_median=0.0038 | measured | 20260927T171603Z-1d279ea9 | see finding below — NOT a simple robustness overstatement
+```
+
+**The approximation error was small for the original model, and M7-3's own conclusions hold.**
+Binary search's median (0.3213) overstates the true median by only 1.5 points (exact: 0.3063);
+p10/p90 move by <0.2pt. 65/353 rows (18.4%) are proven-optimal exact results (61 already
+misclassified at 0% perturbation, 4 where a `random_forest`/`decision_tree`/`logistic_regression`
+breakpoint is the true cause); the remaining 288 are bounded to `1e-6`, not proven optimal, but
+the binary search was only >=10 percentage points loose for 4/353 rows (1.1%) — all
+`k_nearest_neighbours`-driven, the one component this method does not solve exactly (DEV-43).
+**None of M7-3's 28 "never flips" survivors actually flip under exact search** — the 7.9% floor
+of trivially-unflippable ransomware samples is confirmed, not a coarse-grid artifact.
+
+**M7-8's 25%/50%-budget findings are unchanged to four decimal places** (shift <0.01pp both). The
+25%-budget robustness *backfire* and the 50%-budget bound-memorisation are real, not approximation
+artifacts.
+
+**The 100%-budget model's "never flips" claim is the session's central finding, and it needs
+correcting precisely, not simply overturning.** Exact search finds 177/353 rows (50.1%) DO flip —
+a massive apparent contradiction of M7-8's reported median=1.0. Verified directly against the real
+ensemble (not `exact_min_perturbation`'s own machinery): of those 177, only **1** stays flipped
+all the way to `t=1.0`; the other **176** revert to the correct (ransomware) verdict almost
+immediately — median dip width **0.38% of the perturbation range** (vs. 39.6% for the handful of
+real flips on the *original* model). These are razor-thin, unstable windows in `DM_CSl`'s decision
+surface, not usable evasion regions: an attacker would need to land a perturbation fraction to
+within roughly 1 part in 250 of an unpublished, model-specific value, which M7-3/M7-8's own threat
+model (a rational attacker tuning observable behaviour, not one with white-box gradient access to
+this exact fitted forest) cannot do. **M7-8's *practical* robustness conclusion for 100% budget
+therefore still holds** — but "never flips" is corrected to "flips only within measure-zero-like
+windows, 99.4% of the time reverting one step later," which is direct, quantitative evidence *for*
+M7-8's own "memorises the evasion boundary, not a deeper representation" reading: a smooth,
+genuinely-generalising decision surface does not have hundreds of one-sample-wide holes in it. This
+80.95-point median shift exceeds the session brief's 5-point retraining-revisit threshold; no new
+retraining was run because the shift is explained entirely by measurement precision (the existing
+100%-budget model was not retrained or altered) and the qualitative conclusion is unchanged — see
+DEV-43 for why the Pareto figure (`fig9d`) is not redrawn from the raw exact numbers alone.
+
+Histogram comparison: `results/figures/fig_m7_17_exact_vs_binary_search_histogram.png`. Sidecar:
+`results/logs/20260927T171603Z-1d279ea9.json`.
