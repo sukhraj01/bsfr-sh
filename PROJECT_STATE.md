@@ -4,44 +4,46 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-27 · **Milestone:** M7 stretch complete (M7-15 delivered) ·
-**Sessions completed:** 32
+**Last updated:** 2026-09-27 · **Milestone:** M7 stretch complete (M7-16 delivered) ·
+**Sessions completed:** 33
 
 ---
 
 ## One-line status
 
-M7-15 (federated detection via cross-replica disagreement) is delivered: `detection.federated`
-(`FederatedDetector`, `majority_vote`/`vote`, `analyze_disagreement`) exploits the paper's own
-`n=4` cloud-server replication instead of inspecting data (M7-12) or restricting it (M7-14) — no
-new protocol message, no new trust assumption beyond M7-12's existing one. Measured against
-M7-11's three strategies at 5/10/20% budgets under three scenarios (27 cells): **the result is
-honestly mixed, not a clean win.**
+M7-16 (multi-family ransomware detection) is delivered: `detection/multiclass.py` +
+`scripts/m7_16_multiclass_detection.py` test whether BitcoinHeist's 28 named ransomware families
+carry family-discriminative signal beyond binary ransomware/benign — not attempted by the paper.
 
-- **(a) Poisoner trains clean, honest nodes train poisoned.** Outlier identification is always
-  mechanically correct (3-vs-1). The predicted irony — the flagged outlier is the *better* model —
-  holds for `label_flip`/`feature_poison` (poisoner 0.8408 vs. honest 0.7722-0.8363) but
-  **inverts** for `anchor_point_injection` (honest 0.8425-0.8454 > poisoner 0.8408), reproducing
-  M7-11's own finding that this strategy sometimes helps rather than hurts. Excluding the outlier
-  never changes anything (majority voting had already suppressed a lone dissenter).
-- **(b) Algorithm diversity (RF/DT/KNN/LR) on one shared poisoned draw.** Majority vote never
-  scores below its worst individual model (9/9 cells) — but this hard-vote-of-separate-models
-  architecture **underperforms** the paper's own soft-vote `DM_CSl` ensemble on 2 of 3 strategies
-  at the 10% comparison point (0.786/0.819 vs. undefended 0.828/0.840), roughly even on the third.
-  KNN and DT score bit-identical balanced accuracy across all three budgets for
-  `anchor_point_injection` — a measured, genuine model insensitivity, not an artefact.
-- **(c) Private per-node holdout** (this project's extension, not the paper's). A weak,
-  inconsistent signal: only 1 of 9 cells clears its own stated detectability band
-  (`anchor_point_injection` @10%), and `label_flip` — the most damaging strategy — is **not**
-  reliably caught even at 20% budget. `n=4` nodes and a ~65-row holdout do not yet separate real
-  degradation from sampling noise.
-- Four-defense comparison table (M7-11/12/14/15 @10% budget) is the poisoning arc's capstone,
-  in `RESULTS.md`, `docs/DEVIATIONS.md` DEV-41, and the report.
-- Report extended (§"Federated Detection: Exploiting Replicated Redundancy", plus abstract/intro/
-  conclusion updates: 14→15 extensions, "two"→"three" poisoning defenses); recompiles clean
-  (tectonic) at **28 pages** (was 26 after M7-14 — see Risks, page-count gap widening).
+- **Measured: macro F1 0.058-0.199 (decision tree best) — weak, real signal, not strong.**
+  Weighted F1 (0.978-0.985) and top-3 accuracy (0.993-0.998) are both dominated by `white`'s
+  98.58% share and say little alone. Every family's dominant confusion is with `white`, never
+  another family — the 19x19 confusion matrix reflects the same ransomware/benign boundary the
+  binary detector already measures, not inter-family blur.
+- **Per-family feature signal (`year`/`income` dominate all 8 large families) is a stated
+  caveat**: each family is a narrow historical campaign window, so this may be a temporal
+  fingerprint rather than a behavioural one — the graph-topology features FLAW-2 already
+  distrusts contribute least to family discrimination too.
+- **Binary-collapse: RF/DT sit marginally *below* (not above) their published binary-only M6b
+  figures** — under 1 point apart on every metric, a wash rather than a win; the brief's own
+  expectation ("should match or exceed") is not quite met, reported as measured.
+- **The FT_RW/honeypot gap is real, not moot**: `honeypot/features.py` has no family field;
+  if graph features alone carry even weak family signal, FT_RW's richer behavioural features
+  plausibly would too. Recorded as a finding; no generator change made (out of scope).
+- **Found and fixed a latent performance bug** in `detection.dataset.grouped_stratified_holdout`
+  (used since Q10/D6): `np.isin` on large object-dtype arrays does not take numpy's hashed fast
+  path — never exercised at full 2.9M-row scale before this session (every prior caller only ran
+  it on the 46K-row `paper_mode` resample). Fixed with a Python hash-set membership test (0.25s
+  vs. an unbounded hang). A second fix in the same function: a class confined to a single
+  address could previously land entirely in test, crashing `top_k_accuracy_score` — now reserves
+  at least one group for training whenever more than one exists. Neither fix touches any
+  previously-published binary number (confirmed: `test_detection_dataset.py` unchanged, still
+  green).
+- Report extended (`docs/report/report.tex` §"Multi-Family Ransomware Detection", new figure
+  `fig_m7_16_family_confusion.png`); recompiles clean (tectonic) at **29 pages** (was 28 after
+  M7-15 — see Risks, page-count gap widening again).
 
-`make test` (1758 passed, incl. 12 new `detection.federated` tests) and `make lint` (ruff + mypy
+`make test` (1779 passed, incl. 21 new `detection.multiclass` tests) and `make lint` (ruff + mypy
 --strict on `src/`) green.
 
 ---
@@ -50,30 +52,26 @@ honestly mixed, not a clean win.**
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | this session adds `detection/federated.py` only — no `consensus/`, `blockchain/`, or existing `detection/` module touched |
-| Honeypot poisoning: attack (M7-11) + three independent defenses | done | statistical (M7-12, DEV-38, catches anchor-point-shaped batches in principle, misses label-flip) + protocol-level (M7-14, DEV-40, correctly built, measured-null effect on this corpus) + federated (M7-15, DEV-41, no new trust assumption, real but narrow/inconsistent effect) |
-| Real-malware transfer evaluation | done, 3 datasets | ClaMP (3/22), EMBER (6/22), MalbehavD-V1 (12/22, DEV-39) — unchanged this session |
-| `docs/report/report.pdf` | done, 28 pages | extended this session, recompiles clean via `tectonic` |
-| Everything else (M7-1 through M7-14's own deliverables) | done | unchanged |
+| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | this session adds `detection/multiclass.py` + one new function in `detection/dataset.py`; fixes a bug in existing `grouped_stratified_holdout` |
+| Honeypot poisoning: attack + three independent defenses (M7-11/12/14/15) | done | unchanged this session |
+| Multi-family detection (M7-16) | done | binary detector (`detection/detector.py`, `models.py`, `metrics.py`) untouched — new module only |
+| Real-malware transfer evaluation | done, 3 datasets | unchanged this session |
+| `docs/report/report.pdf` | done, 29 pages | extended this session, recompiles clean via `tectonic` |
+| Everything else (M7-1 through M7-15's own deliverables) | done | unchanged |
 
 ## Next task
 
 None forced. If a future session wants to act on this one's own findings, in order of interest:
 
-1. **A coordination mechanism for disagreement**, the limitation `docs/THREAT_MODEL.md`'s
-   federated-detection subsection states plainly: M7-15 builds the signal (voting, outlier
-   identification) but not what four cloud servers *do* once they disagree — the paper specifies
-   nothing here and this project does not add it. A protocol for acting on a flagged node (e.g.
-   feeding into `mitigation/` or a pBFT-level exclusion) is the natural next extension.
-2. **Scenario (c) with a larger holdout or more nodes**: the private-holdout signal's failure to
-   catch `label_flip` reliably at 20% budget is explicitly attributed to `n=4` nodes and a ~65-row
-   holdout's sampling variance — untested whether more nodes or a larger holdout fraction would
-   resolve it, and a candidate follow-up experiment, not a fix to this session's code.
-3. Test M7-14's commit-reveal on a corpus with genuine concept drift (carried, unchanged, from the
-   M7-14 session — this session did not touch commit-reveal).
-4. Close the report's page-count gap (28pp vs. the original <20pp target, now two sessions wider
-   than the 26pp M7-14 left it) — ranked options in
-   `sessions/2026-09-26-03-report-restructure-and-ember-check.md`.
+1. **The FT_RW/honeypot family-label gap** (M7-16's own finding): the synthetic honeypot
+   generator (`honeypot/collector.py`/`features.py`) produces only `RW`/`benign`, no family. A
+   future session could design a family-labelled extension of the generator — explicitly out of
+   scope for M7-16 itself.
+2. **A coordination mechanism for disagreement** (carried from M7-15): a protocol for acting on a
+   federated-detection flag (e.g. feeding into `mitigation/` or a pBFT-level exclusion) — the
+   paper specifies nothing here and M7-15 built the signal, not the response.
+3. Close the report's page-count gap (29pp vs. the original <20pp target, widened again this
+   session) — ranked options in `sessions/2026-09-26-03-report-restructure-and-ember-check.md`.
 
 ## Blockers
 
@@ -88,9 +86,9 @@ access request (carried, unchanged).
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q11 | Is the report's length (28pp) acceptable for submission, or does it need the deeper,
-substance-costing cuts `sessions/2026-09-26-03-...md` describes? Now two sessions further from the
-original <20pp target than when Q11 was first opened. | report sign-off | reviewer/instructor judgement |
+| Q11 | Is the report's length (29pp) acceptable for submission, or does it need the deeper,
+substance-costing cuts `sessions/2026-09-26-03-...md` describes? Now three sessions further from
+the original <20pp target than when Q11 was first opened. | report sign-off | reviewer/instructor judgement |
 
 ## Carried debt
 
@@ -103,10 +101,8 @@ original <20pp target than when Q11 was first opened. | report sign-off | review
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 tested eight hypotheses, narrowed the gap to 1.51pt; report states the residual as measured-and-bounded |
-| M7-12's "0/15 cells prevented" could be read as "the defense doesn't work" | undersells that the mechanism works exactly where predicted | DEV-38/`RESULTS.md`/report all lead with the anchor-point-injection inversion finding before the headline 0/15 |
-| M7-14's null result could be read as "commit-reveal doesn't work" | misreads a correctly-built, correctly-verified protocol as broken | DEV-40/`RESULTS.md`/report lead with "the protocol behaves exactly as specified" before the honest null result |
-| M7-15's scenario (a) irony could be read as "the defense is broken" (it flags the correct model as the outlier for some cells) | misreads a stated, predicted property of disagreement-based detection as a bug | DEV-41/`RESULTS.md`/report state the irony as a designed-for finding, not a discovered defect, and show it holds for 2/3 strategies, not universally |
-| The report is 28 pages, not the requested under-20 (widened from 26pp last session) | a page-limited venue/rubric may reject it as-is | PROJECT_STATE.md/session files state the finding and ranked options honestly rather than silently shipping either an over-length report or one hollowed out to hit a number |
+| M7-16's binary-collapse falling slightly *below* the binary-only reference could be read as "multi-class training hurts detection" | overstates a <1pt difference as a regression | RESULTS.md/DEVIATIONS.md/report all state it as "a wash, not a regression" with the exact deltas shown, never rounded to "worse" |
+| The report is 29 pages, not the requested under-20 (widened from 26pp two sessions ago) | a page-limited venue/rubric may reject it as-is | PROJECT_STATE.md/session files state the finding and ranked options honestly rather than silently shipping either an over-length report or one hollowed out to hit a number |
 | Two Claude Code sessions ran on this repo concurrently during M7-10; nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — flagging as a standing risk; re-read a file immediately before writing to it if a long gap occurred since it was first read |
 
 ---

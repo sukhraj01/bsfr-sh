@@ -1,0 +1,364 @@
+{
+  "best_model_by_macro_f1": "decision_tree",
+  "class_distribution_merged": {
+    "montrealCryptXXX": 182,
+    "montrealCryptoLocker": 645,
+    "montrealDMALocker": 16,
+    "montrealDMALockerv3": 29,
+    "montrealNoobCrypt": 41,
+    "other_ransomware": 21,
+    "paduaCryptoWall": 842,
+    "princetonCerber": 625,
+    "princetonLocky": 439,
+    "white": 197160
+  },
+  "class_distribution_raw": {
+    "montrealCryptXXX": 182,
+    "montrealCryptoLocker": 645,
+    "montrealCryptoTorLocker2015": 4,
+    "montrealDMALocker": 16,
+    "montrealDMALockerv3": 29,
+    "montrealGlobe": 1,
+    "montrealGlobeImposter": 3,
+    "montrealGlobev3": 4,
+    "montrealJigSaw": 1,
+    "montrealNoobCrypt": 41,
+    "montrealRazy": 1,
+    "montrealSamSam": 3,
+    "montrealVenusLocker": 2,
+    "montrealWannaCry": 1,
+    "paduaCryptoWall": 842,
+    "paduaKeRanger": 1,
+    "princetonCerber": 625,
+    "princetonLocky": 439,
+    "white": 197160
+  },
+  "config_hash": "7d2c9dfb3b4c7afd5891c4987fb1d823eac24a01c46030621542c52d9d53f959",
+  "config_hash_scheme": 2,
+  "confusion_matrix_figure": "results/figures/fig_m7_16_family_confusion.png",
+  "confusion_matrix_labels": [
+    "montrealCryptXXX",
+    "montrealCryptoLocker",
+    "montrealDMALocker",
+    "montrealDMALockerv3",
+    "montrealNoobCrypt",
+    "other_ransomware",
+    "paduaCryptoWall",
+    "princetonCerber",
+    "princetonLocky",
+    "white"
+  ],
+  "dataset": {
+    "columns": [
+      "year",
+      "day",
+      "length",
+      "weight",
+      "count",
+      "looped",
+      "neighbors",
+      "income"
+    ],
+    "matches_paper_counts": false,
+    "n_negative": 197160,
+    "n_positive": 2840,
+    "n_rows": 200000,
+    "positive_rate": 0.0142,
+    "source": "BitcoinHeistData.csv"
+  },
+  "deferred": {},
+  "full_scale": false,
+  "git_rev": "0645d6c",
+  "honest_mode_binary_reference": {
+    "f1_minority": 0.4145,
+    "mcc": 0.4579,
+    "precision": 0.7434,
+    "recall": 0.2874
+  },
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "large_families": [
+    "paduaCryptoWall",
+    "montrealCryptoLocker",
+    "princetonCerber",
+    "princetonLocky",
+    "montrealCryptXXX"
+  ],
+  "merged_into_other": [
+    "montrealGlobev3",
+    "montrealCryptoTorLocker2015",
+    "montrealSamSam",
+    "montrealGlobeImposter",
+    "montrealVenusLocker",
+    "montrealRazy",
+    "montrealWannaCry",
+    "montrealJigSaw",
+    "montrealGlobe",
+    "paduaKeRanger"
+  ],
+  "models": {
+    "decision_tree": {
+      "binary_collapse": {
+        "accuracy_for_contrast": 0.9802862903897749,
+        "confusion": {
+          "fn": 563,
+          "fp": 620,
+          "tn": 58530,
+          "tp": 296
+        },
+        "f1_minority": 0.3335211267605634,
+        "mcc": 0.32369876996215896,
+        "pr_auc": 0.12073309603492033,
+        "precision": 0.3231441048034934,
+        "recall": 0.3445867287543655
+      },
+      "classes": [
+        "montrealCryptXXX",
+        "montrealCryptoLocker",
+        "montrealDMALocker",
+        "montrealDMALockerv3",
+        "montrealNoobCrypt",
+        "other_ransomware",
+        "paduaCryptoWall",
+        "princetonCerber",
+        "princetonLocky",
+        "white"
+      ],
+      "fit_seconds": 0.531061583023984,
+      "macro_f1": 0.31457352333132127,
+      "model": "decision_tree",
+      "n_test": 60009,
+      "n_train": 139991,
+      "predict_seconds": 0.003736915998160839,
+      "subsampled_for_memory": false,
+      "top3_accuracy": 0.9932176840140645,
+      "weighted_f1": 0.9805826047687815
+    },
+    "k_nearest_neighbours": {
+      "binary_collapse": {
+        "accuracy_for_contrast": 0.9851355629988835,
+        "confusion": {
+          "fn": 775,
+          "fp": 117,
+          "tn": 59033,
+          "tp": 84
+        },
+        "f1_minority": 0.15849056603773584,
+        "mcc": 0.19697340764802856,
+        "pr_auc": 0.053781408865793245,
+        "precision": 0.417910447761194,
+        "recall": 0.09778812572759023
+      },
+      "classes": [
+        "montrealCryptXXX",
+        "montrealCryptoLocker",
+        "montrealDMALocker",
+        "montrealDMALockerv3",
+        "montrealNoobCrypt",
+        "other_ransomware",
+        "paduaCryptoWall",
+        "princetonCerber",
+        "princetonLocky",
+        "white"
+      ],
+      "fit_seconds": 0.1747015419532545,
+      "macro_f1": 0.19955405722807656,
+      "model": "k_nearest_neighbours",
+      "n_test": 60009,
+      "n_train": 139991,
+      "predict_seconds": 0.12272870901506394,
+      "subsampled_for_memory": false,
+      "top3_accuracy": 0.9924677964971921,
+      "weighted_f1": 0.980034871630589
+    },
+    "logistic_regression": {
+      "binary_collapse": {
+        "accuracy_for_contrast": 0.9856854805112566,
+        "confusion": {
+          "fn": 859,
+          "fp": 0,
+          "tn": 59150,
+          "tp": 0
+        },
+        "f1_minority": 0.0,
+        "mcc": 0.0,
+        "pr_auc": 0.014314519488743354,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "classes": [
+        "montrealCryptXXX",
+        "montrealCryptoLocker",
+        "montrealDMALocker",
+        "montrealDMALockerv3",
+        "montrealNoobCrypt",
+        "other_ransomware",
+        "paduaCryptoWall",
+        "princetonCerber",
+        "princetonLocky",
+        "white"
+      ],
+      "fit_seconds": 3.3598194170044735,
+      "macro_f1": 0.09927911446051074,
+      "model": "logistic_regression",
+      "n_test": 60009,
+      "n_train": 139991,
+      "predict_seconds": 0.0066325420048087835,
+      "subsampled_for_memory": false,
+      "top3_accuracy": 0.9946174740455598,
+      "weighted_f1": 0.9785798164174058
+    },
+    "random_forest": {
+      "binary_collapse": {
+        "accuracy_for_contrast": 0.9867186588678365,
+        "confusion": {
+          "fn": 759,
+          "fp": 38,
+          "tn": 59112,
+          "tp": 100
+        },
+        "f1_minority": 0.20060180541624875,
+        "mcc": 0.28709768889990916,
+        "pr_auc": 0.09700638929906663,
+        "precision": 0.7246376811594203,
+        "recall": 0.11641443538998836
+      },
+      "classes": [
+        "montrealCryptXXX",
+        "montrealCryptoLocker",
+        "montrealDMALocker",
+        "montrealDMALockerv3",
+        "montrealNoobCrypt",
+        "other_ransomware",
+        "paduaCryptoWall",
+        "princetonCerber",
+        "princetonLocky",
+        "white"
+      ],
+      "fit_seconds": 2.100034917006269,
+      "macro_f1": 0.23988369672583332,
+      "model": "random_forest",
+      "n_test": 60009,
+      "n_train": 139991,
+      "predict_seconds": 0.11105499998666346,
+      "subsampled_for_memory": false,
+      "top3_accuracy": 0.9981336132913396,
+      "weighted_f1": 0.9816751319682032
+    }
+  },
+  "n_test": 60009,
+  "n_train": 139991,
+  "per_family_feature_signal": {
+    "montrealCryptXXX": {
+      "count": 0.04177502185696472,
+      "day": 0.15066989835383082,
+      "income": 0.5806123289626718,
+      "length": 0.04075432512476931,
+      "looped": 0.012853360752047857,
+      "neighbors": 0.01973150709021609,
+      "weight": 0.0707857762518154,
+      "year": 0.0828177816076841
+    },
+    "montrealCryptoLocker": {
+      "count": 0.06023762507082153,
+      "day": 0.265920338465174,
+      "income": 0.24777752594287034,
+      "length": 0.0790985340708454,
+      "looped": 0.022218857233796224,
+      "neighbors": 0.06509679485329099,
+      "weight": 0.12821756415360033,
+      "year": 0.1314327602096012
+    },
+    "paduaCryptoWall": {
+      "count": 0.07007386210487336,
+      "day": 0.24031763672775283,
+      "income": 0.20386712588789485,
+      "length": 0.07647882996174131,
+      "looped": 0.028652528373677388,
+      "neighbors": 0.04742058548046727,
+      "weight": 0.11414422540586627,
+      "year": 0.21904520605772673
+    },
+    "princetonCerber": {
+      "count": 0.0608154509112283,
+      "day": 0.20445084862180554,
+      "income": 0.36766663451778797,
+      "length": 0.06812168297826636,
+      "looped": 0.010707816537189503,
+      "neighbors": 0.030871729020573845,
+      "weight": 0.11627882353345824,
+      "year": 0.14108701387969033
+    },
+    "princetonLocky": {
+      "count": 0.06485624818324515,
+      "day": 0.21272585534188626,
+      "income": 0.3011734543769864,
+      "length": 0.06017407321258769,
+      "looped": 0.011174373885850733,
+      "neighbors": 0.04732813027306146,
+      "weight": 0.10013310200835482,
+      "year": 0.20243476271802746
+    }
+  },
+  "per_family_report": {
+    "most_confused_with": {
+      "montrealCryptXXX": "white",
+      "montrealCryptoLocker": "white",
+      "montrealDMALocker": "white",
+      "montrealDMALockerv3": "white",
+      "montrealNoobCrypt": "white",
+      "other_ransomware": "white",
+      "paduaCryptoWall": "white",
+      "princetonCerber": "white",
+      "princetonLocky": "white",
+      "white": "montrealCryptoLocker"
+    },
+    "precision": {
+      "montrealCryptXXX": 0.7884615384615384,
+      "montrealCryptoLocker": 0.12757201646090535,
+      "montrealDMALocker": 0.0,
+      "montrealDMALockerv3": 0.0,
+      "montrealNoobCrypt": 0.0,
+      "other_ransomware": 0.0,
+      "paduaCryptoWall": 0.24242424242424243,
+      "princetonCerber": 0.3804347826086957,
+      "princetonLocky": 0.6194029850746269,
+      "white": 0.9904726448141066
+    },
+    "recall": {
+      "montrealCryptXXX": 0.7454545454545455,
+      "montrealCryptoLocker": 0.15979381443298968,
+      "montrealDMALocker": 0.0,
+      "montrealDMALockerv3": 0.0,
+      "montrealNoobCrypt": 0.0,
+      "other_ransomware": 0.0,
+      "paduaCryptoWall": 0.25196850393700787,
+      "princetonCerber": 0.3723404255319149,
+      "princetonLocky": 0.6287878787878788,
+      "white": 0.9895181741335588
+    },
+    "support": {
+      "montrealCryptXXX": 55,
+      "montrealCryptoLocker": 194,
+      "montrealDMALocker": 5,
+      "montrealDMALockerv3": 9,
+      "montrealNoobCrypt": 16,
+      "other_ransomware": 6,
+      "paduaCryptoWall": 254,
+      "princetonCerber": 188,
+      "princetonLocky": 132,
+      "white": 59150
+    }
+  },
+  "purpose": "M7-16 \u2014 multi-class ransomware family detection",
+  "run_id": "20260927T065605Z-ff9f662b",
+  "seed": 20260912,
+  "test_size": 0.3,
+  "wall_seconds": 7.908237291965634
+}

@@ -1331,3 +1331,112 @@ over — matching M7-14's own convention of reporting when a mean sits inside it
 
 Figure: `results/figures/fig15a_federated_scenarios.png`, sidecar
 `results/logs/20260927T053738Z-fc5e7c20.json`.
+
+### Multi-family ransomware detection (M7-16)
+
+BitcoinHeist's `label` column carries which of 28 named ransomware families an address belongs to
+— information the binary evaluation (M4a onward) has never used. `detection/multiclass.py` +
+`scripts/m7_16_multiclass_detection.py` test whether the same 8 address-level graph features that
+support the binary ransomware/benign boundary also support 28+1 separate ones. Natural class
+balance, no resample (the 90/10 trick has no 29-class analogue), grouped stratified holdout
+(`test_size=0.30`), full 2,916,697 rows.
+
+**Class distribution is itself the first finding.** Before any merge: 29 raw classes,
+`white`=2,875,284 (98.58%), the largest family `paduaCryptoWall`=12,390, down to three families
+with exactly 1 address. 11 of 28 families have fewer than 10 samples and are folded into
+`other_ransomware` per the M7-16 brief (`montrealFlyper`, `montrealXTPLocker`,
+`montrealVenusLocker`, `montrealCryptConsole`, `montrealXLockerv5.0`, `montrealEDA2`,
+`montrealJigSaw`, `paduaJigsaw`, `montrealXLocker`, `montrealSam`, `montrealComradeCircle`),
+leaving 19 classes. No family with >=10 samples is merged (checked directly against the raw
+counts). Two of the 19 surviving classes (`montrealRazy`, `montrealGlobeImposter`) turn out to be
+confined to exactly **one** address each — an address-grouped split cannot divide a single-address
+class, so both are structurally unsplittable (a real bug this session's fix addresses; see below).
+
+```
+2026-09-27 | detection/bitcoinheist-multiclass | random_forest, natural 2916697 rows, 19 classes | macro_f1=0.1978 weighted_f1=0.9850 top3=0.9980 bc_rec=0.2785 bc_mcc=0.4491 | measured | 20260927T071228Z-8d52159c | M7-16
+2026-09-27 | detection/bitcoinheist-multiclass | logistic_regression, natural 2916697 rows, 19 classes | macro_f1=0.0584 weighted_f1=0.9786 top3=0.9951 bc_rec=0.0000 bc_mcc=0.0000 | measured | 20260927T071228Z-8d52159c | M7-16
+2026-09-27 | detection/bitcoinheist-multiclass | decision_tree, natural 2916697 rows, 19 classes | macro_f1=0.1985 weighted_f1=0.9825 top3=0.9936 bc_rec=0.4166 bc_mcc=0.3939 | measured | 20260927T071228Z-8d52159c | M7-16
+2026-09-27 | detection/bitcoinheist-multiclass | k_nearest_neighbours, natural 1248537 rows (subsampled for memory, full n=2916697, ceiling=8.0GB) | macro_f1=0.1531 weighted_f1=0.9820 top3=0.9928 bc_rec=0.1760 bc_mcc=0.3082 | measured | 20260927T071228Z-8d52159c | M7-16
+```
+
+Weighted F1 (0.978-0.985) and top-3 accuracy (0.993-0.998) are both dominated by `white`'s 98.58%
+share — a model that predicts `white` for nearly everything already scores well on both, so
+neither number says much about family discrimination on its own. **Macro F1 (0.058-0.199) is the
+metric that answers the M7-16 question, and it says the feature space carries weak, decidedly not
+strong, family-discriminative signal.** Decision tree is the best of the four (0.1985, narrowly
+over random forest's 0.1978); logistic regression's one-vs-rest wrapper is worst by a wide margin
+(0.0584) and, like binary LR at the natural rate (`detection/bitcoinheist-honest`, M6b), collapses
+to predicting the majority class for every one-vs-rest sub-problem.
+
+**Per-family recall (decision tree, the macro-F1 winner) is not uniform, and where it is highest
+is informative.** `montrealCryptXXX` recall=0.8375 (n=726 test rows), `princetonLocky`
+recall=0.7188 (n=1988), `princetonCerber` recall=0.5320 (n=2767), `paduaCryptoWall` recall=0.3140
+(n=3717), `montrealCryptoLocker` recall=0.1483 (n=2805) — the four largest families are all
+detectable well above chance, but the eleven smallest (`montrealAPT` through `paduaKeRanger`,
+all <160 test rows) score at or near **zero recall**. **Every family's dominant confusion target
+is `white`, never another family** (`most_confused_with` is `"white"` for all 17 families with
+any off-diagonal mass) — when the detector fails to name a family it defaults to "benign", it does
+not mix up CryptoLocker for CryptoWall. The 29x29 (19x19 after merge) confusion is therefore
+concentrated entirely on the same ransomware/benign boundary the binary detector already measures,
+not on inter-family confusion — a materially different finding from "families look alike to each
+other."
+
+**Per-family feature signal (the 8 large families, one-vs-rest RF, `n_estimators=50`,
+`max_rows=20000`): `year` and `income` dominate every family's top-2 importance**, e.g.
+`montrealCryptoLocker` (year=0.391, day=0.202), `paduaCryptoWall` (year=0.427, day=0.205),
+`princetonLocky` (year=0.422, income=0.208), `montrealCryptXXX` (income=0.497, year=0.220) — the
+graph-topology features (`weight`, `count`, `looped`, `neighbors`) that the binary detector relies
+on rank low for every family. **This is a caveat, not just a finding**: each family's activity
+window is a narrow historical campaign (CryptoLocker ~2013-14, WannaCry 2017, ...), so `year` may
+be a temporal fingerprint of *when a campaign ran* rather than a distinguishing *behavioural*
+signature the way FT_RW's kill-chain features would be. The families may be separable mostly
+because they do not overlap in time, not because their address-level graph behaviour differs.
+
+**Binary-collapse comparison against the existing full-scale `honest_mode` binary numbers
+(`detection/bitcoinheist-honest`, M6b, run `20260917T175754Z-f3b9e363`) — three of four models are
+statistically indistinguishable from their binary-only counterparts, not clearly better:**
+
+| Model | Binary-only (M6b) | Multiclass, collapsed (M7-16) |
+|---|---|---|
+| random_forest | prec=0.7434 rec=0.2874 mcc=0.4579 f1min=0.4145 | prec=0.7383 rec=0.2785 mcc=0.4491 f1min=0.4044 |
+| decision_tree | prec=0.3970 rec=0.4236 mcc=0.4013 f1min=0.4099 | prec=0.3897 rec=0.4166 mcc=0.3939 f1min=0.4027 |
+| logistic_regression | prec=0.0000 rec=0.0000 mcc=0.0000 f1min=0.0000 | prec=0.0000 rec=0.0000 mcc=0.0000 f1min=0.0000 |
+| k_nearest_neighbours | n=780336, prec=0.5410 rec=0.1716 mcc=0.2995 f1min=0.2605 | n=1248537, prec=0.5577 rec=0.1760 mcc=0.3082 f1min=0.2675 |
+
+RF and DT are within 1 point of their own binary-only figure on every metric, marginally *below*
+rather than above it — **the M7-16 brief's expectation that multi-class training would match or
+exceed the binary task is not quite met, though the gap is small enough to be a wash rather than a
+regression.** LR reproduces binary LR's exact natural-rate failure mode (predicts nothing) inside
+every one-vs-rest sub-problem. KNN's multiclass binary-collapse is nominally better, but the two
+KNN rows are not a clean comparison — different subsample sizes (1,248,537 vs. 780,336) from
+different sampling procedures (grouped-by-address here, stratified k-fold there), so the direction
+should not be read as a real effect. **Net finding: family labels add signal about *which*
+ransomware without costing anything at the *is-it-ransomware* task** for RF/DT, the two models
+that do the real work in Table II.
+
+**KNN memory (CLAUDE.md §6).** Full-scale projection (`n_train=2,041,524`, `n_test=875,173`,
+8 features): peak 15.70 GB, over the 8 GB x 0.6 headroom ceiling — the same shape of hazard DEV-31
+found for the binary detector's full-scale `honest_mode` (17.94 GB there). `largest_feasible_n`
+sized a 1,248,537-row stratified subsample (train=873,929, test=374,608) that fits at 1.19 GB
+peak; run locally rather than deferred to Ada, following DEV-31's precedent of subsampling over
+deferring when a feasible size exists. `logistic_regression`'s one-vs-rest wrapper (19 binary
+fits) ran on the full 2,916,697 rows locally in 74.07s — well inside a practical local budget, so
+this did not need Ada either, despite the brief's expectation that it might.
+
+**Session finding, not a M7-16 result but load-bearing for it:** `grouped_stratified_holdout`
+(`detection/dataset.py`, used since Q10/D6) had a latent performance bug — `np.isin` on large
+object-dtype arrays does not take numpy's sorted/hashed fast path, so membership-testing ~860K
+candidate addresses against the 2.87M-row `white` class did not complete in any practical time
+(killed after 10+ minutes on an isolated case). Every caller through M4a/Q10/D6 only ever exercised
+this function on the 46K-row `paper_mode` resample, so nothing before M7-16 hit the majority class
+at full scale. Fixed with a Python hash-set membership test (0.25s on a comparable-size array);
+confirmed at 3.81s for a real full-scale 2.9M-row split. A second, related fix: a class confined to
+too few unique groups (as few as one, per the two single-address families above) could previously
+land *entirely* in the test partition, leaving zero training examples and crashing
+`top_k_accuracy_score` — `grouped_stratified_holdout` now reserves at least one group for training
+whenever more than one exists. Neither fix changes any previously-published binary number: the
+binary splits this function has always served have thousands of groups per class, far from either
+edge case.
+
+Sidecar: `results/logs/20260927T071228Z-8d52159c.json`. Figure:
+`results/figures/fig_m7_16_family_confusion.png` (decision tree, the macro-F1 winner).

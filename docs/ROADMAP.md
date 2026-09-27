@@ -4,8 +4,9 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 **Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11), its
 statistical drift-detection defense (M7-12), dynamic-behavioral real-data transfer (M7-13), a
-commit-reveal protocol defense (M7-14), and a federated cross-replica-disagreement defense (M7-15)
-delivered; async pBFT with modelled network latency is the one remaining, not-required item**
+commit-reveal protocol defense (M7-14), a federated cross-replica-disagreement defense (M7-15),
+and multi-family ransomware detection (M7-16) delivered; async pBFT with modelled network latency
+is the one remaining, not-required item**
 
 ---
 
@@ -404,6 +405,22 @@ existing baseline convention). Variance is reported and the repeat count follows
       poisoning arc's capstone. `scripts/m7_15_federated_detection.py`, `RESULTS.md` M7-15,
       `docs/DEVIATIONS.md` DEV-41, `docs/THREAT_MODEL.md` Gap 1 updated, report §"Honeypot Data
       Poisoning" extended (2026-09-27)
+- [x] **M7-16 — multi-family ransomware detection.** Tests whether BitcoinHeist's 28 named
+      ransomware families carry family-discriminative signal beyond binary ransomware/benign, not
+      attempted by the paper. Natural class balance (no 90/10 resample — no 29-class analogue),
+      rare families (<10 samples, 11 of 28) merged into `other_ransomware`, grouped stratified
+      holdout, full 2,916,697 rows. Measured: macro F1 0.058-0.199 (decision tree best) — weak,
+      real signal, not strong; every family's dominant confusion is with `white`, never another
+      family; per-family feature importance is dominated by `year`/`income` for all 8 large
+      families, a caveat (temporal campaign fingerprint, not necessarily behavioural) rather than
+      a clean win. Binary-collapse: RF/DT sit marginally *below* (not above) their published
+      binary-only M6b figures — under 1 point apart, a wash. Along the way, found and fixed a
+      latent performance bug in `grouped_stratified_holdout` (`np.isin` on large object arrays;
+      never exercised at full 2.9M-row scale before this session) and a split-safety gap
+      (single-address classes could land entirely in test, crashing top-k scoring) — neither
+      changes any previously-published binary number. `scripts/m7_16_multiclass_detection.py`,
+      `detection/multiclass.py`, `RESULTS.md` M7-16, `docs/DEVIATIONS.md` DEV-42, report
+      §"Multi-Family Ransomware Detection" added (2026-09-27)
 
 ---
 

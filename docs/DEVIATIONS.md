@@ -2029,3 +2029,104 @@ other two: scenario (a) can misidentify the correct model as the outlier by desi
 underperforms the paper's own soft-vote ensemble, and scenario (c) catches only one of nine cells.
 The honest verdict is "cheapest to add, narrowly and inconsistently useful," not "solves what the
 other two could not."
+
+### DEV-42 · ADD · Multi-family ransomware detection: weak but real family signal, concentrated
+entirely on the ransomware/benign boundary, not on inter-family confusion (M7-16)
+
+**Paper:** n/a — §VII evaluates BitcoinHeist as a binary ransomware/benign problem and never asks
+whether the 28 named families it already carries are themselves distinguishable. New extension.
+
+**Why this matters for Algorithm 4, stated up front.** Case dispatch in Alg. 4 is currently
+label-blind: every positive detection routes through the same isolate/remediate/case-1-2-3 state
+machine regardless of which family triggered it. Different families imply different decryption
+tools and kill-chain speeds, so family identification is a precondition for differentiated
+response — but only if the detector can actually name the family, which this session tests rather
+than assumes.
+
+**Class imbalance is a finding, not a preamble.** 29 raw classes (28 families + `white`):
+`white`=2,875,284 (98.58%), the largest family `paduaCryptoWall`=12,390, three families with
+exactly 1 address each. 11 of 28 families fall under the 10-sample threshold and are merged into
+`other_ransomware` per the brief; 19 classes survive. No family with >=10 samples is merged
+(checked directly, not asserted).
+
+**Measured result: macro F1 0.058-0.199 across the four models (decision tree best), weak
+signal, not strong.** Weighted F1 (0.978-0.985) and top-3 accuracy (0.993-0.998) are both
+dominated by `white`'s 98.58% share and say little on their own about family discrimination.
+Per-family recall is highly uneven: the four largest families score 0.15-0.84 recall; the eleven
+smallest score at or near zero. **The confusion is structurally one-sided** — every family's
+dominant misclassification target is `white`, never another family (`most_confused_with` is
+`"white"` for all 17 families with any off-diagonal mass) — so the 19x19 confusion matrix
+(`results/figures/fig_m7_16_family_confusion.png`) shows the same ransomware/benign boundary the
+binary detector already measures, not families blurring into each other.
+
+**Per-family feature signal (`year`/`income` dominate every large family) is a caveat, not just a
+finding.** A one-vs-rest RF per family (>=100 samples, `n_estimators=50` on a size-capped sample)
+ranks `year` and `income` above every graph-topology feature (`weight`, `count`, `looped`,
+`neighbors`) for all 8 large families. Since each family's activity is a narrow historical
+campaign window, this may be detecting *when a campaign ran* rather than a *behavioural*
+signature — the graph features FLAW-2 argues are already a poor proxy for ransomware behaviour
+(§ARCHITECTURE `honeypot/`) contribute the least to family discrimination too.
+
+**Binary-collapse: RF/DT are statistically indistinguishable from their binary-only counterparts,
+not clearly better — the brief's expectation is not quite met, honestly reported rather than
+rounded up.** Collapsing multi-class predictions to ransomware-vs-benign and scoring with the same
+`honest_metrics` the binary detector uses: RF (prec=0.7383 rec=0.2785 mcc=0.4491 f1min=0.4044) and
+DT (prec=0.3897 rec=0.4166 mcc=0.3939 f1min=0.4027) both sit marginally *below* their published
+binary-only M6b figures (RF: 0.7434/0.2874/0.4579/0.4145; DT: 0.3970/0.4236/0.4013/0.4099) on
+every metric — under 1 point apart, a wash rather than either a win or a real regression. LR
+reproduces binary LR's exact natural-rate failure (predicts nothing) inside every one-vs-rest
+sub-problem. KNN's multiclass number is nominally higher but is not a clean comparison (different
+subsample sizes from different sampling procedures — see `RESULTS.md`). **Net reading: family
+labels add information about *which* ransomware without detectably costing the *is-it-ransomware*
+task**, for the two models (RF/DT) that do the real work in Table II.
+
+**The FT_RW gap this surfaces.** `honeypot/features.py`'s schema (`docs/ARCHITECTURE.md`
+§honeypot) has no family field — `Sig_RW`/`FT_RW` records carry `label ∈ {"RW", "benign"}` and
+nothing finer. If BitcoinHeist families are even weakly distinguishable from address-level graph
+features alone, a real deployment training on genuinely richer behavioural features (the
+kill-chain/entropy/crypto-API groups FT_RW already has, that BitcoinHeist does not) would plausibly
+do better at family identification, not worse — so this is a real, stateable gap in the synthetic
+pipeline's design, not a moot one. **Out of scope for this session**: no change to
+`honeypot/collector.py`, `features.py`, or the generator's label vocabulary. Recorded here as a
+finding for a future session to act on, per the M7-16 brief.
+
+**Another instance of FLAW-2's own shape.** §VII evaluates BitcoinHeist as if `label`'s only
+usable content were "ransomware or not" — the family names sit unused in the same column the
+paper already reads for the binary target. The paper's own chosen dataset carries more usable
+structure than its own evaluation ever asks of it, one more form of the framework/evaluation
+disconnect FLAW-2 names (`docs/report/report.tex` §\ref{sec:flaw2}).
+
+**A latent performance bug this session's split exercise found and fixed, not a deviation from
+the paper but load-bearing for M7-16's own numbers:** `grouped_stratified_holdout`
+(`detection/dataset.py`, in place since Q10/D6) used `np.isin` for group-membership testing, which
+does not take numpy's sorted/hashed fast path on object-dtype arrays. Every caller through
+M4a/Q10/D6 only ever ran it on the 46K-row `paper_mode` resample, so nothing before M7-16 exercised
+the majority class (`white`, 2.87M rows, ~2.6M unique addresses) at full scale; there, `np.isin`
+does not complete in any practical time (confirmed killed after 10+ minutes on an isolated case of
+the same size). Fixed with a Python hash-set membership test (0.25s on a comparable array; 3.81s
+for a real full-scale 2.9M-row split). A second fix in the same function: two of the 19 surviving
+families (`montrealRazy`, `montrealGlobeImposter`) are each confined to exactly one address, so
+the whole class is one indivisible group — the split previously could put a class like this
+entirely in test, leaving zero training rows and crashing `top_k_accuracy_score` downstream.
+`grouped_stratified_holdout` now reserves at least one group for training whenever more than one
+exists. Neither fix changes any previously-published binary number (those splits have thousands of
+groups per class, nowhere near either edge case) — confirmed by re-running
+`tests/unit/test_detection_dataset.py` unchanged after both fixes.
+
+**What was built.** `detection/dataset.py`: `FamilyDataset`/`load_bitcoinheist_families` (the
+family-preserving sibling of `load_bitcoinheist`, same read path, same §VII count verification).
+`detection/multiclass.py`: `merge_rare_families`, `build_multiclass_model(s)` (RF/DT/KNN
+unchanged, LR wrapped in `OneVsRestClassifier` per the brief), `macro_f1`/`weighted_f1`,
+`per_class_report`/`confusion`/`most_confused_with`, `top_k_accuracy`, `binary_collapse`,
+`per_family_feature_signal`. `scripts/m7_16_multiclass_detection.py`: full pipeline, KNN memory
+projection/fallback (DEV-31's precedent), confusion-matrix figure. 21 unit tests
+(`tests/unit/test_detection_multiclass.py`), including three real-data invariant checks (merge
+correctness, `other_ransomware` composition, grouped-split disjointness) that skip when the raw
+CSV is absent, matching `test_detection_dataset.py`'s own convention. Found and fixed a real bug
+in `merge_rare_families` itself during test-writing: assigning `OTHER_RANSOMWARE` (17 characters)
+into a fixed-width numpy string array silently truncates it — fixed by working in `dtype=object`.
+
+**Impact on reproduction:** none — new capability, no paper target touched, no change to
+`detection/detector.py`, `detection/profiles.py`, or any `consensus/`/`mitigation/` module.
+Figure: `results/figures/fig_m7_16_family_confusion.png`. Full numbers: `RESULTS.md` "M7-16",
+sidecar `results/logs/20260927T071228Z-8d52159c.json`.

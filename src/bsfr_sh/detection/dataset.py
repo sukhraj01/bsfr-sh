@@ -78,12 +78,14 @@ __all__ = [
     "DatasetSpec",
     "Decryptor",
     "DetectionDataset",
+    "FamilyDataset",
     "HoneypotBackend",
     "LoadedDataset",
     "backend_from_config",
     "encode_group_column",
     "grouped_stratified_holdout",
     "load_bitcoinheist",
+    "load_bitcoinheist_families",
     "load_from_chain",
     "paper_mode_arithmetic",
     "paper_mode_resample",
@@ -302,6 +304,122 @@ def load_bitcoinheist(spec: DatasetSpec, *, verify: bool = True, seed: int = 0) 
     )
 
 
+@dataclass(frozen=True)
+class FamilyDataset:
+    """Like `LoadedDataset`, but the target is the family name (`"white"` or one of the 28
+    ransomware families), never binarized. M7-16: whether the same 8 address-level graph features
+    that support the binary ransomware/benign boundary also support 28+1 separate ones.
+
+    Deliberately its own type rather than a `LoadedDataset` field — `LoadedDataset.labels` is
+    typed and used everywhere downstream as `np.int8`, and overloading it with strings would make
+    every existing binary caller a silent trap.
+    """
+
+    features: pd.DataFrame
+    family_labels: np.ndarray  # dtype object: "white" or a family name, unmerged
+    source: Path
+    n_rows: int
+    n_positive: int
+    n_negative: int
+    #: True when the full file matched §VII exactly (same meaning as `LoadedDataset`'s field).
+    matches_paper_counts: bool
+    #: The raw grouping key per row (`address`), aligned with `features`/`family_labels`.
+    groups: np.ndarray | None = None
+
+    @property
+    def positive_rate(self) -> float:
+        return self.n_positive / self.n_rows
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        return tuple(self.features.columns)
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "source": self.source.name,
+            "n_rows": self.n_rows,
+            "n_positive": self.n_positive,
+            "n_negative": self.n_negative,
+            "positive_rate": self.positive_rate,
+            "matches_paper_counts": self.matches_paper_counts,
+            "columns": list(self.columns),
+        }
+
+
+def load_bitcoinheist_families(
+    spec: DatasetSpec, *, verify: bool = True, seed: int = 0
+) -> FamilyDataset:
+    """Like `load_bitcoinheist`, but keeps the family name as the target instead of binarizing it.
+
+    Reuses the same read path — `usecols`, dtypes, the `address` drop, §VII count verification,
+    and `subsample_index`'s stratified sampling (stratified on the binary ransomware/benign split,
+    since that is the rate §VII anchors; family balance within the ransomware side is exactly the
+    thing `detection.multiclass.merge_rare_families` handles downstream, not a sampling decision).
+    Kept as a sibling function rather than a `binarize: bool` flag on `load_bitcoinheist` so the
+    already-tested binary path is untouched by this addition.
+    """
+    if not spec.path.exists():
+        raise DatasetError(
+            f"{spec.path} is missing. `make data` fetches and verifies it; the dataset is "
+            "gitignored because it is 2.9M rows."
+        )
+    usecols = [*spec.feature_columns, spec.label_column]
+    if spec.group_column and spec.group_column not in usecols:
+        usecols = [*usecols, spec.group_column]
+    dtypes = {name: _DTYPES[name] for name in usecols if name in _DTYPES}
+    frame = pd.read_csv(spec.path, usecols=usecols, dtype=dtypes)
+
+    for dropped in spec.drop_columns:
+        if dropped == spec.group_column:
+            continue  # loaded only for grouping; never reaches `features` below
+        if dropped in frame.columns:  # pragma: no cover - usecols already excluded it
+            raise DatasetError(f"{dropped!r} reached the frame; it must be excluded at read time")
+
+    family_labels = frame[spec.label_column].astype(object).to_numpy()
+    is_positive = family_labels != spec.benign_label
+    n_rows = len(frame)
+    n_positive = int(is_positive.sum())
+    n_negative = n_rows - n_positive
+    if verify:
+        verify_counts(n_rows, n_positive, n_negative)
+
+    features = frame[list(spec.feature_columns)]
+    groups = frame[spec.group_column].to_numpy() if spec.group_column else None
+
+    matches = (n_rows, n_negative, n_positive) == (
+        EXPECTED_ROWS,
+        EXPECTED_WHITE,
+        EXPECTED_RANSOMWARE,
+    )
+
+    if spec.subsample_rows is not None and spec.subsample_rows < n_rows:
+        index = subsample_index(
+            is_positive.astype(np.int8),
+            spec.subsample_rows,
+            stratified=spec.subsample_stratified,
+            seed=seed,
+        )
+        features = features.iloc[index]
+        family_labels = family_labels[index]
+        if groups is not None:
+            groups = groups[index]
+        n_rows = len(index)
+        n_positive = int((family_labels != spec.benign_label).sum())
+        n_negative = n_rows - n_positive
+        matches = False
+
+    return FamilyDataset(
+        features=features.reset_index(drop=True),
+        family_labels=family_labels,
+        source=spec.path,
+        n_rows=n_rows,
+        n_positive=n_positive,
+        n_negative=n_negative,
+        matches_paper_counts=matches,
+        groups=groups,
+    )
+
+
 def encode_group_column(values: pd.Series) -> np.ndarray:
     """Ordinal-encode a string column via scikit-learn's `LabelEncoder`. Q10 only.
 
@@ -439,6 +557,17 @@ def grouped_stratified_holdout(
     target, so the whole group that crosses the target goes to test. Group sizes are lumpy (up to
     420 rows for one address), so the achieved test share is only approximate — callers should
     read it back off the returned indices rather than assume `test_size` was hit exactly.
+
+    M7-16 finding: membership via a hash set, not `np.isin`
+    ---------------------------------------------------------
+    Every caller through M4a/Q10/D6 only ever ran this on the ~46K-row `paper_mode` resample, so
+    nothing before M7-16 exercised the majority class (`white`, 2.87M rows, ~2.6M unique
+    addresses) at full scale. `np.isin` on object-dtype arrays this large does not take the
+    sorted/hash fast path numpy uses for numeric dtypes; membership-testing ~860K candidate
+    addresses (30% of 2.87M) against every row is effectively O(n*m) and does not finish in any
+    practical time (measured: killed after 10+ minutes on the isolated case alone). A Python
+    `set` (hash-based, like `pandas.Series.isin` uses internally) turns this back into the
+    O(n + m) it should always have been, confirmed against a 2.9M-row real run.
     """
     if not 0.0 < test_size < 1.0:
         raise DatasetError(f"test_size must be in (0, 1), got {test_size}")
@@ -457,7 +586,20 @@ def grouped_stratified_holdout(
         target = round(len(row_idx) * test_size)
         cut = int(np.searchsorted(np.cumsum(counts), target)) + 1
         cut = min(cut, len(unique_groups))
-        in_test = np.isin(group_ids, unique_groups[:cut])
+        # M7-16 finding: a class can have so few unique groups that the ordinary cut would put
+        # *all* of it in test, leaving nothing to train on — real for this dataset, not a
+        # constructed edge case: `montrealRazy` and `montrealGlobeImposter` are each confined to
+        # exactly one address, so the whole class is one indivisible group. Reserve at least one
+        # group for training whenever more than one exists; a genuinely single-group class goes
+        # to training entirely (it cannot be split either way, and a class no model has ever
+        # seen cannot be scored on held-out data anyway, so training exposure is the only useful
+        # side to keep it on). This never engages for the binary paper_mode/honest_mode splits —
+        # both classes there have thousands of groups — so it changes nothing already published.
+        cut = min(cut, len(unique_groups) - 1) if len(unique_groups) > 1 else 0
+        test_group_set = set(unique_groups[:cut].tolist())
+        in_test = np.fromiter(
+            (group in test_group_set for group in group_ids), dtype=bool, count=len(group_ids)
+        )
         test_parts.append(row_idx[in_test])
         train_parts.append(row_idx[~in_test])
     return np.sort(np.concatenate(train_parts)), np.sort(np.concatenate(test_parts))

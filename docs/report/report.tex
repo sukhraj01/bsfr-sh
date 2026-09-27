@@ -2207,6 +2207,104 @@ coverage-and-divergence pattern at a glance.}
 \label{fig:m7-13-heatmap}
 \end{figure}
 
+\subsection{Multi-Family Ransomware Detection}
+\label{sec:m7-16}
+
+\S VII evaluates BitcoinHeist as a binary ransomware/benign problem. Its \texttt{label} column
+already carries \emph{which} of 28 named families an address belongs to -- information the binary
+evaluation (\S\ref{sec:5a} onward) never uses. Family identification matters for Algorithm 4:
+mitigation dispatch is currently label-blind, but different ransomware families imply different
+decryption tools and kill-chain speeds, so a detector that can name the family (not just flag
+``ransomware'') is a precondition for differentiated response. This subsection tests whether the
+same 8 address-level graph features that support the binary boundary also support 28+1 separate
+ones -- natural class balance (the 90/10 resample has no 29-class analogue), rare families (fewer
+than 10 samples, 11 of 28) merged into \texttt{other\_ransomware}, grouped stratified holdout,
+full 2{,}916{,}697 rows, all four Table~II algorithms (logistic regression as one-vs-rest, per the
+brief).
+
+\textbf{The class imbalance is itself a finding.} \texttt{white}=2{,}875{,}284 (98.58\%), the
+largest family \texttt{paduaCryptoWall}=12{,}390, three families with exactly one address each. 19
+classes survive the merge; no family with $\geq$10 samples is folded in.
+
+\textbf{Measured: macro F1 0.058--0.199 -- weak, real signal, not strong.} Weighted F1
+(0.978--0.985) and top-3 accuracy (0.993--0.998) are both dominated by \texttt{white}'s 98.58\%
+share and say little on their own; macro F1 is the metric that answers the question, and decision
+tree is the best of the four (0.1985), narrowly over random forest (0.1978). Logistic regression's
+one-vs-rest wrapper is worst by a wide margin (0.0584) and reproduces binary LR's exact
+natural-rate failure -- it predicts nothing for every one-vs-rest sub-problem, the same collapse
+\S\ref{sec:5b} already measured for the binary task.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{figs/fig_m7_16_family_confusion.png}
+\caption{19$\times$19 family confusion matrix, decision tree (the macro-F1 winner). Every row's
+dominant off-diagonal mass sits in the \texttt{white} column -- families are confused with
+\emph{benign}, essentially never with each other.}
+\label{fig:m7-16-confusion}
+\end{figure}
+
+\textbf{The confusion is structurally one-sided, not inter-family.} Per-family recall is highly
+uneven -- the four largest families score 0.15--0.84; the eleven smallest score at or near zero --
+but every family's dominant misclassification target is \texttt{white}, never another family
+(Figure~\ref{fig:m7-16-confusion}). The 19$\times$19 matrix therefore reflects the same
+ransomware/benign boundary \S\ref{sec:5b} already measures, not families blurring into each other.
+
+\textbf{Per-family feature signal is a caveat, not just a finding.} A one-vs-rest random forest per
+family ($\geq$100 samples) ranks \texttt{year} and \texttt{income} above every graph-topology
+feature (\texttt{weight}, \texttt{count}, \texttt{looped}, \texttt{neighbors}) for all 8 large
+families -- e.g.\ \texttt{montrealCryptoLocker} (year=0.391), \texttt{paduaCryptoWall}
+(year=0.427), \texttt{princetonLocky} (year=0.422, income=0.208). Since each family's activity is a
+narrow historical campaign window, this may be detecting \emph{when} a campaign ran rather than a
+\emph{behavioural} signature -- the same graph features FLAW-2 (\S\ref{sec:flaw2}) already argues
+are a poor proxy for ransomware behaviour contribute the least to family discrimination too.
+
+\begin{table}[t]
+\centering
+\caption{Binary-collapse comparison: multi-class predictions collapsed to ransomware-vs-benign and
+scored identically to the binary detector, against the published full-scale \texttt{honest\_mode}
+figures (\S\ref{sec:5b}).}
+\label{tab:m7-16-collapse}
+\footnotesize
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccc}
+\hline
+Model & Split & Precision & Recall & MCC \\
+\hline
+random\_forest & binary-only & 0.7434 & 0.2874 & 0.4579 \\
+random\_forest & multiclass, collapsed & 0.7383 & 0.2785 & 0.4491 \\
+decision\_tree & binary-only & 0.3970 & 0.4236 & 0.4013 \\
+decision\_tree & multiclass, collapsed & 0.3897 & 0.4166 & 0.3939 \\
+logistic\_regression & binary-only & 0.0000 & 0.0000 & 0.0000 \\
+logistic\_regression & multiclass, collapsed & 0.0000 & 0.0000 & 0.0000 \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\textbf{Binary-collapse: RF/DT are statistically indistinguishable from their binary-only
+counterparts, not clearly better -- the brief's expectation is not quite met, reported as
+measured rather than rounded up.} Table~\ref{tab:m7-16-collapse}: both models sit marginally
+\emph{below} their published binary-only figures on every metric, under one point apart -- a wash,
+not a regression. KNN's multiclass number is nominally higher but is not a clean comparison
+(different subsample sizes from different sampling procedures; full numbers in \texttt{RESULTS.md}
+``M7-16''). Net reading: family labels add information about \emph{which} ransomware without
+detectably costing the \emph{is-it-ransomware} task, for the two models that do the real work in
+Table~II.
+
+\textbf{The FT\_RW gap this surfaces.} \texttt{honeypot/features.py}'s schema
+(\S\ref{sec:honeypot}) carries \texttt{label} $\in$ \{RW, benign\} and nothing finer -- no family
+field. If BitcoinHeist families are even weakly distinguishable from address-level graph features
+alone, a deployment training on FT\_RW's genuinely richer behavioural features (kill-chain,
+entropy, crypto-API groups BitcoinHeist does not have) would plausibly do better at family
+identification, not worse -- a real, stateable gap in the synthetic pipeline's design. Out of
+scope for this session: no change to \texttt{honeypot/collector.py}, \texttt{features.py}, or the
+generator's label vocabulary.
+
+\textbf{One more instance of FLAW-2's own shape.} \S VII evaluates BitcoinHeist as if
+\texttt{label}'s only usable content were ``ransomware or not'' -- the family names sit unused in
+the same column the paper already reads for the binary target. The paper's own chosen dataset
+carries more usable structure than its own evaluation ever asks of it.
+
 \section{Scalability Analysis}
 \label{sec:scalability}
 
