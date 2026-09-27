@@ -1928,3 +1928,104 @@ to direct submission, `WithholdTracker` streak/reset/permanent-exclusion behavio
 `tests/integration/test_commit_reveal_pbft.py` (1 test: a withheld/crashed node's batch is
 excluded and the remaining honest batch still commits through real, unmodified pBFT consensus at
 `n=4, f=1`).
+
+### DEV-41 · ADD · Federated detection via cross-replica disagreement: a real, cost-free signal
+for two of the three strategies; a weak, small-sample-limited one for the third (M7-15)
+
+**Paper:** n/a — Algorithm 3 describes one detection module `DM_CSl` per cloud server but never
+asks whether the paper's own `n=4` replication could be used *between* servers rather than only
+within one. This is a new extension this project adds, exploiting redundancy the paper's own
+architecture already pays for.
+
+**Why this is the third and structurally different leg of the poisoning-defense arc.** M7-12
+(DEV-38) inspects *feature distributions* and fails when the poison looks statistically normal
+(anchor-point injection, invisible at every budget). M7-14 (DEV-40) restricts *information* and
+fails when historical data alone already estimates what the current round would have revealed
+(measured null on this corpus for the same strategy). Federated detection inspects *model
+outputs* instead: four independently-trained replicas voting on the same sample. It needs no new
+protocol message (`docs/ARCHITECTURE.md` §consensus's `n=4` cluster already exists) and no new
+trust assumption beyond what `docs/THREAT_MODEL.md` Trust Assumption 6 (every `BC_SigRW` replica
+can decrypt) already introduced for M7-12.
+
+**The subtlety a naive framing misses, stated up front rather than discovered mid-session.** If
+every node trains on the identical committed chain, disagreement has no source at all. Three
+scenarios supply one, each measured separately (`scripts/m7_15_federated_detection.py`, 27 cells:
+3 scenarios x 3 of M7-11's strategies x 3 budgets — 5/10/20%, narrower than M7-11/12/14's five-
+budget sweep per this session's own brief):
+
+* **(A) The poisoner trains on a different view than it commits.** Three honest nodes fit on the
+  poisoned chain; the poisoner fits its own model on the pre-poison, clean view — rational for an
+  attacker degrading *others'* detection, not its own. `analyze_disagreement` always correctly
+  names the poisoner as the outlier (mechanical: 3-vs-1 by construction), but **the predicted
+  irony — that the "outlier" is the node with the better model — holds only for two of the three
+  strategies, not universally.** For `label_flip`/`feature_poison`, the poisoner's clean model
+  (0.8408) genuinely outperforms the honest nodes' degraded one (0.7722-0.8363): disagreement
+  flags the correct model as anomalous. For `anchor_point_injection`, the opposite holds — the
+  honest nodes score *higher* (0.8425-0.8454) than the poisoner's own clean baseline, reproducing
+  M7-11's own finding that this strategy sometimes *improves* accuracy — so here the flagged node
+  is unremarkably the worse one, and no irony exists. `excluding_outlier_improves` is `False` in
+  all 9 cells: at a 3-1 split, majority voting has already suppressed the dissenter's influence
+  before any exclusion step runs, so acting on the flag changes nothing a plain vote had not
+  already achieved.
+* **(B) Algorithm diversity over one shared poisoned draw.** Four nodes, one of
+  `configs/ml.yaml`'s four declared algorithms each (RF/DT/KNN/LR), all trained on the identical
+  poisoned data. Majority voting **never scores below its own weakest individual algorithm** (all
+  9 cells) — KNN alone is badly hurt on this feature space independent of poisoning
+  (0.658-0.669), and voting recovers to 0.768-0.823. **This is not a like-for-like improvement
+  over the M7-11/12/14 baseline**, which soft-votes across all four algorithms *inside one*
+  `DetectionModule` (Alg. 3's own `DM_CSl`); scenario B hard-votes four *separately-fit*
+  single-algorithm detectors, and that architecture underperforms the paper's own blended
+  ensemble on `label_flip`/`feature_poison` (0.786/0.819 vs. 0.828/0.840) and is roughly even on
+  `anchor_point_injection` (0.817 vs. 0.847) — the paper's own soft-vote ensemble already captures
+  most of what algorithm diversity offers; this session's honest reading is "recovers the worst
+  single model" rather than "beats the standard architecture." KNN and Decision Tree individually
+  score **identical balanced accuracy across all three budgets** for `anchor_point_injection`
+  (0.6602 and 0.8203 exactly) — a measured, genuine insensitivity: both are local/piecewise-
+  constant models, and the injected anchor cluster apparently never enters any eval row's k=5
+  neighbourhood or crosses an existing tree split at any tested budget, not an averaging artefact.
+* **(C) A private, never-committed holdout per node** (this project's own extension — Alg. 3
+  trains exclusively on `BC_SigRW`; no honeypot-collecting node in the paper reserves anything
+  before committing). Four nodes each reserve 10% of their own contribution, fit on the
+  (possibly-poisoned) committed 90%, and self-score against their own held-back 10% — no vote,
+  no cross-node communication needed. **Measured result: a weak, inconsistent signal, not a
+  reliable one.** Of 9 cells, exactly one crosses this session's own stated detectability band
+  (mean drop across the 4 node-specific holdout splits is positive and exceeds its own
+  cross-node standard deviation) — `anchor_point_injection` @10% (mean_drop=+0.0149,
+  std_drop=0.0115) — the one strategy M7-12 and M7-14 both measured null against, briefly caught
+  here but not at the adjacent 5%/20% budgets. **`label_flip`, M7-11's most damaging strategy, is
+  not reliably caught even at 20% budget** (mean_drop=+0.0374, std_drop=0.0554 — zero sits inside
+  the band): a ~62-70-row holdout (10% of the committed set at this corpus's size) across only
+  four independent splits carries enough sampling variance that real degradation and pure noise
+  are not yet distinguishable. Stated as a limitation of `n=4` nodes and this corpus's absolute
+  size, the same convention M7-14 used for its own robustness check, not smoothed over.
+
+**What was built.** `detection/federated.py`: `FederatedDetector` (a thin wrapper over N
+independently-fitted `DetectionModule`s — no new training logic, reuses
+`detection.adversarial.ensemble_predict`/`balanced_accuracy` unchanged), `majority_vote`/`vote`
+(strict-majority decision plus per-node disagreement-fraction flagging; an exact 50/50 tie at
+`n=4` resolves to benign, a stated convention, not a derived fact), and `analyze_disagreement`
+(`DisagreementReport`: per-node agreement rate, the single most-divergent node — `None` on
+perfect agreement or an exact tie, never an arbitrary pick — and, when ground truth is available,
+individual/majority/excluding-outlier accuracy so scenario (a)'s irony is visible in the numbers
+rather than assumed away by the identification step). Zero new dependencies: this module imports
+only `detection.adversarial` and `detection.detector`, both already inside `detection/`'s own
+boundary (`docs/ARCHITECTURE.md` §detection) — no `consensus/` change at all, unlike M7-12's named
+exception. 12 unit tests (`tests/unit/test_federated_detection.py`): no-dissent reproduction,
+3-vs-1 override, tie resolution, empty-input rejection, threshold-based flagging, divergent-node
+identification, perfect-agreement and exact-tie null cases, the scenario-A irony property, and
+the scenario-B non-negative-vs-worst-model property.
+
+**Impact on reproduction:** none — new capability, no paper target touched, no change to
+`detection/detector.py`, `detection/profiles.py`, `detection/models.py`, or any `consensus/`
+module. Figure: `results/figures/fig15a_federated_scenarios.png`. Full numbers: `RESULTS.md`
+"M7-15", sidecar `results/logs/20260927T053738Z-fc5e7c20.json`.
+
+**Architectural honesty, stated once.** Unlike M7-12 (a new trust assumption, TA-6/TA-7) and
+M7-14 (a new protocol module, one new trust assumption, TA-8), federated detection adds *nothing*
+beyond what the paper's own `n=4` deployment and M7-12's existing decrypt-capable-replica
+assumption already provide. That is a genuine structural advantage — the paper had this defense
+available for free and never used it — but it is not a stronger defense on this corpus than the
+other two: scenario (a) can misidentify the correct model as the outlier by design, scenario (b)
+underperforms the paper's own soft-vote ensemble, and scenario (c) catches only one of nine cells.
+The honest verdict is "cheapest to add, narrowly and inconsistently useful," not "solves what the
+other two could not."

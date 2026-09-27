@@ -372,6 +372,24 @@ backends' evaluation paths.
 chains (a training draw and an evaluation draw) — the first place in this project where Phase 2's
 output feeds Phase 3's input (`tests/integration/test_phase2_feeds_phase3.py`).
 
+**`detection/federated.py` (M7-15, DEV-41).** A third, structurally different answer to
+`docs/THREAT_MODEL.md` Gap 1, after M7-12's statistical drift check and M7-14's protocol-level
+information restriction: exploit the paper's own `n=4` cloud-server replication
+(`docs/ARCHITECTURE.md` §consensus) instead of inspecting data or restricting it.
+`FederatedDetector` wraps N independently-fitted `DetectionModule`s (no new training logic — it
+calls `detection.adversarial.ensemble_predict`/`balanced_accuracy` unchanged); `majority_vote`/
+`vote` implement strict-majority decision plus per-node disagreement flagging; `analyze_
+disagreement` reports per-node agreement with the majority, the single most-divergent node (or
+`None` on perfect agreement or an exact tie — never an arbitrary pick), and, given ground truth,
+individual/majority/excluding-outlier accuracy. This module imports only `detection.adversarial`
+and `detection.detector` — **no new dependency on `consensus/` at all**, unlike M7-12's named
+exception in that section: the four "nodes" a caller assembles are `DetectionModule` instances,
+not `consensus.pbft.Replica`s, and nothing here reads or writes a chain. `scripts/
+m7_15_federated_detection.py` is what actually reads `BC_SigRW`'s committed corpus and constructs
+the per-scenario training draws each node fits on; `detection/federated.py` itself is data-
+agnostic, the same separation `detection/poisoning.py` (attack) keeps from
+`scripts/m7_11_honeypot_poisoning.py` (measurement).
+
 ---
 
 ## `mitigation/` and `recovery/`

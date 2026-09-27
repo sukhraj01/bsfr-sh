@@ -28,14 +28,17 @@ paper specifies but never defines. Reproducing the paper's own evaluation protoc
 model reaches 0.9442 accuracy / 0.9697 F1 -- 4.56 points below the published figure; an
 eight-hypothesis ablation over every candidate methodological explanation we could identify
 narrows, but does not close, a residual gap that tightens from 3.58 to 1.51 points. Beyond
-reproduction, fourteen extensions build three analyses the paper never attempts. A
+reproduction, fifteen extensions build three analyses the paper never attempts. A
 \emph{security} analysis: formal verification of our own session protocol, a pBFT-vs-Raft
 consensus comparison, external anchoring against a simulated public chain, a four-tier threat
-model, and a measured honeypot data-poisoning attack together with two independent defenses for
+model, and a measured honeypot data-poisoning attack together with three independent defenses for
 it -- a statistical one that catches the poisoning strategy predicted least catchable and misses
-the one predicted most catchable, at a measured false-positive cost, and a protocol-level
+the one predicted most catchable, at a measured false-positive cost; a protocol-level
 commit-then-reveal defense, correctly built and behaviourally verified, whose measured protection
-against that same missed strategy is statistically indistinguishable from zero on our corpus. A
+against that same missed strategy is statistically indistinguishable from zero on our corpus; and
+a federated defense exploiting the paper's own replicated cloud-server architecture, which costs
+nothing beyond what that architecture already provides but is, on our corpus, only narrowly and
+inconsistently useful. A
 \emph{detection} analysis: the honeypot pipeline's real end-to-end result, adversarial
 feature-space evasion and a partial defense against it tested across two model architectures, and
 transfer evaluation against three real malware datasets, one of them genuinely dynamic. And a
@@ -91,20 +94,23 @@ truth and a system's backups protects both from an adversary with every incentiv
 either. Testing that claim needs a working system to attack, which reproduction under the
 paper's own protocol does not by itself provide: the paper's evaluation runs entirely on
 BitcoinHeist address features, not on anything a ransomware operator, a compromised cloud server,
-or a network attacker actually controls. \textbf{Fourteen extensions}, built once the working
+or a network attacker actually controls. \textbf{Fifteen extensions}, built once the working
 system existed, supply that missing half, organized into three analyses beyond reproduction and
 critique. \S\ref{sec:security} is a \emph{security} analysis the paper never attempts: it
 constructs the four-tier threat model \S V's five informal paragraphs never state, formally
 verifies our own session-establishment protocol against a Dolev-Yao adversary, measures pBFT
 against Raft to ask whether the paper's own deployment needs Byzantine tolerance at all, adds
 external anchoring against a simulated public chain so a private chain's operators cannot rewrite
-history undetected, and measures a real honeypot data-poisoning attack together with two
+history undetected, and measures a real honeypot data-poisoning attack together with three
 independent defenses built and evaluated against it -- a statistical one (a genuine research
 contribution, not a critique, that finds the defense catches exactly the poisoning strategy
-predicted least catchable and misses the one predicted most catchable) and a protocol-level
+predicted least catchable and misses the one predicted most catchable); a protocol-level
 commit-then-reveal defense (\S\ref{sec:m7-14}) that behaves exactly as designed yet measurably
 does not degrade the one strategy it targets on our corpus, for a reason this project measures
-rather than assumes. \S\ref{sec:detection-analysis} is a
+rather than assumes; and a federated disagreement-based defense (\S\ref{sec:m7-15}) exploiting the
+paper's own replicated cloud-server architecture, costing nothing beyond what that architecture
+already provides but, on our corpus, real for only a narrow and inconsistent slice of the attack
+space. \S\ref{sec:detection-analysis} is a
 \emph{detection} analysis the paper's own \S VII never runs, because it evaluates on data no
 ransomware author could ever produce: the honeypot pipeline's real end-to-end result once its
 undefined layer is actually built, adversarial feature-space evasion against the resulting
@@ -1351,6 +1357,107 @@ meaning -- a defense with real conceptual reach, whose demonstrated reach on thi
 narrower than its motivating argument alone would suggest. Full numbers: \texttt{RESULTS.md} M7-14;
 mechanism and trust assumption: DEV-40.
 
+\subsection{Federated Detection: Exploiting Replicated Redundancy}
+\label{sec:m7-15}
+
+The two defenses above both look at the \emph{data}: \S\ref{sec:m7-12} inspects feature
+distributions and fails when the poison looks statistically normal; \S\ref{sec:m7-14} restricts
+what the adversary can see before committing and fails when historical data alone already
+estimates the boundary. Neither looks at the one thing the paper's own architecture already
+duplicates for free: \texttt{docs/ARCHITECTURE.md} \S consensus's four cloud servers each hold a
+decryption key and can each independently run Algorithm 3 on the identical \(BC_{SigRW}\) chain.
+If one server is the poisoner, its model may disagree with the other three's -- and that
+disagreement costs no new protocol message and, beyond the decrypt-capable-replica assumption
+\S\ref{sec:m7-12} already introduced, no new trust assumption either.
+
+\textbf{Why replicas trained on the same chain would ever disagree at all.} If every node commits
+to and trains on the identical data, there is no obvious source of disagreement. Three scenarios
+supply one, each measured against M7-11's three strategies at 5/10/20\% budgets (27 cells,
+\texttt{scripts/m7\_15\_federated\_detection.py}):
+
+\textbf{(a) The poisoner trains on a different view than it commits.} Rational for an attacker
+who wants to degrade \emph{others'} detection, not its own: three honest nodes fit the poisoned
+chain; the poisoner fits its own model on the pre-poison, clean view. Disagreement always
+correctly names the poisoner as the outlier node (mechanical -- three identical honest nodes
+outvote one differently-trained node every time). \textbf{The irony this scenario is built to
+state plainly: the "outlier" disagreement identifies can be the node with the correct model, not
+the wrong one -- and this holds for two of the three strategies, not all three.} For
+\texttt{label\_flip}/\texttt{feature\_poison}, the poisoner's clean model ($0.8408$) genuinely
+outperforms the honest nodes' degraded one ($0.7722$--$0.8363$): disagreement flags the accurate
+model as anomalous, exactly the finding the scenario predicts. For \texttt{anchor\_point\_
+injection}, the irony inverts -- the honest (poisoned) nodes score \emph{higher} ($0.8425$--
+$0.8454$) than the poisoner's own clean baseline, reproducing \S\ref{sec:m7-11}'s own finding that
+this strategy sometimes improves accuracy rather than degrading it. Excluding the identified
+outlier improves nothing in any of the 9 cells: at a 3-1 split, majority voting had already
+suppressed the single dissenter's influence before any exclusion step runs.
+
+\textbf{(b) Algorithm diversity over one shared poisoned draw.} Four nodes, one of \texttt{configs/
+ml.yaml}'s four declared algorithms each (RF/DT/KNN/LR), all trained on the identical poisoned
+data. Majority voting never scores below its own weakest individual algorithm in any of the 9
+cells -- KNN alone is badly hurt on this feature space regardless of poisoning ($0.658$--$0.669$),
+and every majority vote recovers to $0.768$--$0.823$. This is \textbf{not a like-for-like
+improvement over the M7-11/12/14 baseline}, which soft-votes all four algorithms inside one
+detection module (Algorithm 3's own $DM_{CS_l}$); scenario (b) hard-votes four \emph{separately-
+fit} single-algorithm detectors, and that architecture underperforms the paper's own blended
+ensemble on two of three strategies and is roughly even on the third (Table~\ref{tab:poisoning-
+defenses}) -- the paper's own soft-vote design already captures most of what algorithm diversity
+would add. KNN and Decision Tree score identical balanced accuracy across all three budgets for
+\texttt{anchor\_point\_injection} ($0.6602$/$0.8203$ exactly) -- a measured insensitivity of local
+and piecewise-constant models to a small injected cluster that apparently never enters any eval
+row's nearest-neighbour set or crosses an existing tree split, not an averaging artefact.
+
+\textbf{(c) A private, never-committed holdout per node} -- this project's own extension, not the
+paper's: Algorithm 3 trains exclusively on $BC_{SigRW}$, and nothing in it reserves data before
+committing. Four nodes each hold back 10\% of their own contribution, fit on the (possibly
+poisoned) committed 90\%, and self-score against their own held-back 10\% -- no vote and no
+cross-node communication needed at all. \textbf{Measured result: a weak, inconsistent signal, not
+a reliable one.} Of 9 cells, exactly one crosses this session's own stated detectability band
+(the mean drop across four independent node-specific holdout splits is positive and exceeds its
+own cross-node standard deviation) -- \texttt{anchor\_point\_injection} @10\% ($+0.0149$ vs.\
+$\sigma{=}0.0115$), the one strategy both prior defenses measured null against. \texttt{label\_
+flip}, the project's most damaging strategy, is \textbf{not} reliably caught even at 20\% budget
+($+0.0374$ vs.\ $\sigma{=}0.0554$ -- zero sits inside the band): a $\approx$62--70-row holdout
+across only four independent splits does not yet separate real degradation from sampling noise.
+
+\begin{table}[t]
+\centering
+\caption{The poisoning-defense arc's capstone: all four sessions' own headline numbers at the
+10\% budget. M7-15's row is scenario (b)'s majority vote -- the one scenario needing no
+assumption about who trains on what.}
+\label{tab:poisoning-defenses}
+\footnotesize
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lccc}
+\hline
+& \texttt{label\_flip} & \texttt{feature\_poison} & \texttt{anchor\_point} \\
+\hline
+M7-11 (no defense) & 0.8279 & 0.8396 & 0.8468 \\
+M7-12 (statistical) & not prevented & not prevented & not prevented \\
+M7-14 (commit-reveal) & 0.8153 & 0.8478 & 0.8412 \\
+M7-15 (federated, scenario b) & 0.7859 & 0.8186 & 0.8168 \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\textbf{The architectural argument, and its limit.} Federated detection is the cleanest of the
+three defenses in one specific sense: it costs nothing beyond what the paper's own replicated
+deployment already pays for, and it needs no new protocol message, no statistical threshold, and
+(beyond \S\ref{sec:m7-12}'s existing decrypt-capable-replica assumption) no new trust assumption.
+It is the defense the paper's own architecture had available for free and never used. That is not
+the same claim as "it works better" -- Table~\ref{tab:poisoning-defenses} shows M7-15's row is not
+uniformly stronger than M7-11's undefended baseline, and scenario (c) catches only one of nine
+cells. The honest reading of the full arc: a statistical check that catches nothing measurable
+(M7-12), a protocol restriction that changes nothing measurable (M7-14), and a free architectural
+signal that is real but narrow and inconsistent (M7-15) -- three different mechanisms, none of
+which closes Gap 1 in general, each closing a different, small, precisely bounded piece of it.
+
+\textbf{Limitation, stated plainly.} All three scenarios assume the honest nodes can recognise or
+act on disagreement once it is measured -- this session builds the signal (\texttt{detection.
+federated}'s voting and disagreement analysis), not a coordination mechanism for what four
+servers do once they disagree, which the paper does not specify and this project does not add.
+Full numbers: \texttt{RESULTS.md} M7-15; mechanism and honest verdict: DEV-41.
+
 \subsection{Coverage Matrix and Gaps}
 \label{sec:threat-model}
 
@@ -2303,14 +2410,14 @@ adversary with every incentive to attack both -- is sound, and our own honeypot 
 framework can produce a real, bounded detection result (0.8422 balanced accuracy) once its
 undefined layer is actually built.
 
-Fourteen extensions, built once that working system existed, tested the architectural idea itself
+Fifteen extensions, built once that working system existed, tested the architectural idea itself
 rather than the paper's published numbers, across three analyses. \textbf{Security}
 (\S\ref{sec:security}): the four-tier threat model \S V never states; formal (Scyther)
 verification of our own session protocol (Tier 1); a pBFT-vs-Raft comparison finding a single
 Byzantine leader corrupts Raft's chain undetectably, which is the reason pBFT, not Raft, is the
 correct choice here -- a reason the paper never states (Tier 2); external anchoring against a
 simulated public chain, answering \S VIII's own stated future work (Tier 2--3); and a real,
-measured honeypot data-poisoning attack together with two independent defenses built and
+measured honeypot data-poisoning attack together with three independent defenses built and
 evaluated against it, closing the loop this project's own threat model opened. The statistical
 defense's finding is a genuine research contribution, not a critique: it catches the poisoning
 strategy predicted least catchable (an engineered class-boundary midpoint that, in a balanced
@@ -2321,7 +2428,13 @@ specifically to close that missed case, behaves exactly as designed -- yet measu
 degrade anchor-point injection's damage on our corpus, because the corpus's stationary,
 low-dimensional profiles let a historical-only centroid estimate converge almost as fast as a
 full-information one; a correctly-built defense whose real-world reach turned out narrower than
-its own motivating argument, measured rather than assumed either way. \textbf{Detection}
+its own motivating argument, measured rather than assumed either way. A third, federated defense
+(\S\ref{sec:m7-15}) exploits the paper's own replicated cloud-server architecture instead of
+inspecting or restricting data, costing nothing beyond what that architecture already provides --
+architecturally the cleanest of the three, but on our corpus only narrowly and inconsistently
+useful: it correctly identifies a poisoner in every tested cell, but the disagreement it flags is
+the \emph{correct} model, not the wrong one, for the one strategy the other two defenses also
+struggled with. \textbf{Detection}
 (\S\ref{sec:detection-analysis}): the honeypot pipeline's own
 end-to-end result; adversarial feature-space evasion finding roughly a quarter of ransomware
 samples trivially evadable, and a hardening defense that works only at a real, non-trivial

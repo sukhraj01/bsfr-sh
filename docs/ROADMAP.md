@@ -3,9 +3,9 @@
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 **Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11), its
-statistical drift-detection defense (M7-12), dynamic-behavioral real-data transfer (M7-13), and a
-commit-reveal protocol defense (M7-14) delivered; async pBFT with modelled network latency is the
-one remaining, not-required item**
+statistical drift-detection defense (M7-12), dynamic-behavioral real-data transfer (M7-13), a
+commit-reveal protocol defense (M7-14), and a federated cross-replica-disagreement defense (M7-15)
+delivered; async pBFT with modelled network latency is the one remaining, not-required item**
 
 ---
 
@@ -386,6 +386,23 @@ existing baseline convention). Variance is reported and the repeat count follows
       `consensus.commit_reveal.{enabled, max_consecutive_withholds}` is the config-flag switch.
       `scripts/m7_14_commit_reveal_defense.py`, `RESULTS.md` M7-14, `docs/DEVIATIONS.md` DEV-40,
       `docs/THREAT_MODEL.md` Gap 1 updated + Trust Assumption 8 added, report §"Honeypot Data
+      Poisoning" extended (2026-09-27)
+- [x] **M7-15 — federated detection via cross-replica disagreement.** `detection/federated.py`
+      (`FederatedDetector`, `majority_vote`/`vote`, `analyze_disagreement`) exploits the paper's
+      own `n=4` cloud-server replication instead of inspecting data (M7-12) or restricting it
+      (M7-14) — no new protocol message, no new trust assumption beyond M7-12's existing one.
+      Measured against M7-11's three strategies at 5/10/20% budgets under three scenarios: (a)
+      poisoner trains clean while honest nodes train poisoned — outlier identification is always
+      correct, but the predicted irony (outlier = better model) holds for label_flip/
+      feature_poison only, inverting for anchor_point_injection, which M7-11 already found
+      sometimes *helps* accuracy; (b) algorithm diversity (RF/DT/KNN/LR) on one shared poisoned
+      draw — majority vote never scores below its worst individual model, but underperforms the
+      paper's own soft-vote ensemble on two of three strategies; (c) a private per-node holdout
+      (this project's own extension) — a weak, inconsistent signal, detectable in only 1 of 9
+      cells (anchor_point_injection @10%) and not reliably even for label_flip, M7-11's most
+      damaging strategy. Four-defense comparison table (M7-11/12/14/15 at 10% budget) is the
+      poisoning arc's capstone. `scripts/m7_15_federated_detection.py`, `RESULTS.md` M7-15,
+      `docs/DEVIATIONS.md` DEV-41, `docs/THREAT_MODEL.md` Gap 1 updated, report §"Honeypot Data
       Poisoning" extended (2026-09-27)
 
 ---

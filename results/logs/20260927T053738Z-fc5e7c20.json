@@ -1,0 +1,674 @@
+{
+  "budgets": [
+    0.05,
+    0.1,
+    0.2
+  ],
+  "comparison_table": {
+    "M7-11 (no defense)": {
+      "anchor_point_injection": "bal_acc=0.8468",
+      "feature_poison": "bal_acc=0.8396",
+      "label_flip": "bal_acc=0.8279"
+    },
+    "M7-12 (statistical)": {
+      "anchor_point_injection": "not prevented (maha=0.0083)",
+      "feature_poison": "not prevented (maha=0.2828)",
+      "label_flip": "not prevented (maha=0.3244)"
+    },
+    "M7-14 (commit-reveal)": {
+      "anchor_point_injection": "bal_acc=0.8412",
+      "feature_poison": "bal_acc=0.8478",
+      "label_flip": "bal_acc=0.8153"
+    },
+    "M7-15 (federated, scenario B majority)": {
+      "anchor_point_injection": "bal_acc=0.8168",
+      "feature_poison": "bal_acc=0.8186",
+      "label_flip": "bal_acc=0.7859"
+    }
+  },
+  "config_hash": "7d2c9dfb3b4c7afd5891c4987fb1d823eac24a01c46030621542c52d9d53f959",
+  "config_hash_scheme": 2,
+  "csv_path_reference_bal_acc": 0.8408,
+  "figures": [
+    "results/figures/fig15a_federated_scenarios.png"
+  ],
+  "git_rev": "0a50787",
+  "host": {
+    "machine": "arm64",
+    "platform": "darwin",
+    "processor": "arm",
+    "python_version": "3.11.14",
+    "pythonhashseed": "20260912",
+    "system": "Darwin 24.6.0"
+  },
+  "original_metrics": {
+    "balanced_accuracy": 0.8408464109597253,
+    "mcc": 0.6821684412447128,
+    "pr_auc": 0.9110693406779685,
+    "precision": 0.8414985590778098,
+    "recall": 0.8271954674220963
+  },
+  "purpose": "M7-15 -- federated detection via cross-replica disagreement: 3 scenarios x 3 poisoning strategies x 3 budgets",
+  "run_id": "20260927T053738Z-fc5e7c20",
+  "scenario_a": {
+    "anchor_point_injection": {
+      "0.05": {
+        "accuracy_excluding_outlier": 0.8424502000989254,
+        "disagreement_rate": 0.047879616963064295,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.8424502000989254,
+        "irony_poisoner_more_accurate": false,
+        "majority_bal_acc": 0.8424502000989254,
+        "n_poisoned": 36,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      },
+      "0.1": {
+        "accuracy_excluding_outlier": 0.8453767405608765,
+        "disagreement_rate": 0.0506155950752394,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.8453767405608765,
+        "irony_poisoner_more_accurate": false,
+        "majority_bal_acc": 0.8453767405608765,
+        "n_poisoned": 72,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      },
+      "0.2": {
+        "accuracy_excluding_outlier": 0.8442413477824242,
+        "disagreement_rate": 0.057455540355677154,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.8442413477824242,
+        "irony_poisoner_more_accurate": false,
+        "majority_bal_acc": 0.8442413477824242,
+        "n_poisoned": 143,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      }
+    },
+    "feature_poison": {
+      "0.05": {
+        "accuracy_excluding_outlier": 0.8363048398459163,
+        "disagreement_rate": 0.07660738714090287,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.8363048398459163,
+        "irony_poisoner_more_accurate": true,
+        "majority_bal_acc": 0.8363048398459163,
+        "n_poisoned": 36,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      },
+      "0.1": {
+        "accuracy_excluding_outlier": 0.8355441641560621,
+        "disagreement_rate": 0.10533515731874145,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.8355441641560621,
+        "irony_poisoner_more_accurate": true,
+        "majority_bal_acc": 0.8355441641560621,
+        "n_poisoned": 72,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      },
+      "0.2": {
+        "accuracy_excluding_outlier": 0.834783488466208,
+        "disagreement_rate": 0.1121751025991792,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.834783488466208,
+        "irony_poisoner_more_accurate": true,
+        "majority_bal_acc": 0.834783488466208,
+        "n_poisoned": 143,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      }
+    },
+    "label_flip": {
+      "0.05": {
+        "accuracy_excluding_outlier": 0.8144026260173569,
+        "disagreement_rate": 0.09712722298221614,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.8144026260173569,
+        "irony_poisoner_more_accurate": true,
+        "majority_bal_acc": 0.8144026260173569,
+        "n_poisoned": 36,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      },
+      "0.1": {
+        "accuracy_excluding_outlier": 0.8063836803213573,
+        "disagreement_rate": 0.15868673050615595,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.8063836803213573,
+        "irony_poisoner_more_accurate": true,
+        "majority_bal_acc": 0.8063836803213573,
+        "n_poisoned": 72,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      },
+      "0.2": {
+        "accuracy_excluding_outlier": 0.7722019874994379,
+        "disagreement_rate": 0.16415868673050615,
+        "excluding_outlier_improves": false,
+        "honest_bal_acc": 0.7722019874994379,
+        "irony_poisoner_more_accurate": true,
+        "majority_bal_acc": 0.7722019874994379,
+        "n_poisoned": 143,
+        "outlier_is_poisoner": true,
+        "outlier_node": "CS_poisoner",
+        "poisoner_bal_acc": 0.8408464109597253
+      }
+    }
+  },
+  "scenario_b": {
+    "anchor_point_injection": {
+      "0.05": {
+        "disagreement_fraction": {
+          "decision_tree": 0.12038303693570451,
+          "k_nearest_neighbours": 0.2393980848153215,
+          "logistic_regression": 0.12995896032831739,
+          "random_forest": 0.08755129958960328
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.8202557069412593,
+          "k_nearest_neighbours": 0.6602477629389811,
+          "logistic_regression": 0.7863438104231305,
+          "random_forest": 0.8480222432063792
+        },
+        "majority_bal_acc": 0.8212149826880705,
+        "n_poisoned": 36,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6602477629389811
+      },
+      "0.1": {
+        "disagreement_fraction": {
+          "decision_tree": 0.11901504787961696,
+          "k_nearest_neighbours": 0.23803009575923392,
+          "logistic_regression": 0.12859097127222982,
+          "random_forest": 0.09028727770177838
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.8202557069412593,
+          "k_nearest_neighbours": 0.6602477629389811,
+          "logistic_regression": 0.7890829923407827,
+          "random_forest": 0.8436792721495272
+        },
+        "majority_bal_acc": 0.8167783323590689,
+        "n_poisoned": 72,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6602477629389811
+      },
+      "0.2": {
+        "disagreement_fraction": {
+          "decision_tree": 0.11627906976744186,
+          "k_nearest_neighbours": 0.24076607387140903,
+          "logistic_regression": 0.1326949384404925,
+          "random_forest": 0.08481532147742818
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.8202557069412593,
+          "k_nearest_neighbours": 0.6602477629389811,
+          "logistic_regression": 0.7962588245874365,
+          "random_forest": 0.8548233583644349
+        },
+        "majority_bal_acc": 0.8225377340108218,
+        "n_poisoned": 143,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6602477629389811
+      }
+    },
+    "feature_poison": {
+      "0.05": {
+        "disagreement_fraction": {
+          "decision_tree": 0.11901504787961696,
+          "k_nearest_neighbours": 0.25444596443228457,
+          "logistic_regression": 0.11354309165526676,
+          "random_forest": 0.08481532147742818
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.7937070012140834,
+          "k_nearest_neighbours": 0.6579769773820765,
+          "logistic_regression": 0.80824602425169,
+          "random_forest": 0.8507501836113733
+        },
+        "majority_bal_acc": 0.8212037411754125,
+        "n_poisoned": 36,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6579769773820765
+      },
+      "0.1": {
+        "disagreement_fraction": {
+          "decision_tree": 0.1121751025991792,
+          "k_nearest_neighbours": 0.23803009575923392,
+          "logistic_regression": 0.11491108071135431,
+          "random_forest": 0.07934336525307797
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.8135482710553532,
+          "k_nearest_neighbours": 0.6694021014134328,
+          "logistic_regression": 0.804465128827735,
+          "random_forest": 0.8507501836113733
+        },
+        "majority_bal_acc": 0.8185582385299099,
+        "n_poisoned": 72,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6694021014134328
+      },
+      "0.2": {
+        "disagreement_fraction": {
+          "decision_tree": 0.12038303693570451,
+          "k_nearest_neighbours": 0.25718194254445964,
+          "logistic_regression": 0.11354309165526676,
+          "random_forest": 0.08071135430916553
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.7887082752521846,
+          "k_nearest_neighbours": 0.6617466312933735,
+          "logistic_regression": 0.7961426622899711,
+          "random_forest": 0.8550931546682254
+        },
+        "majority_bal_acc": 0.8215784582640107,
+        "n_poisoned": 143,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6617466312933735
+      }
+    },
+    "label_flip": {
+      "0.05": {
+        "disagreement_fraction": {
+          "decision_tree": 0.13953488372093023,
+          "k_nearest_neighbours": 0.22845417236662108,
+          "logistic_regression": 0.13953488372093023,
+          "random_forest": 0.09302325581395349
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.7729401801639761,
+          "k_nearest_neighbours": 0.6593109702174857,
+          "logistic_regression": 0.7767098340752732,
+          "random_forest": 0.8527511728644872
+        },
+        "majority_bal_acc": 0.7983647346253578,
+        "n_poisoned": 36,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6593109702174857
+      },
+      "0.1": {
+        "disagreement_fraction": {
+          "decision_tree": 0.1545827633378933,
+          "k_nearest_neighbours": 0.23803009575923392,
+          "logistic_regression": 0.12995896032831739,
+          "random_forest": 0.09302325581395349
+        },
+        "flagged_nodes": [
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.7594316291200144,
+          "k_nearest_neighbours": 0.6694245844387487,
+          "logistic_regression": 0.7709504324235202,
+          "random_forest": 0.8315047139409746
+        },
+        "majority_bal_acc": 0.7858978970876989,
+        "n_poisoned": 72,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6694245844387487
+      },
+      "0.2": {
+        "disagreement_fraction": {
+          "decision_tree": 0.16415868673050615,
+          "k_nearest_neighbours": 0.22024623803009577,
+          "logistic_regression": 0.15595075239398085,
+          "random_forest": 0.10533515731874145
+        },
+        "flagged_nodes": [
+          "random_forest",
+          "decision_tree",
+          "k_nearest_neighbours",
+          "logistic_regression"
+        ],
+        "individual_bal_acc": {
+          "decision_tree": 0.7597351499617788,
+          "k_nearest_neighbours": 0.6589587361542035,
+          "logistic_regression": 0.7560366922973155,
+          "random_forest": 0.8183933630109268
+        },
+        "majority_bal_acc": 0.7679751787400513,
+        "n_poisoned": 143,
+        "outlier_node": "k_nearest_neighbours",
+        "recovers_worst_model": true,
+        "worst_individual_bal_acc": 0.6589587361542035
+      }
+    }
+  },
+  "scenario_c": {
+    "anchor_point_injection": {
+      "0.05": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.8356490849408696,
+          0.8361174813016172,
+          0.830826476010612,
+          0.8297847625043092
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8574999999999999,
+          0.8847222222222222,
+          0.8497222222222223,
+          0.8238888888888889
+        ],
+        "mean_drop": 0.0030555555555555336,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.013055555555555598,
+          -0.0002777777777778212,
+          -0.0002777777777778212,
+          -0.0002777777777778212
+        ],
+        "std_drop": 0.00666666666666671
+      },
+      "0.1": {
+        "detectable_by_private_holdout": true,
+        "eval_poisoned_bal_acc": [
+          0.8358364434851686,
+          0.8374402326243686,
+          0.8295037246878607,
+          0.8298784417764588
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8441666666666667,
+          0.8641666666666667,
+          0.8497222222222223,
+          0.8105555555555556
+        ],
+        "mean_drop": 0.01486111111111102,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.026388888888888795,
+          0.020277777777777617,
+          -0.0002777777777778212,
+          0.013055555555555487
+        ],
+        "std_drop": 0.011469901567812508
+      },
+      "0.2": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.831587151700466,
+          0.830826476010612,
+          0.8132559917262467,
+          0.828649369725857
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8638888888888889,
+          0.8780555555555556,
+          0.8497222222222223,
+          0.803611111111111
+        ],
+        "mean_drop": 0.008194444444444393,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.006666666666666599,
+          0.006388888888888777,
+          -0.0002777777777778212,
+          0.020000000000000018
+        ],
+        "std_drop": 0.008499878963069526
+      }
+    },
+    "feature_poison": {
+      "0.05": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.8341277335611613,
+          0.8206191825171996,
+          0.8231710058905526,
+          0.8315759101878082
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8722222222222222,
+          0.8852777777777778,
+          0.8502777777777778,
+          0.8447222222222222
+        ],
+        "mean_drop": -0.0061111111111111505,
+        "n_nodes": 4,
+        "per_node_drop": [
+          -0.0016666666666667052,
+          -0.0008333333333334636,
+          -0.0008333333333333526,
+          -0.02111111111111108
+        ],
+        "std_drop": 0.01000771307480652
+      },
+      "0.1": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.8277013354917038,
+          0.8358252019725108,
+          0.8361062397889594,
+          0.8237330815234498
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8383333333333334,
+          0.8852777777777778,
+          0.8847222222222222,
+          0.8647222222222222
+        ],
+        "mean_drop": -0.011250000000000038,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.03222222222222215,
+          -0.0008333333333334636,
+          -0.03527777777777774,
+          -0.0411111111111111
+        ],
+        "std_drop": 0.033996868047469216
+      },
+      "0.2": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.8364809568775575,
+          0.8168382870932446,
+          0.8362935983332584,
+          0.8281697318524514
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8516666666666666,
+          0.8444444444444444,
+          0.8308333333333333,
+          0.8383333333333334
+        ],
+        "mean_drop": 0.015694444444444428,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.018888888888888955,
+          0.039999999999999925,
+          0.018611111111111134,
+          -0.014722222222222303
+        ],
+        "std_drop": 0.02261743473317577
+      }
+    },
+    "label_flip": {
+      "0.05": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.8107154098655515,
+          0.8093926585428002,
+          0.8092989792706506,
+          0.8118508026440038
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8497222222222223,
+          0.8433333333333334,
+          0.8500000000000001,
+          0.8775
+        ],
+        "mean_drop": 0.0018749999999999323,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.02083333333333326,
+          0.04111111111111099,
+          -0.0005555555555556424,
+          -0.053888888888888875
+        ],
+        "std_drop": 0.04088361416762714
+      },
+      "0.1": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.8060914009922509,
+          0.8098722964162057,
+          0.8199746691248108,
+          0.8244225609664703
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8702777777777777,
+          0.8569444444444445,
+          0.8633333333333333,
+          0.8147222222222222
+        ],
+        "mean_drop": 0.005694444444444419,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.0002777777777778212,
+          0.027499999999999858,
+          -0.01388888888888884,
+          0.008888888888888835
+        ],
+        "std_drop": 0.01730639525933766
+      },
+      "0.2": {
+        "detectable_by_private_holdout": false,
+        "eval_poisoned_bal_acc": [
+          0.8037494191885126,
+          0.7981773760810588,
+          0.7694628055817858,
+          0.778523464784088
+        ],
+        "holdout_baseline_bal_acc": [
+          0.8705555555555555,
+          0.8844444444444444,
+          0.8494444444444444,
+          0.8236111111111111
+        ],
+        "holdout_poisoned_bal_acc": [
+          0.8625,
+          0.8077777777777777,
+          0.758888888888889,
+          0.8491666666666666
+        ],
+        "mean_drop": 0.03743055555555552,
+        "n_nodes": 4,
+        "per_node_drop": [
+          0.008055555555555483,
+          0.07666666666666666,
+          0.0905555555555555,
+          -0.025555555555555554
+        ],
+        "std_drop": 0.05535304525806654
+      }
+    }
+  },
+  "seed": 20260912,
+  "wall_seconds": 18.35103345796233
+}

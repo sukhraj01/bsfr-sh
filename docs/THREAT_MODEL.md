@@ -424,6 +424,62 @@ value to corpora with genuine concept drift or much smaller absolute sample size
 positive rows tested here — a different, more specific claim than "commit-reveal defeats
 anchor-point injection," and the one the measurements actually support.
 
+*Federated detection via cross-replica disagreement, built and measured, and structurally
+different from both defenses above (M7-15).* M7-12 inspects feature distributions; M7-14
+restricts information; both look at the data and both measured null against anchor-point
+injection specifically. Federated detection looks at *model outputs* instead: the paper's own
+`n=4` cloud-server replication (`docs/ARCHITECTURE.md` §consensus) already lets every server
+independently run Alg. 3 on the same `BC_SigRW` chain, so disagreement between replicas' verdicts
+is a signal that costs no new protocol message and no new trust assumption beyond the one M7-12
+already introduced (Trust Assumption 6 — every replica can decrypt). `detection.federated`
+(DEV-41) supplies the mechanism (`FederatedDetector`, majority-vote `vote()`,
+`analyze_disagreement()`); three scenarios answer why replicas trained on the identical chain
+would ever disagree at all, each measured against M7-11's three strategies at 5/10/20% budgets:
+
+* **(a) The poisoner trains on a different view than it commits** — three honest nodes fit the
+  poisoned chain, the poisoner fits its own clean view. Disagreement always correctly names the
+  poisoner as the outlier (mechanical, 3-vs-1). **The predicted irony — that the identified
+  outlier is the node with the *better* model — holds for two of the three strategies, not all
+  three.** For `label_flip`/`feature_poison`, it holds exactly as predicted: the poisoner's clean
+  model (0.8408) outperforms the honest nodes' degraded one (0.7722-0.8363). For
+  `anchor_point_injection`, it inverts: the honest nodes score *higher* (0.8425-0.8454) than the
+  poisoner's own baseline, reproducing M7-11's own finding that this strategy sometimes improves
+  rather than degrades accuracy — so the flagged node is, here, unremarkably the worse one.
+  Excluding the identified outlier improves nothing in any of the 9 cells: majority voting at a
+  3-1 split had already suppressed the dissenter before any exclusion step runs.
+* **(b) Algorithm diversity over one shared poisoned draw** — four nodes, one of `configs/
+  ml.yaml`'s four declared algorithms each, all trained on the identical poisoned data. Majority
+  voting never scores below its own weakest individual model in any of the 9 cells (KNN alone:
+  0.658-0.669; voted: 0.768-0.823). **Not a like-for-like improvement over M7-11/12/14's
+  baseline**, which soft-votes all four algorithms inside one `DetectionModule` — hard-voting four
+  separately-fit single-algorithm detectors underperforms that blended ensemble on two of three
+  strategies and is roughly even on the third (§4 below has the exact numbers). KNN and Decision
+  Tree score identical balanced accuracy across all three budgets for `anchor_point_injection`
+  (0.6602/0.8203 exactly) — a measured insensitivity of local/piecewise-constant models to a
+  small injected cluster, not an artefact.
+* **(c) A private, never-committed holdout per node** (this project's extension — Alg. 3 trains
+  exclusively on `BC_SigRW`; nothing in the paper reserves data before committing). Four nodes
+  each hold back 10% of their own contribution and self-score against it, needing no vote and no
+  cross-node communication at all. **Measured result: a weak, inconsistent signal.** Exactly one
+  of 9 cells crosses this session's own stated detectability band (mean cross-node drop positive
+  and exceeding its own standard deviation) — `anchor_point_injection` @10%
+  (mean_drop=+0.0149, std=0.0115), the one strategy the other two defenses both measured null
+  against. `label_flip`, the project's most damaging strategy, is **not** reliably caught even at
+  20% budget (mean_drop=+0.0374, std=0.0554 — zero sits inside the band): a ~62-70-row holdout
+  across only four independent splits does not yet separate real degradation from sampling noise.
+
+**Honest verdict.** Federated detection is architecturally the cleanest of the three poisoning
+defenses — it adds no new protocol message and no new trust assumption beyond what M7-12 already
+introduced, exploiting redundancy the paper's own deployment size already pays for and never
+uses. It is not, on this corpus, a stronger defense than the other two: scenario (a) can name the
+*correct* model as the outlier by design (a finding about what disagreement means, not a flaw to
+fix), scenario (b) underperforms the paper's own soft-vote ensemble, and scenario (c) catches only
+one of nine cells at the stated detectability band. The three-defense arc's honest shape is: a
+statistical check that catches nothing (M7-12), a protocol restriction that changes nothing
+measurable (M7-14), and a free architectural signal that is real but narrow and inconsistent
+(M7-15) — none of the three closes Gap 1 in general, and each closes a different, small, precisely
+bounded piece of it.
+
 *Hybrid anchoring (M7-5) does not help.* Anchoring verifies integrity of already-committed data
 over time; poisoning is a validly signed, validly consensus-approved commitment in the first
 place, not post-commit tampering. The anchor faithfully records the poisoned block exactly as
@@ -477,14 +533,16 @@ specifically, is that some metadata is meant to be externally visible).
   change), DEV-32 (Raft comparison, M7-4), DEV-33 (hybrid chain, M7-5), DEV-27/DEV-34 (honeypot
   representativeness, M7-7), DEV-37 (honeypot poisoning, M7-11), DEV-38 (drift-detection defense
   and its trust assumptions, M7-12), DEV-40 (commit-reveal defense and its trust assumption,
-  M7-14).
+  M7-14), DEV-41 (federated detection, M7-15).
 - `RESULTS.md` M7-3 (adversarial attack), M7-4 (Raft comparison), M7-5 (hybrid anchoring), M7-7
   (real-malware transfer), M7-8 (adversarial retraining), M7-11 (honeypot poisoning), M7-12
-  (drift-detection defense), M7-14 (commit-reveal defense).
+  (drift-detection defense), M7-14 (commit-reveal defense), M7-15 (federated detection).
 - `scripts/m7_12_poisoning_defense.py`, `src/bsfr_sh/detection/drift.py`,
   `src/bsfr_sh/consensus/validated_commit.py` — the drift-detection defense measured above.
 - `scripts/m7_14_commit_reveal_defense.py`, `src/bsfr_sh/consensus/commit_reveal.py`,
   `src/bsfr_sh/framework/commit_reveal_pipeline.py` — the commit-reveal defense measured above.
+- `scripts/m7_15_federated_detection.py`, `src/bsfr_sh/detection/federated.py` — the federated
+  disagreement-based defense measured above.
 - `verification/README.md` — the full Scyther claims table and stated limitations (Tier 1).
 - `docs/report/report.tex` §"Threat Model" — the shorter, matrix-and-gaps-focused version of this
   document, written for the report's own reader rather than as a standalone reference.

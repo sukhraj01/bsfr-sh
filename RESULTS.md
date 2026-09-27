@@ -1239,3 +1239,95 @@ anything neither mechanism caught alone, on this corpus.
 Figures: `results/figures/fig14a_commit_reveal_sweep.png`,
 `results/figures/fig14b_repeated_rounds.png`, sidecar
 `results/logs/20260926T210819Z-1c0db7c7.json`.
+
+## M7-15 — federated detection: cross-replica disagreement as a poisoning signal (2026-09-27)
+
+`scripts/m7_15_federated_detection.py --seed 20260912`, run_id `20260927T053738Z-fc5e7c20`,
+sidecar `results/logs/20260927T053738Z-fc5e7c20.json`. `detection/federated.py`: `FederatedDetector`
++ majority-vote `vote()` + `analyze_disagreement()` (DEV-41) — exploits the paper's own replicated
+architecture (four cloud servers, each independently capable of running Alg. 3 on `BC_SigRW`,
+`docs/THREAT_MODEL.md` Trust Assumption 6) instead of inspecting feature distributions (M7-12) or
+restricting information (M7-14). Measured against exactly M7-11's three strategies at 5/10/20%
+budgets under three scenarios: (A) three honest nodes train on the poisoned chain, one poisoner
+node trains on its own clean view; (B) four nodes share the identical poisoned training draw but
+each runs a different one of `configs/ml.yaml`'s four declared algorithms; (C) four nodes each
+reserve a private, never-committed 10% holdout and self-score against it. Full discussion:
+`docs/DEVIATIONS.md` DEV-41, `docs/THREAT_MODEL.md` Gap 1's federated-detection subsection.
+
+```
+2026-09-27 | detection/honeypot-m7-15-federated | unpoisoned baseline, clean eval | bal_acc=0.8408 | measured | 20260927T053738Z-fc5e7c20 | M7-15, cf. M7-3/M7-11/M7-14 0.8408
+2026-09-27 | detection/honeypot-m7-15-scenario-a | label_flip @5% budget | honest_bal_acc=0.8144 poisoner_bal_acc=0.8408 majority_bal_acc=0.8144 disagreement_rate=0.0971 outlier_node=CS_poisoner outlier_is_poisoner=True irony=True excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | label_flip @10% budget | honest_bal_acc=0.8064 poisoner_bal_acc=0.8408 majority_bal_acc=0.8064 disagreement_rate=0.1587 outlier_node=CS_poisoner outlier_is_poisoner=True irony=True excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | label_flip @20% budget | honest_bal_acc=0.7722 poisoner_bal_acc=0.8408 majority_bal_acc=0.7722 disagreement_rate=0.1642 outlier_node=CS_poisoner outlier_is_poisoner=True irony=True excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | feature_poison @5% budget | honest_bal_acc=0.8363 poisoner_bal_acc=0.8408 majority_bal_acc=0.8363 disagreement_rate=0.0766 outlier_node=CS_poisoner outlier_is_poisoner=True irony=True excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | feature_poison @10% budget | honest_bal_acc=0.8355 poisoner_bal_acc=0.8408 majority_bal_acc=0.8355 disagreement_rate=0.1053 outlier_node=CS_poisoner outlier_is_poisoner=True irony=True excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | feature_poison @20% budget | honest_bal_acc=0.8348 poisoner_bal_acc=0.8408 majority_bal_acc=0.8348 disagreement_rate=0.1122 outlier_node=CS_poisoner outlier_is_poisoner=True irony=True excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | anchor_point_injection @5% budget | honest_bal_acc=0.8425 poisoner_bal_acc=0.8408 majority_bal_acc=0.8425 disagreement_rate=0.0479 outlier_node=CS_poisoner outlier_is_poisoner=True irony=False excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | anchor_point_injection @10% budget | honest_bal_acc=0.8454 poisoner_bal_acc=0.8408 majority_bal_acc=0.8454 disagreement_rate=0.0506 outlier_node=CS_poisoner outlier_is_poisoner=True irony=False excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-a | anchor_point_injection @20% budget | honest_bal_acc=0.8442 poisoner_bal_acc=0.8408 majority_bal_acc=0.8442 disagreement_rate=0.0575 outlier_node=CS_poisoner outlier_is_poisoner=True irony=False excluding_outlier_improves=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | label_flip @5% budget | majority_bal_acc=0.7984 worst_individual=0.6593 recovers_worst_model=True random_forest=0.8528 decision_tree=0.7729 k_nearest_neighbours=0.6593 logistic_regression=0.7767 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | label_flip @10% budget | majority_bal_acc=0.7859 worst_individual=0.6694 recovers_worst_model=True random_forest=0.8315 decision_tree=0.7594 k_nearest_neighbours=0.6694 logistic_regression=0.7710 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | label_flip @20% budget | majority_bal_acc=0.7680 worst_individual=0.6590 recovers_worst_model=True random_forest=0.8184 decision_tree=0.7597 k_nearest_neighbours=0.6590 logistic_regression=0.7560 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | feature_poison @5% budget | majority_bal_acc=0.8212 worst_individual=0.6580 recovers_worst_model=True random_forest=0.8508 decision_tree=0.7937 k_nearest_neighbours=0.6580 logistic_regression=0.8082 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | feature_poison @10% budget | majority_bal_acc=0.8186 worst_individual=0.6694 recovers_worst_model=True random_forest=0.8508 decision_tree=0.8135 k_nearest_neighbours=0.6694 logistic_regression=0.8045 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | feature_poison @20% budget | majority_bal_acc=0.8216 worst_individual=0.6617 recovers_worst_model=True random_forest=0.8551 decision_tree=0.7887 k_nearest_neighbours=0.6617 logistic_regression=0.7961 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | anchor_point_injection @5% budget | majority_bal_acc=0.8212 worst_individual=0.6602 recovers_worst_model=True random_forest=0.8480 decision_tree=0.8203 k_nearest_neighbours=0.6602 logistic_regression=0.7863 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | anchor_point_injection @10% budget | majority_bal_acc=0.8168 worst_individual=0.6602 recovers_worst_model=True random_forest=0.8437 decision_tree=0.8203 k_nearest_neighbours=0.6602 logistic_regression=0.7891 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-b | anchor_point_injection @20% budget | majority_bal_acc=0.8225 worst_individual=0.6602 recovers_worst_model=True random_forest=0.8548 decision_tree=0.8203 k_nearest_neighbours=0.6602 logistic_regression=0.7963 | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | label_flip @5% budget, n_nodes=4 | mean_drop=+0.0019 std_drop=0.0409 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | label_flip @10% budget, n_nodes=4 | mean_drop=+0.0057 std_drop=0.0173 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | label_flip @20% budget, n_nodes=4 | mean_drop=+0.0374 std_drop=0.0554 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | feature_poison @5% budget, n_nodes=4 | mean_drop=-0.0061 std_drop=0.0100 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | feature_poison @10% budget, n_nodes=4 | mean_drop=-0.0113 std_drop=0.0340 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | feature_poison @20% budget, n_nodes=4 | mean_drop=+0.0157 std_drop=0.0226 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | anchor_point_injection @5% budget, n_nodes=4 | mean_drop=+0.0031 std_drop=0.0067 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | anchor_point_injection @10% budget, n_nodes=4 | mean_drop=+0.0149 std_drop=0.0115 detectable_by_private_holdout=True | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-scenario-c | anchor_point_injection @20% budget, n_nodes=4 | mean_drop=+0.0082 std_drop=0.0085 detectable_by_private_holdout=False | measured | 20260927T053738Z-fc5e7c20 | M7-15
+2026-09-27 | detection/honeypot-m7-15-comparison-table | four-defense comparison @10% budget, label_flip/feature_poison/anchor_point_injection | M7-11(no defense)=0.8279/0.8396/0.8468 M7-12(statistical)=not_prevented/not_prevented/not_prevented(maha=0.32/0.28/0.01) M7-14(commit-reveal)=0.8153/0.8478/0.8412 M7-15(federated, scenario B majority)=0.7859/0.8186/0.8168 | measured+cited | 20260927T053738Z-fc5e7c20 | M7-15, cites M7-11/M7-12/M7-14's own already-published lines above
+```
+
+**Reading the numbers, honestly.** Scenario A's outlier identification is always correct (the
+poisoner node is always the one `analyze_disagreement` names — by construction, since three
+identical honest nodes outvote one differently-trained node 3-1 every time) but the *irony* the
+brief predicted is strategy-dependent, not universal: for `label_flip` and `feature_poison`, the
+poisoner's clean-trained model (0.8408) is indeed more accurate than the honest nodes' poisoned
+one (0.7722-0.8363) — disagreement correctly flags the node with the *better* model. For
+`anchor_point_injection`, the opposite holds: the honest (poisoned) nodes score *higher*
+(0.8425-0.8454) than the poisoner's clean baseline (0.8408), reproducing M7-11's own finding that
+this strategy sometimes improves accuracy rather than degrading it — so here the flagged outlier
+is, unremarkably, the worse model, and "irony" does not apply. `excluding_outlier_improves` is
+`False` in all 9 cells: at a 3-1 split, majority voting has already suppressed the single
+dissenter's influence, so removing it changes nothing — exclusion adds nothing that voting had
+not already done.
+
+Scenario B's majority vote **never scores below its own weakest individual algorithm**
+(`recovers_worst_model=True` in all 9 cells) — KNN, run alone and unaugmented by RF/DT/LR, is
+badly hurt on this feature space regardless of poisoning (0.658-0.669 even before considering
+poisoning's own effect), and every majority vote recovers to 0.768-0.823. This is a real,
+measured ensemble-diversity property, but it is **not a like-for-like comparison with the M7-11/
+12/14 baseline**: those measure one `DetectionModule` soft-voting across all four algorithms
+inside a single training draw (Alg. 3's own `DM_CSl`); scenario B measures four *separate*
+single-algorithm detectors combined by hard-vote majority. The comparison table's M7-15 row is
+therefore weaker than M7-11's undefended baseline on `label_flip`/`feature_poison` (0.786/0.819
+vs. 0.828/0.840) and about even on `anchor_point_injection` (0.817 vs. 0.847) — hard-voting four
+separately-degraded single-algorithm models is not automatically better than soft-voting four
+jointly-trained ones, and the paper's own `DM_CSl` ensemble already captures most of what
+algorithm diversity offers. KNN and Decision Tree's individual accuracy is **identical across all
+three budgets** for `anchor_point_injection` (KNN: 0.6602 exactly; DT: 0.8203 exactly) — both are
+local/piecewise-constant models, and the injected anchor cluster apparently never enters any
+eval-row's k=5 neighbourhood or crosses any of the tree's existing splits at any of the three
+tested budgets, a genuine, measured insensitivity rather than an averaging artefact.
+
+Scenario C's private-holdout self-check is a **weak, inconsistent signal, not a reliable one**.
+Of 9 cells, only one crosses the stated detectability band (`anchor_point_injection` @10%,
+mean_drop=+0.0149 > std_drop=0.0115) — the one strategy M7-12 and M7-14 both measured null against,
+briefly caught here, but not at the adjacent 5% or 20% budgets, and not by a wide margin. The
+project's most damaging strategy, `label_flip`, is **not** reliably caught even at 20% budget
+(mean_drop=+0.0374 but std_drop=0.0554 — zero sits inside the band): a 10%-of-committed-set
+holdout at this corpus's size (~62-70 rows) has enough node-to-node sampling variance across only
+four independent splits that a real degradation and pure noise are not yet distinguishable. This
+is an honest limitation of `n=4` nodes and a small absolute corpus, stated rather than smoothed
+over — matching M7-14's own convention of reporting when a mean sits inside its own noise band.
+
+Figure: `results/figures/fig15a_federated_scenarios.png`, sidecar
+`results/logs/20260927T053738Z-fc5e7c20.json`.
