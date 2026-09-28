@@ -246,28 +246,41 @@ per CLAUDE.md, an unmeasured number is not reported as one.
 
 Both exhaustive attempts that did not finish locally (Run 2's exhaustive leg and Run 4 in full)
 were shipped to the Ada HPC cluster (CLAUDE.md §6) rather than re-attempted or abandoned on the 8
-GB dev box. This account's actual SLURM ceiling (`sacctmgr show qos low`: `MaxTRESPU = cpu=10`;
-partition `u22`'s `MaxMemPerCPU=3000` — the same ceiling `scripts/ada_honest_mode.sbatch` already
-discovered and documented) is `--cpus-per-task=10 --mem-per-cpu=3000` (~29.3 GB), not the `-Xmx64g`
-this task's own brief first suggested — adjusted down to what the account can actually be granted,
-the same correction M6b already made once for the ML jobs. Both `.sbatch` scripts request
-`-Xmx27g`, run the identical unmodified `.cfg`/`.tla` files from a `/scratch/$SLURM_JOB_ID` working
-copy (disk-heavy TLC checkpoint files never touch the NFS home checkout), and copy back only a
+GB dev box. This account's SLURM ceiling at submission time (`sacctmgr show qos low`: `MaxTRESPU =
+cpu=10`; partition `u22`'s `MaxMemPerCPU=3000` — the same ceiling `scripts/ada_honest_mode.sbatch`
+already discovered and documented) was `--cpus-per-task=10 --mem-per-cpu=3000` (~29.3 GB), not the
+`-Xmx64g` this task's own brief first suggested — adjusted down to what the account could actually
+be granted, the same correction M6b already made once for the ML jobs. Both `.sbatch` scripts run
+the identical unmodified `.cfg`/`.tla` files from a `/scratch/$SLURM_JOB_ID` working copy
+(disk-heavy TLC checkpoint files never touch the NFS home checkout), and copy back only a
 human-readable result log.
 
-| Job | Config | SLURM job ID | Status at session end |
-|---|---|---|---|
-| `ada_flaw5.sbatch` | `pbft_flaw5.cfg`, exhaustive (upgrades Run 2's simulation-based finding) | 2720269 | submitted, pending (PD) |
-| `ada_liveness.sbatch` | `pbft_liveness.cfg`, exhaustive (Run 4, unresolved locally) | 2720270 | submitted, pending (PD) |
+**Both jobs ended up running concurrently** (`gnode080` for FLAW-5, a separate node for liveness) —
+apparently this account's QOS accounting did not serialize two 10-CPU jobs the way the `MaxTRESPU
+cpu=10` figure implied it should; not investigated further since it only helped.
 
-Both jobs request the account's full `cpu=10` quota, so they queue rather than run concurrently
-(`squeue` showed both `PD (Priority)` immediately after submission — expected, not an error). The
-session was not held open for either to complete; `PROJECT_STATE.md` records both as an open item
-for the next session (or a wakeup within this one, if the harness re-invokes before Ada finishes).
-**These are upgrades, not blockers**: Run 2's simulation-found counterexample already conclusively
-demonstrates FLAW-5 (one counterexample is one counterexample regardless of search strategy); Run
-4's expected result is already argued analytically from Run 1's own exhaustively-confirmed
-certificate math (below). What Ada adds, if it finishes, is "we searched everything" in place of
+**The account's QOS was upgraded from `low` to `medium` mid-session** (`MaxTRESPU` `cpu=10` →
+`cpu=40`), noticed and confirmed by re-running `sacctmgr show qos` after the user flagged it. The
+FLAW-5 job (already ~7 hours in with real structural progress — BFS depth advanced 15→17, hundreds
+of millions of states accumulated) was left running rather than restarted purely to claim the new
+headroom. The liveness job was young enough (~13 minutes, 2.6M states) that the trade was worth it:
+cancelled and resubmitted under `qos=medium` with `--cpus-per-task=20 --mem-per-cpu=3000` (~58.6 GB,
+`-Xmx54g`) instead of the original ~29.3 GB, to reduce the chance of repeating the same
+low-memory-driven slowdown seen both locally and in the first Ada attempt.
+
+| Job | Config | SLURM job ID | Resources | Status at session end |
+|---|---|---|---|---|
+| `ada_flaw5.sbatch` | `pbft_flaw5.cfg`, exhaustive (upgrades Run 2's simulation-based finding) | 2720269 | `qos=low`, 10 cpu/~29.3GB | running, in progress |
+| `ada_liveness.sbatch` (1st submit, cancelled) | `pbft_liveness.cfg`, exhaustive (Run 4, unresolved locally) | 2720270 | `qos=low`, 10 cpu/~29.3GB | cancelled at ~13min/2.6M states, superseded |
+| `ada_liveness.sbatch` (resubmit) | `pbft_liveness.cfg`, exhaustive (Run 4, unresolved locally) | 2721161 | `qos=medium`, 20 cpu/~58.6GB | running, in progress |
+
+The session was not held open for either to complete; `PROJECT_STATE.md` records both as an open
+item for the next session (or a wakeup within this one, if the harness re-invokes before Ada
+finishes). **These are upgrades, not blockers**: Run 2's simulation-found counterexample already
+conclusively demonstrates FLAW-5 (one counterexample is one counterexample regardless of search
+strategy); Run 4's expected result is already argued analytically from Run 1's own
+exhaustively-confirmed certificate math (below). What Ada adds, if it finishes, is "we searched
+everything" in place of
 "we searched enough to find one."
 
 ---
@@ -300,7 +313,7 @@ property TLC checked for it, and the measured result.
 | An honest replica commits at most once per seq | `TypeOK` / state-representation argument | **HOLDS BY CONSTRUCTION** — `log[r][s]` is a single-value slot, checked every state |
 | FLAW-5: pBFT's real safety bound is `n/3`, not the paper's borrowed 51% — two colluding replicas of four (50%, below 51%) can fork | `Agreement`, `F=1` (design)/`\|Faulty\|=2` | **VIOLATED** — counterexample found (simulation, 1s/115,938 states); exhaustive attempt reached 281M states/4h19min without completing (Ada job 2720269 pending) |
 | Termination under fairness, fault-free (sanity control) | `Termination`, `\|Faulty\|=0` | **VERIFIED**, exhaustive — 1,240,200 states, depth 27, 2min59s |
-| DEV-20 #2 (no state transfer): a lagging honest replica can become permanently unable to progress once one Byzantine replica equivocates | `Termination`, `F=1`, `\|Faulty\|=1` | **EXPECTED VIOLATED** (argued from Run 1's certificate math: at `F=1/n=4`, `QuorumSize` equals the honest-replica count exactly, so *any* progress requires *every* honest replica to commit — DEV-20 confirmed formally, not just by the one Python fixture, **once Ada job 2720270 completes**); **UNRESOLVED as measured fact** at session end |
+| DEV-20 #2 (no state transfer): a lagging honest replica can become permanently unable to progress once one Byzantine replica equivocates | `Termination`, `F=1`, `\|Faulty\|=1` | **EXPECTED VIOLATED** (argued from Run 1's certificate math: at `F=1/n=4`, `QuorumSize` equals the honest-replica count exactly, so *any* progress requires *every* honest replica to commit — DEV-20 confirmed formally, not just by the one Python fixture, **once Ada job 2721161 completes**); **UNRESOLVED as measured fact** at session end |
 
 ---
 

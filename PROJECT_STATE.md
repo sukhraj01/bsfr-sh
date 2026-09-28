@@ -33,7 +33,7 @@ M7-1's Scyther verification of the session layer.
   run hit a low-memory warning after 1h42min/16.4M states and was stopped rather than left running
   or risked repeating the FLAW-5 disk exhaustion.
 - **Both incomplete exhaustive runs (FLAW-5 `F=2`, `Termination` `F=1`) were moved to Ada**
-  (`verification/ada_flaw5.sbatch` job 2720269, `ada_liveness.sbatch` job 2720270 — both `PD`,
+  (`verification/ada_flaw5.sbatch` job 2720269, `ada_liveness.sbatch` job 2721161 — both `PD`,
   queued behind the account's `cpu=10` QOS ceiling, not run in parallel). **This is an upgrade to
   already-reported findings, not a blocker** — see Next task.
 - Report extended (`docs/report/report.tex` §"Formal Verification of Consensus", new table
@@ -58,7 +58,7 @@ docs; no Python source changed.
 
 ## Next task
 
-**Check Ada jobs 2720269 (`ada_flaw5.sbatch`) and 2720270 (`ada_liveness.sbatch`)**:
+**Check Ada jobs 2720269 (`ada_flaw5.sbatch`) and 2721161 (`ada_liveness.sbatch`)**:
 `ssh ada squeue -u sukhraj.singh`; when each finishes, `~/m7-18-verification/ada_{flaw5,liveness}_
 result_<jobid>.log` holds the result. If `ada_flaw5` completes: record total states/time and
 confirm Agreement is the only invariant violated — upgrades FLAW-5 from "counterexample found" to
@@ -105,10 +105,10 @@ substance-costing cuts `sessions/2026-09-26-03-...md` describes? | report sign-o
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 narrowed the gap to 1.51pt; report states the residual as measured-and-bounded |
-| The `F=1` liveness claim (DEV-20 #2's cost) is currently an argument, not a TLC-measured fact, pending Ada job 2720270 | a reader could mistake the analytical argument for a measured result | `pbft_results.md`, `DEVIATIONS.md` and the report all state "expected violated"/"pending" explicitly, never phrase it as measured |
+| The `F=1` liveness claim (DEV-20 #2's cost) is currently an argument, not a TLC-measured fact, pending Ada job 2721161 | a reader could mistake the analytical argument for a measured result | `pbft_results.md`, `DEVIATIONS.md` and the report all state "expected violated"/"pending" explicitly, never phrase it as measured |
 | The report is 30 pages, not the requested under-20 | a page-limited venue/rubric may reject it as-is | stated honestly rather than silently shipping either an over-length report or a hollowed-out one |
 | Two Claude Code sessions ran on this repo concurrently during M7-10; nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — re-read a file immediately before writing to it if a long gap occurred since it was first read |
-| Ada jobs 2720269/2720270 are unattended background SLURM jobs (4-day wall-clock limit) | if never checked, they finish and are never incorporated | flagged as the explicit Next task above |
+| Ada jobs 2720269/2721161 are unattended background SLURM jobs (4-day wall-clock limit) | if never checked, they finish and are never incorporated | flagged as the explicit Next task above |
 
 ---
 

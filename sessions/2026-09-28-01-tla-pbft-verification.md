@@ -251,13 +251,13 @@ version:
 protocol. Safety is exhaustively confirmed at the design fault bound; FLAW-5's fork is confirmed by
 direct construction (simulation); liveness is exhaustively confirmed fault-free and argued (not yet
 measured) under one Byzantine fault. Two exhaustive TLC runs that did not finish on the 8 GB dev box
-are running on Ada as SLURM jobs 2720269 (`ada_flaw5.sbatch`) and 2720270 (`ada_liveness.sbatch`),
+are running on Ada as SLURM jobs 2720269 (`ada_flaw5.sbatch`) and 2721161 (`ada_liveness.sbatch`),
 queued sequentially (both request the account's full `cpu=10` QOS ceiling). The report, DEVIATIONS,
 ROADMAP and PROJECT_STATE all reflect this local-plus-pending state honestly, with "pending"/
 "expected" wording that a future session (or this one, if re-invoked before Ada finishes) must
 replace with the measured result once available.
 
-**Next task:** Check Ada jobs 2720269/2720270 (`ssh ada squeue -u sukhraj.singh`; results land in
+**Next task:** Check Ada jobs 2720269/2721161 (`ssh ada squeue -u sukhraj.singh`; results land in
 `~/m7-18-verification/ada_{flaw5,liveness}_result_<jobid>.log`). When each finishes, update
 `verification/pbft_results.md` §"Ada runs", the report's §"Formal Verification of Consensus", and
 `docs/DEVIATIONS.md`'s DEV-20 amendment to state the measured result instead of "pending"/
