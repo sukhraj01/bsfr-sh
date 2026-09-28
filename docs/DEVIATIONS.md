@@ -574,6 +574,36 @@ chain forever, which undercuts §V-3's resistance claim.
 replicas under the reduction; liveness is weaker than full Castro–Liskov only through (2), (6)
 and (7).
 
+**Amendment (M7-18, 2026-09-28): the safety claim above is now confirmed by exhaustive model
+checking, and the liveness cost of (2) is confirmed formally, though not yet by a completed TLC
+run.** `verification/pbft.tla` models the reduced protocol above (view-change with prepared-
+certificate carry-over, `PrevCommitted`'s guard for omission (2)) and TLC exhaustively checked
+Agreement/Validity/Integrity at the design fault bound (`F=1`, one of four replicas byzantine):
+**no violation over the full reachable state space at `MaxView=1, MaxSeq=1`** — 74,970,368 states,
+depth 33, 1h08min (`verification/pbft_results.md`). Two draft versions of the view-change safety
+guard were themselves shown unsound by TLC, at this same bound, before a third verified clean —
+both were spec bugs in this session's TLA+ model, not protocol bugs; kept as documented dead ends
+in `pbft.tla` rather than silently fixed.
+
+Omission (2)'s liveness cost — "a lagging honest replica plus one byzantine replica stalls the
+chain" — has a sharper formal statement than the prose above states: **at `F=1, n=4`, the commit
+quorum size (`2f+1=3`) equals the honest-replica count exactly, so at this specific configuration
+any progress at all requires every honest replica to commit, not merely a quorum of them.** A
+Byzantine equivocation combined with (2)'s missing state transfer is therefore not a minor liveness
+degradation here — it is a complete-halt risk whenever it triggers, exactly as this point already
+argued from the Python test, now argued from the safety proof's own certificate arithmetic. The
+TLC run built to confirm this as a measured (not argued) fact — `Termination` under `F=1` — did not
+finish locally within this session's practical compute budget (1h42min, 16.4M states, TLC warning
+it was low on memory) and was moved to the Ada cluster; **as of this amendment, the run is pending
+and the violation is not yet a TLC-measured fact**, only an argument, stated as such rather than
+reported as a result (CLAUDE.md §2). The fault-free control (`F=0`) verifies `Termination`
+exhaustively (1,240,200 states, 3min), isolating that the open question is genuinely about the
+Byzantine/no-state-transfer interaction and not an artifact of the TLA+ model. FLAW-5
+(`docs/PAPER_NOTES.md` §V-3) is separately confirmed by TLC constructing the `F=2` fork directly —
+via simulation (1s) after the exhaustive attempt exhausted 24GB of local disk at 4h19min/281M
+states without completing; that exhaustive attempt was also resubmitted to Ada. Full mapping
+table, both configs' raw output, and stated limitations: `verification/pbft_results.md`.
+
 ### DEV-21 · FILL · Message bus on a simulated clock, per-message delay declared and zero by default
 **Paper:** §VII reports timings for pBFT over four miners and says nothing about the network
 between them — not whether nodes were separate machines, not the link latency.

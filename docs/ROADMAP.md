@@ -5,8 +5,11 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 **Current milestone: write-up done; M7 (stretch) — honeypot data poisoning (M7-11), its
 statistical drift-detection defense (M7-12), dynamic-behavioral real-data transfer (M7-13), a
 commit-reveal protocol defense (M7-14), a federated cross-replica-disagreement defense (M7-15),
-multi-family ransomware detection (M7-16), and exact minimum adversarial perturbation (M7-17)
-delivered; async pBFT with modelled network latency is the one remaining, not-required item**
+multi-family ransomware detection (M7-16), exact minimum adversarial perturbation (M7-17), and TLA+
+formal verification of the reduced pBFT consensus protocol (M7-18) delivered; async pBFT with
+modelled network latency is the one remaining, not-required item; two M7-18 exhaustive TLC runs are
+pending completion on Ada (jobs 2720269/2720270), an upgrade to already-reported results, not a
+blocker**
 
 ---
 
@@ -435,6 +438,24 @@ existing baseline convention). Variance is reported and the repeat count follows
       M7-8's own "memorises the boundary" reading. `detection/exact_adversarial.py`,
       `scripts/m7_17_exact_min_perturbation.py`, `RESULTS.md` M7-17, `docs/DEVIATIONS.md` DEV-43
       (2026-09-27)
+- [x] **M7-18 — TLA+ formal specification and model checking of the reduced pBFT consensus
+      protocol.** Companion to M7-1's Scyther verification of `crypto.session`: that verified the
+      session layer symbolically, this verifies consensus by exhaustive state-space enumeration
+      (TLC). `verification/pbft.tla` models the DEV-10/DEV-20 reduced protocol (view-change with
+      prepared-certificate carry-over, no-state-transfer via `PrevCommitted`'s guard). Two draft
+      versions of the view-change safety guard were themselves shown unsound by TLC at the
+      smallest bound before a third verified clean — both spec bugs, kept as documented dead ends
+      rather than silently fixed. **Measured**: Agreement/Validity/Integrity verify exhaustively at
+      the design fault bound (`F=1`, 74,970,368 states, 68min); FLAW-5's fork at `F=2` is
+      constructed directly (simulation, 1s) after the exhaustive attempt exhausted 24GB of local
+      disk (4h19min, 281M states, stuck at BFS depth 15); `Termination` verifies exhaustively
+      fault-free (1,240,200 states, 3min). Two exhaustive runs (FLAW-5 at `F=2`; `Termination` at
+      `F=1`, expected violated per DEV-20's own lagging-replica cost, sharpened here to "any
+      progress requires every honest replica" at this exact `n=4/F=1` configuration) did not finish
+      locally and were moved to Ada (jobs 2720269/2720270, pending — an upgrade to already-reported
+      findings, not a blocker). `verification/pbft.tla`, `MC.tla`, four `.cfg` files,
+      `pbft_results.md`, report §"Formal Verification of Consensus", `docs/DEVIATIONS.md` DEV-20
+      amendment (2026-09-28)
 
 ---
 

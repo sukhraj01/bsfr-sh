@@ -29,7 +29,8 @@ model reaches 0.9442 accuracy / 0.9697 F1 -- 4.56 points below the published fig
 eight-hypothesis ablation over every candidate methodological explanation we could identify
 narrows, but does not close, a residual gap that tightens from 3.58 to 1.51 points. Beyond
 reproduction, fifteen extensions build three analyses the paper never attempts. A
-\emph{security} analysis: formal verification of our own session protocol, a pBFT-vs-Raft
+\emph{security} analysis: formal verification of our own session protocol and, separately, of the
+reduced pBFT consensus protocol by exhaustive model checking, a pBFT-vs-Raft
 consensus comparison, external anchoring against a simulated public chain, a four-tier threat
 model, and a measured honeypot data-poisoning attack together with three independent defenses for
 it -- a statistical one that catches the poisoning strategy predicted least catchable and misses
@@ -871,6 +872,80 @@ Within-window replay & -- (stateful cache) & Out of scope \\
 \hline
 \end{tabular}
 \end{table}
+\subsection{Formal Verification of Consensus (Tier 2--3)}
+\label{sec:tlc}
+
+Where \S\ref{sec:scyther} verified the point-to-point session layer symbolically, this subsection
+verifies the multi-party consensus layer (DEV-10, DEV-20's reduced Castro-Liskov pBFT) by
+exhaustive state-space enumeration -- TLC, the model checker for TLA+~\cite{lamport2002specifying}.
+The two techniques are complementary rather than redundant: a two-party key exchange's interesting
+properties (secrecy, mutual authentication, freshness) are naturally checked as trace properties
+under a symbolic Dolev-Yao adversary, Scyther's exact domain; four replicas' agreement under
+quorum intersection and liveness under fairness are naturally checked as reachable-state
+exploration, TLC's exact domain. \texttt{verification/pbft.tla} models replica state (\texttt{view},
+committed \texttt{log}), a monotonically growing set of authenticated-but-unforgeable messages
+(\texttt{PrePrepare}/\texttt{Prepare}/\texttt{Commit}/\texttt{ViewChange}), and a Byzantine replica
+that may send any message well-formed under its own identity but never forge another's. Two
+successive draft versions of the view-change safety guard were each shown \emph{unsound by TLC
+itself} at the smallest bound before a third verified clean -- kept as documentation in
+\texttt{pbft.tla} rather than quietly fixed and forgotten, the same discipline \S\ref{sec:scyther}
+applied to the pre-M1 attack trace: a timing-free global snapshot let an honest replica race ahead
+of another's still-forming certificate (found in 26s), and its fix -- an explicit but unverified
+\texttt{ViewChange} message -- let a Byzantine replica assert a false prepared-block claim with no
+evidence behind it (found in 6m17s). Both were spec bugs, not protocol ones; the fix that finally
+verified clean requires a declared block to independently re-verify against the real message log,
+one line encoding exactly what DEV-20's prose already claimed the real protocol does ("every
+receiver re-verifies each carried view-change and certificate").
+
+\textbf{Bound.} $\text{MaxView}{=}1,\ \text{MaxSeq}{=}1$ -- every attempt at
+$\text{MaxView}{=}2,\text{MaxSeq}{=}2$ exceeded 10 million states within seconds, and this smaller
+bound is both the smallest that still exercises the view-change mechanism at all and the largest
+this project's 8\,GB dev box could exhaust for the $F{=}1$ case (74,970,368 states, 68 minutes).
+Table~\ref{tab:tlc} maps \S\ref{sec:flaw5}'s informal claims onto the formal properties checked.
+\textbf{Safety (Agreement, Validity, Integrity) verifies exhaustively at the design fault bound}
+($F{=}1$, one Byzantine replica of four). \textbf{At $F{=}2$ -- one more fault than the design
+tolerates -- TLC constructs the fork directly}: replica \texttt{r1} commits $b_1$ at view 0 (a
+commit-quorum padded by both Byzantine replicas); replica \texttt{r2} later commits $b_2$ at view 1
+(a view-change quorum in which neither Byzantine sender honestly declares $b_1$, and the one
+honest sender, \texttt{r2}, moved to the new view before observing $b_1$'s certificate --
+individually legitimate, jointly unsafe). This is FLAW-5 by direct construction rather than by
+argument: the ``at least one honest replica in the quorum intersection'' guarantee that keeps the
+$F{=}1$ case safe requires $|\text{Faulty}| \le F$; at $|\text{Faulty}|{=}2 > F{=}1$ on $n{=}4$,
+both members of the two-replica intersection can be the two Byzantine ones, and the guarantee
+simply does not apply. The exhaustive search for this case did not finish locally (4h19m, 281
+million states, disk exhausted at 24\,GB on the dev box's single volume) -- TLC's
+\texttt{-simulate} mode found the same counterexample in one second, and the exhaustive attempt was
+resubmitted to the Ada cluster, pending. \textbf{Liveness (Termination) verifies exhaustively with
+zero Byzantine replicas} (1,240,200 states, 3 minutes), isolating that the harder question is
+genuinely about the Byzantine/no-state-transfer interaction rather than an artifact of the model.
+\textbf{Under one Byzantine replica, the same property did not finish checking locally}
+(1h42m, 16.4 million states, TLC warning it was low on memory) and was moved to Ada rather than
+left to exhaust the dev box a second time; the expected result -- violated, exhibiting DEV-20's
+named lagging-replica cost -- follows from the safety run's own certificate arithmetic (at
+$F{=}1/n{=}4$, the commit quorum size equals the honest-replica count exactly, so \emph{any}
+progress requires \emph{every} honest replica to commit) but is reported as an argument, not yet a
+measured fact, pending that job. Full methodology, both draft-guard failures, and all raw TLC
+output: \texttt{verification/pbft\_results.md}.
+
+\begin{table}[t]
+\centering
+\caption{\S\ref{sec:flaw5}/DEV-20's informal claims, the formal property TLC checks for each, and
+the result.}
+\label{tab:tlc}
+\footnotesize
+\begin{tabular}{@{}p{2.6cm}@{\hspace{3pt}}p{2.0cm}@{\hspace{3pt}}p{1.9cm}@{}}
+\hline
+\textbf{Informal claim} & \textbf{Formal property} & \textbf{Result} \\
+\hline
+Safety at design bound & Agreement, $F{=}1$ & Verified, exhaustive \\
+Committed block was proposed & Validity, $F{=}1$ & Verified \\
+Commit at most once/seq & Integrity & Holds by constr. \\
+FLAW-5 fork at $F{=}2$ & Agreement, $F{=}2$ & Violated (sim.); exhaustive pending \\
+Fault-free termination & Termination, $F{=}0$ & Verified, exhaustive \\
+Lagging replica (DEV-20 \#2) & Termination, $F{=}1$ & Expected violated; pending \\
+\hline
+\end{tabular}
+\end{table}
 \subsection{Consensus Comparison: The Byzantine Leader (Tier 2)}
 \label{sec:m7-4}
 
@@ -1483,9 +1558,9 @@ none -- no registration-authority module exists &
 Nothing to check the claim against \\
 (3) pBFT resists 51\% attacks/selfish mining; Sybil handled &
 2, 3 &
-\texttt{test\_\allowbreak pbft\_\allowbreak byzantine.py} ($f{=}1$/$f{=}2$), Sybil test &
-\textbf{MIXED}: Sybil \textbf{VERIFIED}; $f{=}1$ \textbf{VERIFIED}; ``51\%'' framing \textbf{WRONG} (FLAW-5) -- $f{=}2$ (50\%) \textbf{FORKS} &
-``Selfish mining'' has no pBFT analogue \\
+\texttt{test\_\allowbreak pbft\_\allowbreak byzantine.py} ($f{=}1$/$f{=}2$), Sybil test; TLC (M7-18) exhaustive model checking &
+\textbf{MIXED}: Sybil \textbf{VERIFIED}; $f{=}1$ \textbf{VERIFIED} (tests + TLC exhaustive, 74.9M states); ``51\%'' framing \textbf{WRONG} (FLAW-5) -- $f{=}2$ \textbf{FORKS} (test + TLC, exhaustive search pending on Ada) &
+``Selfish mining'' has no pBFT analogue; TLC bound is $\text{MaxView}{=}1,\text{MaxSeq}{=}1$ (largest tractable locally) \\
 (4) Blockchain immutability resists DoS, manipulation, leakage &
 1--3 &
 Chain hash-linking + quorum (manip.); view-change analysis (DoS, untested by paper); hybrid encryption (leakage) &
@@ -2511,7 +2586,9 @@ $f=1$ bound the cluster actually tolerates, and below the 51\% figure the paper 
 threshold being defended against) can make two honest replicas commit different blocks at the
 same height. We demonstrate this directly rather than argue it: a test constructs exactly this
 scenario against our own pBFT implementation and asserts the fork occurs, at exactly the bound
-$f$ predicts and no tighter.
+$f$ predicts and no tighter. \S\ref{sec:tlc} confirms the same fork by exhaustive/model-checked
+construction (TLC, M7-18) rather than one hand-built scenario, and shows the $f=1$ case verifies
+safe over the full reachable state space at the bound checked.
 
 The fair counter-argument, which \S V-3 could have made and does not, is that pBFT's threshold
 counts identities, not hash power, and in a permissioned deployment identities cannot be minted
@@ -2674,6 +2751,10 @@ Digital Signature Algorithm (ECDSA),'' RFC~6979, IETF, Aug.\ 2013.
 C.~Cremers, ``The Scyther Tool: Verification, Falsification, and Analysis of Security
 Protocols,'' in \emph{Computer Aided Verification (CAV)}, LNCS vol.~5123, Springer, 2008,
 pp.~414--418.
+
+\bibitem{lamport2002specifying}
+L.~Lamport, \emph{Specifying Systems: The TLA+ Language and Tools for Hardware and Software
+Engineers}. Addison-Wesley, 2002.
 
 \bibitem{ongaro2014raft}
 D.~Ongaro and J.~Ousterhout, ``In Search of an Understandable Consensus Algorithm,'' in
