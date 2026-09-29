@@ -594,14 +594,18 @@ degradation here — it is a complete-halt risk whenever it triggers, exactly as
 argued from the Python test, now argued from the safety proof's own certificate arithmetic. The
 TLC run built to confirm this as a measured (not argued) fact — `Termination` under `F=1` — did not
 finish locally within this session's practical compute budget (1h42min, 16.4M states, TLC warning
-it was low on memory) and was moved to the Ada cluster; **as of this amendment, the run is pending
-and the violation is not yet a TLC-measured fact**, only an argument, stated as such rather than
-reported as a result (CLAUDE.md §2). The fault-free control (`F=0`) verifies `Termination`
-exhaustively (1,240,200 states, 3min), isolating that the open question is genuinely about the
-Byzantine/no-state-transfer interaction and not an artifact of the TLA+ model. FLAW-5
-(`docs/PAPER_NOTES.md` §V-3) is separately confirmed by TLC constructing the `F=2` fork directly —
-via simulation (1s) after the exhaustive attempt exhausted 24GB of local disk at 4h19min/281M
-states without completing; that exhaustive attempt was also resubmitted to Ada. Full mapping
+it was low on memory) and was moved to the Ada cluster; **as of this amendment, the run's reachable
+graph has fully built on Ada (149,940,224 states, depth 33) and TLC is computing the final
+fairness/temporal result over it — not yet finished, so the violation is still not a TLC-measured
+fact**, only an argument, stated as such rather than reported as a result (CLAUDE.md §2). The
+fault-free control (`F=0`) verifies `Termination` exhaustively (1,240,200 states, 3min), isolating
+that the open question is genuinely about the Byzantine/no-state-transfer interaction and not an
+artifact of the TLA+ model. FLAW-5 (`docs/PAPER_NOTES.md` §V-3) is now confirmed twice over: first
+by TLC constructing the `F=2` fork via simulation (1s), then **independently by an exhaustive,
+standard breadth-first search on Ada reaching the identical fork** (1,501,898,636 states, 15h56min,
+job 2720269) — the local exhaustive attempt that exhausted 24GB of disk at 4h19min/281M states was
+what was resubmitted, and this time it ran to a found violation rather than to disk exhaustion.
+Full mapping
 table, both configs' raw output, and stated limitations: `verification/pbft_results.md`.
 
 ### DEV-21 · FILL · Message bus on a simulated clock, per-message delay declared and zero by default

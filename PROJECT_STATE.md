@@ -4,14 +4,15 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-09-28 · **Milestone:** M7 stretch — M7-18 delivered (local results); two
-exhaustive TLC runs pending on Ada · **Sessions completed:** 35
+**Last updated:** 2026-09-29 · **Milestone:** M7 stretch — M7-18 delivered; FLAW-5's `F=2` exhaustive
+Ada run completed and confirms the fork; `F=1` liveness exhaustive Ada run still computing ·
+**Sessions completed:** 35
 
 ---
 
 ## One-line status
 
-M7-18 (TLA+ formal verification of the reduced pBFT consensus protocol) is delivered locally:
+M7-18 (TLA+ formal verification of the reduced pBFT consensus protocol) is delivered:
 `verification/pbft.tla` models DEV-10/DEV-20's reduced pBFT and TLC confirms, exhaustively at the
 design fault bound, that Agreement/Validity/Integrity hold — the consensus-layer counterpart to
 M7-1's Scyther verification of the session layer.
@@ -23,21 +24,20 @@ M7-1's Scyther verification of the session layer.
 - **Measured, exhaustive**: `F=1` safety (Agreement/Validity/TypeOK) — 74,970,368 states, depth 33,
   1h08min, no violation. `F=0` liveness control (`Termination`) — 1,240,200 states, 3min, no
   violation.
-- **Measured, non-exhaustive**: FLAW-5's `F=2` fork — TLC's exhaustive attempt ran 4h19min/281M
-  states (stuck at BFS depth 15) before exhausting 24GB of local disk without completing;
-  `-simulate` mode found the same Agreement violation in 1 second. One found counterexample already
-  conclusively demonstrates the fork regardless of search strategy.
-- **Not yet measured**: `F=1` liveness (`Termination`) — expected violated, per DEV-20 #2 (no state
-  transfer) sharpened here to a new formal fact (at this exact `n=4/F=1` config, `QuorumSize`
-  equals the honest-replica count, so *any* progress needs *every* honest replica) — but the local
-  run hit a low-memory warning after 1h42min/16.4M states and was stopped rather than left running
-  or risked repeating the FLAW-5 disk exhaustion.
-- **Both incomplete exhaustive runs (FLAW-5 `F=2`, `Termination` `F=1`) were moved to Ada**
-  (`verification/ada_flaw5.sbatch` job 2720269, `ada_liveness.sbatch` job 2721161 — both `PD`,
-  queued behind the account's `cpu=10` QOS ceiling, not run in parallel). **This is an upgrade to
-  already-reported findings, not a blocker** — see Next task.
+- **Measured, exhaustive, confirmed twice over**: FLAW-5's `F=2` fork — local `-simulate` found it
+  in 1s/115,938 states; Ada's standard (non-simulate) exhaustive search independently reached the
+  identical fork at 1,501,898,636 states / 15h56min (job 2720269, completed). TLC stops at the
+  first violation by design (544M states were still unqueued), so "no other violation exists at
+  F=2" is not established and was not pursued — not needed for FLAW-5's actual claim.
+- **Still computing, not yet measured**: `F=1` liveness (`Termination`) — expected violated, per
+  DEV-20 #2 (no state transfer) sharpened here to a new formal fact (at this exact `n=4/F=1`
+  config, `QuorumSize` equals the honest-replica count, so *any* progress needs *every* honest
+  replica). Ada job 2721161 (20 cpu/~58.6GB, resubmitted after a QOS upgrade mid-session) has fully
+  built the 149,940,224-state reachable graph and is now computing the final fairness/temporal
+  result — the one M7-18 claim without a measured pass/fail as of this update.
 - Report extended (`docs/report/report.tex` §"Formal Verification of Consensus", new table
-  `tab:tlc`, coverage-matrix row 3 amended); recompiles clean (tectonic), still **30 pages**.
+  `tab:tlc`, coverage-matrix row 3 amended); recompiles clean (tectonic), now **31 pages** (was 30
+  — widened again, see Risks).
 
 `make test` and `make lint` unaffected — this session touches only `verification/` (new files) and
 docs; no Python source changed.
@@ -49,7 +49,7 @@ docs; no Python source changed.
 | Layer | State | Notes |
 |---|---|---|
 | Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session |
-| Formal verification: session layer (M7-1, Scyther) + consensus layer (M7-18, TLA+/TLC) | done, locally; 2 exhaustive TLC runs pending on Ada | `verification/pbft.tla`, `pbft_results.md` |
+| Formal verification: session layer (M7-1, Scyther) + consensus layer (M7-18, TLA+/TLC) | done; FLAW-5 exhaustive confirmed on Ada, 1 liveness run still computing there | `verification/pbft.tla`, `pbft_results.md` |
 | Honeypot poisoning: attack + three independent defenses (M7-11/12/14/15) | done | unchanged |
 | Multi-family detection (M7-16); adversarial robustness + exact bounds (M7-3/8/17) | done | unchanged |
 | Real-malware transfer evaluation | done, 3 datasets | unchanged |
@@ -58,17 +58,19 @@ docs; no Python source changed.
 
 ## Next task
 
-**Check Ada jobs 2720269 (`ada_flaw5.sbatch`) and 2721161 (`ada_liveness.sbatch`)**:
-`ssh ada squeue -u sukhraj.singh`; when each finishes, `~/m7-18-verification/ada_{flaw5,liveness}_
-result_<jobid>.log` holds the result. If `ada_flaw5` completes: record total states/time and
-confirm Agreement is the only invariant violated — upgrades FLAW-5 from "counterexample found" to
-"full state space explored, this is the only violation." If `ada_liveness` completes: record
-pass/fail — this is the one M7-18 claim not yet backed by a measured number (only an argument from
-the `F=1` safety run's own certificate arithmetic). Either way, update `verification/pbft_results.md`
-§"Ada runs", the report's §"Formal Verification of Consensus" (replace "pending"/"expected" wording
-with the measured result), and `docs/DEVIATIONS.md` DEV-20's amendment. If Ada also exhausts disk,
-note the state count reached and move on — a partial exhaustive search is still informative,
-already the pattern this session used locally.
+**Check Ada job 2721161 (`ada_liveness.sbatch`)** — the only remaining open item.
+`ada_flaw5.sbatch` (2720269) is done: Agreement violated, 1,501,898,636 states, 15h56min, matching
+the local simulation's fork exactly (`verification/pbft_results.md` Run 2 already updated with
+this). `ssh ada squeue -u sukhraj.singh` / `tail ~/m7-18-verification/ada_liveness_result_2721161.log`
+to check; as of this update the reachable graph is fully built (149,940,224 states) and TLC is
+computing the final fairness/temporal result, which can take a long time relative to plain
+reachability (the local low-memory warning on this same check is why it was moved to Ada in the
+first place). When it finishes: record pass/fail, then update `verification/pbft_results.md`
+§"Ada runs"/§"Run 4", the report's §"Formal Verification of Consensus" (replace "still computing"/
+"expected" wording with the measured result and its trace if violated), `docs/DEVIATIONS.md`
+DEV-20's amendment, and this file's one-line status. If the job errors out instead (unlikely at
+58.6GB given the local run's failure mode was memory, not disk), note the state reached and move
+on — a partial exhaustive search is still informative, as Run 2's handling already established.
 
 If Ada is not the next session's actual task, the M7-17 backlog is still open, in order of
 interest: (1) a stability-adjusted robustness metric (M7-17); (2) exact `k_nearest_neighbours`
@@ -89,10 +91,11 @@ access request (carried, unchanged).
 
 | # | Question | Blocks | Resolve by |
 |---|---|---|---|
-| Q11 | Is the report's length (30pp) acceptable for submission, or does it need the deeper,
+| Q11 | Is the report's length (31pp) acceptable for submission, or does it need the deeper,
 substance-costing cuts `sessions/2026-09-26-03-...md` describes? | report sign-off | reviewer/instructor judgement |
-| Q12 | Do the two pending Ada TLC runs need to land before the report is considered final, or can
-"pending, argued analytically" stand as submitted? | report sign-off if Ada is slow | reviewer/instructor judgement |
+| Q12 | Does the one still-pending Ada TLC run (`F=1` liveness, job 2721161) need to land before the
+report is considered final, or can "still computing, argued analytically" stand as submitted?
+FLAW-5's own Ada run already landed and confirmed the fork. | report sign-off if Ada is slow | reviewer/instructor judgement |
 
 ## Carried debt
 
@@ -105,10 +108,10 @@ substance-costing cuts `sessions/2026-09-26-03-...md` describes? | report sign-o
 | Risk | Impact | Mitigation |
 |---|---|---|
 | The non-reproduction (detection headline) is read as our bug rather than a finding | the report's central claim collapses | baselines published beside every number; Q10 + M7-6 narrowed the gap to 1.51pt; report states the residual as measured-and-bounded |
-| The `F=1` liveness claim (DEV-20 #2's cost) is currently an argument, not a TLC-measured fact, pending Ada job 2721161 | a reader could mistake the analytical argument for a measured result | `pbft_results.md`, `DEVIATIONS.md` and the report all state "expected violated"/"pending" explicitly, never phrase it as measured |
-| The report is 30 pages, not the requested under-20 | a page-limited venue/rubric may reject it as-is | stated honestly rather than silently shipping either an over-length report or a hollowed-out one |
+| The `F=1` liveness claim (DEV-20 #2's cost) is currently an argument, not a TLC-measured fact — the only remaining unmeasured M7-18 claim, pending Ada job 2721161 | a reader could mistake the analytical argument for a measured result | `pbft_results.md`, `DEVIATIONS.md` and the report all state "expected violated"/"still computing" explicitly, never phrase it as measured |
+| The report is 31 pages, not the requested under-20 (widened again this session, 30→31) | a page-limited venue/rubric may reject it as-is | stated honestly rather than silently shipping either an over-length report or a hollowed-out one |
 | Two Claude Code sessions ran on this repo concurrently during M7-10; nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — re-read a file immediately before writing to it if a long gap occurred since it was first read |
-| Ada jobs 2720269/2721161 are unattended background SLURM jobs (4-day wall-clock limit) | if never checked, they finish and are never incorporated | flagged as the explicit Next task above |
+| Ada job 2721161 is an unattended background SLURM job (4-day wall-clock limit) computing a potentially long fairness/temporal analysis | if never checked, it finishes and is never incorporated | flagged as the explicit Next task above |
 
 ---
 

@@ -13,10 +13,12 @@ not in what one adversary can forge in a two-party exchange.
 **Result, in one line:** at the design fault bound (F=1, one Byzantine replica of four), Agreement,
 Validity and Integrity all verify clean over the full reachable state space at the largest bound
 this project's hardware could exhaust (74,970,368 states); at two Byzantine replicas — one more
-than the design tolerates — Agreement is violated, confirming FLAW-5 by direct construction of the
-fork rather than by argument; and liveness (Termination) holds exhaustively with zero Byzantine
-replicas but did not finish checking under one Byzantine replica within this session's practical
-compute budget, and was moved to Ada rather than left unresolved (§ Ada runs).
+than the design tolerates — Agreement is violated, confirmed twice over: first by simulation (1
+second), then by an exhaustive, standard breadth-first search on Ada (1.5 billion states,
+15h56min) reaching the identical fork; and liveness (Termination) holds exhaustively with zero
+Byzantine replicas, while the same check under one Byzantine replica built its full 150-million-
+state reachable graph on Ada but was still running the final fairness/temporal analysis over it as
+of this writing — the one M7-18 claim not yet backed by a measured pass/fail (§ Ada runs).
 
 ---
 
@@ -192,7 +194,34 @@ guarantee that makes Run 1 safe requires `|Faulty| <= F`; at `|Faulty|=2 > F=1` 
 members of a 2-element intersection can be the two Byzantine replicas, and the argument simply does
 not apply.
 
-**Exhaustive attempt (Ada): submitted, pending.** See **§ Ada runs**.
+**Exhaustive attempt (Ada): completed — independently confirms the same fork.** Standard
+(non-`-simulate`) TLC, `qos=low` (10 cpu / ~29.3 GB), job 2720269:
+
+```
+Error: Invariant Agreement is violated.
+25,167,797,858 states generated, 1,501,898,636 distinct states found, 544,227,154 states left on queue.
+The depth of the complete state graph search is 18.
+Finished in 15h 56min.
+```
+
+The trace TLC's standard breadth-first search reaches is the identical fork shape the local
+simulation found — `r1` commits `b1` at view 0 (quorum `{r1, r3, r4}`), `r2` commits `b2` at view 1
+(quorum `{r2, r3, r4}`, `ForcedBlocks(1,1)={}` for the same reason above) — found this time by
+exhaustive, deterministic state-space traversal rather than a random walk, at 1.5 billion distinct
+states rather than ~116 thousand. **This upgrades the finding from "a counterexample exists" (one
+random trace) to "the standard, complete state-space search reaches the same counterexample too,"
+independently, via two different search strategies.**
+
+**What this does *not* establish: "no other kind of violation exists."** TLC's default behaviour
+stops at the *first* invariant violation it encounters in BFS order — this run had 544,227,154
+states still on its queue when it stopped, so most of the `F=2` reachable state space was never
+visited. Getting "the fork above is the *only* way Agreement fails at `F=2`" would need TLC's
+`-continue` flag (keep searching past the first violation) on top of *already* exhausting the full
+graph — a run that, at this state space's observed density (~1.5B distinct states to find one
+violation at depth 18, with over a third of the frontier still unexplored), would plausibly cost
+several more days of cluster time for a claim no argument in this project's report or `docs/`
+actually needs: one counterexample already fully refutes universal Agreement at `F=2`, and that is
+the only claim FLAW-5 makes. Not pursued for that reason, not because it ran out of budget.
 
 ### Run 3 — Liveness control, F=1 design/zero actual faults: `pbft_control_f0.cfg`
 
@@ -268,20 +297,21 @@ cancelled and resubmitted under `qos=medium` with `--cpus-per-task=20 --mem-per-
 `-Xmx54g`) instead of the original ~29.3 GB, to reduce the chance of repeating the same
 low-memory-driven slowdown seen both locally and in the first Ada attempt.
 
-| Job | Config | SLURM job ID | Resources | Status at session end |
+| Job | Config | SLURM job ID | Resources | Status |
 |---|---|---|---|---|
-| `ada_flaw5.sbatch` | `pbft_flaw5.cfg`, exhaustive (upgrades Run 2's simulation-based finding) | 2720269 | `qos=low`, 10 cpu/~29.3GB | running, in progress |
-| `ada_liveness.sbatch` (1st submit, cancelled) | `pbft_liveness.cfg`, exhaustive (Run 4, unresolved locally) | 2720270 | `qos=low`, 10 cpu/~29.3GB | cancelled at ~13min/2.6M states, superseded |
-| `ada_liveness.sbatch` (resubmit) | `pbft_liveness.cfg`, exhaustive (Run 4, unresolved locally) | 2721161 | `qos=medium`, 20 cpu/~58.6GB | running, in progress |
+| `ada_flaw5.sbatch` | `pbft_flaw5.cfg`, exhaustive | 2720269 | `qos=low`, 10 cpu/~29.3GB | **complete** — Agreement violated, 1.5B states, 15h56min |
+| `ada_liveness.sbatch` (1st submit, cancelled) | `pbft_liveness.cfg`, exhaustive | 2720270 | `qos=low`, 10 cpu/~29.3GB | cancelled at ~13min/2.6M states, superseded |
+| `ada_liveness.sbatch` (resubmit) | `pbft_liveness.cfg`, exhaustive | 2721161 | `qos=medium`, 20 cpu/~58.6GB | **graph complete** (149,940,224 states, depth 33), computing the temporal/fairness result — not yet finished |
 
-The session was not held open for either to complete; `PROJECT_STATE.md` records both as an open
-item for the next session (or a wakeup within this one, if the harness re-invokes before Ada
-finishes). **These are upgrades, not blockers**: Run 2's simulation-found counterexample already
-conclusively demonstrates FLAW-5 (one counterexample is one counterexample regardless of search
-strategy); Run 4's expected result is already argued analytically from Run 1's own
-exhaustively-confirmed certificate math (below). What Ada adds, if it finishes, is "we searched
-everything" in place of
-"we searched enough to find one."
+`ada_flaw5.sbatch` upgraded Run 2 from "a counterexample exists" (simulation) to "the standard
+exhaustive search reaches the same counterexample too" — see Run 2 above for what it does and does
+not additionally establish. `ada_liveness.sbatch` is what Run 4's argued-but-not-measured
+`Termination` result is waiting on: the reachable-state graph is now fully built (150M states,
+matching the scale this bound's other runs would predict), and TLC is past the expensive-but-
+finite fairness/SCC analysis stage that produced the local "running low on memory" warning — this
+time with 58.6 GB of headroom rather than 1.8 GB, so the concern is patience, not another
+memory-driven stall. Neither job was held open for by this session; check
+`~/m7-18-verification/ada_liveness_result_2721161.log` on Ada for the eventual result.
 
 ---
 
@@ -311,7 +341,7 @@ property TLC checked for it, and the measured result.
 | Reduced pBFT preserves safety (no fork) at the design fault bound, despite omitting checkpoints/state-transfer/pipelining/null-requests/retransmission | `Agreement`, `F=1`, `\|Faulty\|=1` | **VERIFIED**, exhaustive — 74,970,368 states, depth 33, 1h08min |
 | A committed block was really proposed by some replica (never fabricated) | `Validity`, same run | **VERIFIED** (same run) |
 | An honest replica commits at most once per seq | `TypeOK` / state-representation argument | **HOLDS BY CONSTRUCTION** — `log[r][s]` is a single-value slot, checked every state |
-| FLAW-5: pBFT's real safety bound is `n/3`, not the paper's borrowed 51% — two colluding replicas of four (50%, below 51%) can fork | `Agreement`, `F=1` (design)/`\|Faulty\|=2` | **VIOLATED** — counterexample found (simulation, 1s/115,938 states); exhaustive attempt reached 281M states/4h19min without completing (Ada job 2720269 pending) |
+| FLAW-5: pBFT's real safety bound is `n/3`, not the paper's borrowed 51% — two colluding replicas of four (50%, below 51%) can fork | `Agreement`, `F=1` (design)/`\|Faulty\|=2` | **VIOLATED** — found by simulation (1s/115,938 states) and independently by exhaustive BFS on Ada (1.5B states/15h56min, job 2720269) |
 | Termination under fairness, fault-free (sanity control) | `Termination`, `\|Faulty\|=0` | **VERIFIED**, exhaustive — 1,240,200 states, depth 27, 2min59s |
 | DEV-20 #2 (no state transfer): a lagging honest replica can become permanently unable to progress once one Byzantine replica equivocates | `Termination`, `F=1`, `\|Faulty\|=1` | **EXPECTED VIOLATED** (argued from Run 1's certificate math: at `F=1/n=4`, `QuorumSize` equals the honest-replica count exactly, so *any* progress requires *every* honest replica to commit — DEV-20 confirmed formally, not just by the one Python fixture, **once Ada job 2721161 completes**); **UNRESOLVED as measured fact** at session end |
 
@@ -343,9 +373,14 @@ this session's two draft view-change guards).
 2. **Two block values, not an open domain.** Sufficient to detect any equivocation/fork (the
    interesting failure mode always involves two DIFFERENT committed values); does not model
    richer payload semantics, which are irrelevant to consensus safety/liveness.
-3. **`F=2` exhaustive result is pending (Ada).** The FLAW-5 finding itself does not depend on it —
-   a single found counterexample already refutes universal Agreement at `F=2` — but "no OTHER kind
-   of violation exists in the full `F=2` state space" is not yet a checked fact.
+3. **`F=2`'s exhaustive search stopped at the first violation, not after exhausting the space.**
+   TLC's standard behaviour (Ada, job 2720269) found the same fork the local simulation did, by
+   full BFS rather than a random walk — but it stopped there, with 544 million states still
+   unqueued. "No OTHER kind of violation exists in the full `F=2` state space" would need
+   `-continue` mode on top of full exhaustion, plausibly several more days of cluster time, for a
+   claim this project's report does not need: one counterexample already refutes universal
+   Agreement at `F=2`. Not pursued, and stated as a choice rather than a limitation reached by
+   running out of budget.
 4. **`F=1` liveness result is pending (Ada), not merely un-triple-checked.** Unlike the `F=2` case,
    no counterexample has been found for this property at all yet, locally or otherwise. The
    expected-violated call is an argument from Run 1's exhaustively-confirmed certificate math (the

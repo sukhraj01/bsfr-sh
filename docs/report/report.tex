@@ -914,8 +914,13 @@ $F{=}1$ case safe requires $|\text{Faulty}| \le F$; at $|\text{Faulty}|{=}2 > F{
 both members of the two-replica intersection can be the two Byzantine ones, and the guarantee
 simply does not apply. The exhaustive search for this case did not finish locally (4h19m, 281
 million states, disk exhausted at 24\,GB on the dev box's single volume) -- TLC's
-\texttt{-simulate} mode found the same counterexample in one second, and the exhaustive attempt was
-resubmitted to the Ada cluster, pending. \textbf{Liveness (Termination) verifies exhaustively with
+\texttt{-simulate} mode found the same counterexample in one second, and the exhaustive attempt,
+resubmitted to the Ada cluster with real memory/disk headroom, \textbf{completed and reached the
+identical fork by standard breadth-first search} (1.5 billion states, 15h56m) -- two independent
+search strategies, the same counterexample. (TLC stops at the first violation it finds by design;
+this run had 544 million states still unqueued when it stopped, so "no other kind of violation
+exists at $F{=}2$" is not established and was not pursued -- one counterexample already refutes
+universal Agreement, the only claim FLAW-5 makes.) \textbf{Liveness (Termination) verifies exhaustively with
 zero Byzantine replicas} (1,240,200 states, 3 minutes), isolating that the harder question is
 genuinely about the Byzantine/no-state-transfer interaction rather than an artifact of the model.
 \textbf{Under one Byzantine replica, the same property did not finish checking locally}
@@ -940,7 +945,7 @@ the result.}
 Safety at design bound & Agreement, $F{=}1$ & Verified, exhaustive \\
 Committed block was proposed & Validity, $F{=}1$ & Verified \\
 Commit at most once/seq & Integrity & Holds by constr. \\
-FLAW-5 fork at $F{=}2$ & Agreement, $F{=}2$ & Violated (sim.); exhaustive pending \\
+FLAW-5 fork at $F{=}2$ & Agreement, $F{=}2$ & Violated (sim.\ + exhaustive) \\
 Fault-free termination & Termination, $F{=}0$ & Verified, exhaustive \\
 Lagging replica (DEV-20 \#2) & Termination, $F{=}1$ & Expected violated; pending \\
 \hline
@@ -1559,7 +1564,7 @@ Nothing to check the claim against \\
 (3) pBFT resists 51\% attacks/selfish mining; Sybil handled &
 2, 3 &
 \texttt{test\_\allowbreak pbft\_\allowbreak byzantine.py} ($f{=}1$/$f{=}2$), Sybil test; TLC (M7-18) exhaustive model checking &
-\textbf{MIXED}: Sybil \textbf{VERIFIED}; $f{=}1$ \textbf{VERIFIED} (tests + TLC exhaustive, 74.9M states); ``51\%'' framing \textbf{WRONG} (FLAW-5) -- $f{=}2$ \textbf{FORKS} (test + TLC, exhaustive search pending on Ada) &
+\textbf{MIXED}: Sybil \textbf{VERIFIED}; $f{=}1$ \textbf{VERIFIED} (tests + TLC exhaustive, 74.9M states); ``51\%'' framing \textbf{WRONG} (FLAW-5) -- $f{=}2$ \textbf{FORKS} (test + TLC simulation + TLC exhaustive on Ada, 1.5B states) &
 ``Selfish mining'' has no pBFT analogue; TLC bound is $\text{MaxView}{=}1,\text{MaxSeq}{=}1$ (largest tractable locally) \\
 (4) Blockchain immutability resists DoS, manipulation, leakage &
 1--3 &

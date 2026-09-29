@@ -155,8 +155,10 @@ is an upgrade to existing claims, not a blocker.
 - **`docs/report/report.tex`** (AI-generated edit): new §"Formal Verification of Consensus
   (Tier 2–3)" after §"Formal Verification of the Session Protocol", new `tab:tlc`, coverage-matrix
   row 3 amended, FLAW-5 prose (§V-3) cross-references the new subsection, abstract-adjacent
-  intro sentence updated, one new bibliography entry (Lamport's TLA+ book). Recompiles clean via
-  `tectonic`, still 30 pages.
+  intro sentence updated, one new bibliography entry (Lamport's TLA+ book); amended a second time
+  once Ada's FLAW-5 exhaustive result landed, to replace "pending" wording with the measured
+  confirmation. Recompiles clean via `tectonic`; 30 pages after the first edit, **31 after the
+  second** (Risks).
 - **`docs/DEVIATIONS.md`** (AI-generated edit): DEV-20 amendment (below).
 - **`docs/ROADMAP.md`**, **`PROJECT_STATE.md`** (AI-generated edits): M7-18 ticked; state rewritten.
 - No Python source touched. `verification/lib/tla2tools.jar` (2.1 MB, downloaded from the tool
@@ -231,9 +233,12 @@ version:
 | Run | Config | Result | States (distinct) | Time |
 |---|---|---|---|---|
 | 1 — safety | `pbft.cfg`, F=1 | no violation, exhaustive | 74,970,368 | 1h08min |
-| 2 — FLAW-5 | `pbft_flaw5.cfg`, F=2 | Agreement violated (simulation); exhaustive attempt incomplete | 281,002,154 (partial) / 115,938 (sim) | 4h19min (partial) / 1s (sim) |
+| 2 — FLAW-5 (local, partial) | `pbft_flaw5.cfg`, F=2 | exhaustive attempt incomplete (disk exhausted) | 281,002,154 (partial) | 4h19min (partial) |
+| 2 — FLAW-5 (local, simulation) | `pbft_flaw5.cfg`, F=2 | Agreement violated | 115,938 | 1s |
+| 2 — FLAW-5 (Ada, exhaustive) | `pbft_flaw5.cfg`, F=2 | Agreement violated — same fork, standard BFS | 1,501,898,636 | 15h56min |
 | 3 — liveness control | `pbft_control_f0.cfg`, F=0 | no violation, exhaustive | 1,240,200 | 2m59s |
-| 4 — liveness | `pbft_liveness.cfg`, F=1 | did not finish locally, moved to Ada | 16,420,732 (partial) | 1h42min (partial) |
+| 4 — liveness (local, partial) | `pbft_liveness.cfg`, F=1 | did not finish (low-memory warning) | 16,420,732 (partial) | 1h42min (partial) |
+| 4 — liveness (Ada, in progress) | `pbft_liveness.cfg`, F=1 | graph complete, computing fairness result — not yet finished | 149,940,224 | 15h40min+ so far |
 
 ## Deviations opened or changed
 
@@ -248,28 +253,32 @@ version:
 ## Handover *(written last, this is what the next session actually depends on)*
 
 **State after:** `verification/` holds a working, twice-corrected TLA+ spec of the reduced pBFT
-protocol. Safety is exhaustively confirmed at the design fault bound; FLAW-5's fork is confirmed by
-direct construction (simulation); liveness is exhaustively confirmed fault-free and argued (not yet
-measured) under one Byzantine fault. Two exhaustive TLC runs that did not finish on the 8 GB dev box
-are running on Ada as SLURM jobs 2720269 (`ada_flaw5.sbatch`) and 2721161 (`ada_liveness.sbatch`),
-queued sequentially (both request the account's full `cpu=10` QOS ceiling). The report, DEVIATIONS,
-ROADMAP and PROJECT_STATE all reflect this local-plus-pending state honestly, with "pending"/
-"expected" wording that a future session (or this one, if re-invoked before Ada finishes) must
-replace with the measured result once available.
+protocol. Safety is exhaustively confirmed at the design fault bound. FLAW-5's fork is confirmed
+**twice over**: locally by simulation (1s), and — after the local exhaustive attempt exhausted disk
+— independently on Ada by standard exhaustive breadth-first search (job 2720269, completed,
+1.5 billion states, 15h56min, identical fork). Liveness is exhaustively confirmed fault-free; under
+one Byzantine fault the reachable graph is fully built on Ada (job 2721161, resubmitted mid-session
+at 20 cpu/~58.6GB after a QOS upgrade) and TLC is computing the final fairness result — the one
+M7-18 claim still without a measured pass/fail. The report, DEVIATIONS, ROADMAP and PROJECT_STATE
+all reflect this state honestly: FLAW-5's Ada result is written up as measured and confirmed;
+liveness's Ada result is written up as "still computing"/"expected", not as measured.
 
-**Next task:** Check Ada jobs 2720269/2721161 (`ssh ada squeue -u sukhraj.singh`; results land in
-`~/m7-18-verification/ada_{flaw5,liveness}_result_<jobid>.log`). When each finishes, update
-`verification/pbft_results.md` §"Ada runs", the report's §"Formal Verification of Consensus", and
-`docs/DEVIATIONS.md`'s DEV-20 amendment to state the measured result instead of "pending"/
-"expected". If Ada also exhausts disk, record the state count reached and move on — this session's
-own local FLAW-5 handling is the precedent for that being an acceptable, informative outcome.
+**Next task:** Check Ada job 2721161 only (`ssh ada squeue -u sukhraj.singh`; result lands in
+`~/m7-18-verification/ada_liveness_result_2721161.log`). When it finishes, update
+`verification/pbft_results.md` §"Ada runs"/Run 4, the report's §"Formal Verification of Consensus",
+and `docs/DEVIATIONS.md`'s DEV-20 amendment to state the measured pass/fail instead of "still
+computing"/"expected". If it errors out instead of finishing (the local failure mode here was
+low memory, not disk, and this job has ~30x the heap the local attempt had), record the state
+reached and move on — FLAW-5's handling of a non-ideal outcome is the precedent for that being an
+acceptable, informative result to report rather than something to keep retrying indefinitely.
 
-**New blockers:** None. The two Ada jobs are unattended background SLURM work (4-day wall-clock
-limit each), not a blocker on anything else in this project.
+**New blockers:** None. Ada job 2721161 is unattended background SLURM work (4-day wall-clock
+limit), not a blocker on anything else in this project.
 
-**Questions opened / closed:** Opened Q12 (`PROJECT_STATE.md`): whether the report needs the two
-Ada runs to land before being considered final, or can ship with "pending, argued analytically."
-Q11 (report page count) unchanged, carried.
+**Questions opened / closed:** Opened Q12 (`PROJECT_STATE.md`): whether the report needs the one
+still-pending Ada run (liveness) to land before being considered final, or can ship with "still
+computing, argued analytically" — FLAW-5's own Ada run already landed and needs no such caveat.
+Q11 (report page count, now 31pp not 30) unchanged in substance, carried.
 
 ## Checklist
 
