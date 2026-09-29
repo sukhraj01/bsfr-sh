@@ -53,24 +53,26 @@ docs; no Python source changed.
 | Honeypot poisoning: attack + three independent defenses (M7-11/12/14/15) | done | unchanged |
 | Multi-family detection (M7-16); adversarial robustness + exact bounds (M7-3/8/17) | done | unchanged |
 | Real-malware transfer evaluation | done, 3 datasets | unchanged |
-| `docs/report/report.pdf` | done, 30 pages | extended this session, recompiles clean via `tectonic` |
+| `docs/report/report.pdf` | done, 31 pages | extended this session, recompiles clean via `tectonic` |
 | Everything else (M7-2 through M7-17's own deliverables) | done | unchanged |
 
 ## Next task
 
-**Check Ada job 2721161 (`ada_liveness.sbatch`)** — the only remaining open item.
-`ada_flaw5.sbatch` (2720269) is done: Agreement violated, 1,501,898,636 states, 15h56min, matching
-the local simulation's fork exactly (`verification/pbft_results.md` Run 2 already updated with
-this). `ssh ada squeue -u sukhraj.singh` / `tail ~/m7-18-verification/ada_liveness_result_2721161.log`
-to check; as of this update the reachable graph is fully built (149,940,224 states) and TLC is
-computing the final fairness/temporal result, which can take a long time relative to plain
-reachability (the local low-memory warning on this same check is why it was moved to Ada in the
-first place). When it finishes: record pass/fail, then update `verification/pbft_results.md`
-§"Ada runs"/§"Run 4", the report's §"Formal Verification of Consensus" (replace "still computing"/
-"expected" wording with the measured result and its trace if violated), `docs/DEVIATIONS.md`
-DEV-20's amendment, and this file's one-line status. If the job errors out instead (unlikely at
-58.6GB given the local run's failure mode was memory, not disk), note the state reached and move
-on — a partial exhaustive search is still informative, as Run 2's handling already established.
+**Check Ada job 2721161 (`ada_liveness.sbatch`) — blocked by an Ada outage, not by anything in
+this project.** `ada_flaw5.sbatch` (2720269) is done: Agreement violated, 1,501,898,636 states,
+15h56min, matching the local simulation's fork exactly (`verification/pbft_results.md` Run 2
+already updated with this). As of 2026-09-29, the last confirmed liveness state was: reachable
+graph fully built (149,940,224 states), TLC computing the final fairness/temporal result. **Ada is
+now down for a scheduled major upgrade, expected back 2026-10-01** — SSH is refused outright
+(`Permission denied (hostbased)`), so the job's fate (still running / paused / killed by the
+upgrade) cannot be checked until then. Next session (or a later check in this one): `ssh ada
+squeue -u sukhraj.singh` / `tail ~/m7-18-verification/ada_liveness_result_2721161.log`. If the job
+is gone (killed by the upgrade with no result), resubmit `ada_liveness.sbatch` fresh rather than
+try to recover partial state — TLC's own checkpointing is per-run, not something this project's
+tooling manages across a cluster reboot. When a result lands (pass/fail): update
+`verification/pbft_results.md` §"Ada runs"/§"Run 4", the report's §"Formal Verification of
+Consensus" (replace "still computing"/"expected" wording with the measured result and its trace if
+violated), `docs/DEVIATIONS.md` DEV-20's amendment, and this file's one-line status.
 
 If Ada is not the next session's actual task, the M7-17 backlog is still open, in order of
 interest: (1) a stability-adjusted robustness metric (M7-17); (2) exact `k_nearest_neighbours`
@@ -111,7 +113,7 @@ FLAW-5's own Ada run already landed and confirmed the fork. | report sign-off if
 | The `F=1` liveness claim (DEV-20 #2's cost) is currently an argument, not a TLC-measured fact — the only remaining unmeasured M7-18 claim, pending Ada job 2721161 | a reader could mistake the analytical argument for a measured result | `pbft_results.md`, `DEVIATIONS.md` and the report all state "expected violated"/"still computing" explicitly, never phrase it as measured |
 | The report is 31 pages, not the requested under-20 (widened again this session, 30→31) | a page-limited venue/rubric may reject it as-is | stated honestly rather than silently shipping either an over-length report or a hollowed-out one |
 | Two Claude Code sessions ran on this repo concurrently during M7-10; nothing currently prevents this from happening again | a future concurrent session's edits could silently clobber or duplicate content | no fix implemented — re-read a file immediately before writing to it if a long gap occurred since it was first read |
-| Ada job 2721161 is an unattended background SLURM job (4-day wall-clock limit) computing a potentially long fairness/temporal analysis | if never checked, it finishes and is never incorporated | flagged as the explicit Next task above |
+| Ada job 2721161's fate is unknown -- the cluster is down for a scheduled upgrade (back 2026-10-01) and SSH is refused | the liveness result may be lost if the job was killed rather than paused, needing a fresh resubmit | flagged as the explicit Next task above; not a project bug, an external outage |
 
 ---
 
