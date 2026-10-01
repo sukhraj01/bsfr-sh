@@ -11,14 +11,17 @@ for a protocol whose interesting behaviour is in how *several* parties' local st
 not in what one adversary can forge in a two-party exchange.
 
 **Result, in one line:** at the design fault bound (F=1, one Byzantine replica of four), Agreement,
-Validity and Integrity all verify clean over the full reachable state space at the largest bound
-this project's hardware could exhaust (74,970,368 states); at two Byzantine replicas — one more
-than the design tolerates — Agreement is violated, confirmed twice over: first by simulation (1
-second), then by an exhaustive, standard breadth-first search on Ada (1.5 billion states,
-15h56min) reaching the identical fork; and liveness (Termination) holds exhaustively with zero
-Byzantine replicas, while the same check under one Byzantine replica built its full 150-million-
-state reachable graph on Ada but was still running the final fairness/temporal analysis over it as
-of this writing — the one M7-18 claim not yet backed by a measured pass/fail (§ Ada runs).
+Validity, Integrity *and* Termination all verify clean, exhaustively, over the full reachable state
+space at the largest bound this project's hardware could exhaust (74,970,368 states for safety,
+149,940,224 for liveness); at two Byzantine replicas — one more than the design tolerates —
+Agreement is violated, confirmed twice over: first by simulation (1 second), then by an exhaustive,
+standard breadth-first search on Ada (1.5 billion states, 15h56min) reaching the identical fork.
+**One prediction going in was wrong, and the reason why is itself a finding**: DEV-20's own
+documented liveness cost (a lagging replica stranded by a Byzantine equivocation) was expected to
+show up as a `Termination` violation under `F=1` — it does not, at this bound, because the
+omission's guard is vacuously satisfied when only one sequence number ever exists to be stranded
+from (§ Run 4). The defect is real (a concrete Python test constructs it); this particular bound is
+simply too small to let TLC rediscover it unprompted.
 
 ---
 
@@ -252,22 +255,50 @@ artifact of the model itself.
 
 ### Run 4 — Liveness, F=1 (one Byzantine replica): `pbft_liveness.cfg`
 
-`Faulty = {r4}`. Same properties, fairness and no-`SYMMETRY` as Run 3. **Expected result** (by the
-same certificate-quorum argument Run 1's exhaustive safety pass already confirms structurally):
-`Termination` should be *violated* — DEV-20 omission #2 (no state transfer) plus a Byzantine
-equivocation should be able to strand one honest replica permanently behind a seq it can never
-validate `prev_hash` for, exactly `test_pbft_byzantine.py::
-test_equivocation_with_honest_votes_strands_one_honest_replica` on one constructed run, generalised
-to every reachable way of reaching the same outcome.
+`Faulty = {r4}`. Same properties, fairness and no-`SYMMETRY` as Run 3. **Predicted result going
+in** (by the same certificate-quorum argument Run 1's exhaustive safety pass already confirms
+structurally): `Termination` *should* be violated — DEV-20 omission #2 (no state transfer) plus a
+Byzantine equivocation should be able to strand one honest replica permanently behind a seq it can
+never validate `prev_hash` for, exactly `test_pbft_byzantine.py::
+test_equivocation_with_honest_votes_strands_one_honest_replica` on one constructed run.
 
 **Did not complete locally.** Ran 1 h 42 min (2026-09-28 08:58 to 10:00), reaching 16,420,732
 distinct states (160,428,354 generated) at BFS depth 16, with TLC issuing "Warning: Liveness
 checking will be extremely slow because TLC is running low on memory" against the 1,820 MB heap
 this machine's `-workers auto` default left available, and individual "checking temporal
 properties" passes costing minutes each (one took 3 min 27 s) rather than seconds. Stopped rather
-than left running indefinitely or allowed to repeat Run 2's disk exhaustion — **moved to Ada**
-(§ below) with real memory headroom instead. No pass/fail result is claimed for this run locally;
-per CLAUDE.md, an unmeasured number is not reported as one.
+than left running indefinitely or allowed to repeat Run 2's disk exhaustion — moved to Ada with
+real memory headroom instead.
+
+**Completed on Ada (job 2721161, 20 cpu/~58.6GB) — and the prediction above was wrong.**
+
+```
+Model checking completed. No error has been found.
+2,253,843,969 states generated, 149,940,224 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 33.
+Finished in 16h 49min.
+```
+
+**`Termination` *holds*, exhaustively, at `F=1` with `MaxView=1, MaxSeq=1`.** This directly
+contradicts the predicted-violated call above, and the reason is itself the finding: **DEV-20
+omission #2's cost cannot be observed at `MaxSeq=1`.** `DoCommit`'s `PrevCommitted` guard —
+`IF s = 1 THEN TRUE ELSE log[r][s-1] # NoBlock` — is the entire mechanism modelling "no state
+transfer," and at `s=1` it is *vacuously* `TRUE` for every replica, on every reachable path, by
+construction. The omission only bites a replica that has fallen behind on an *earlier* seq while
+others move on to a *later* one — and with only one seq number ever in play, there is no "later
+one" to be stranded from. A Byzantine equivocation can still happen (and does, in many reachable
+traces), but with nowhere to progress to beyond seq 1, the three honest replicas simply have no
+room to end up permanently split: under weak fairness and the `MaxView=1` ceiling, every reachable
+trace ends with all three having committed. The real omission is not fictional — the cited Python
+test constructs it concretely, on a real multi-height run — but **this bound is too small to let
+TLC rediscover it on its own**, and the state-space growth this project measured (Run 1 at
+`MaxView=1, MaxSeq=1` alone: 75M states/68min; Run 2's `F=2` case: 1.5B states/16 h on a 40-core
+machine) makes `MaxSeq=2` — the minimum needed to even give a lagging replica something to miss —
+look intractable for exhaustive BFS on hardware available to this project. Reported as a measured,
+if bound-limited, result rather than quietly keeping the wrong prediction: **at this exact bound,
+TLC's exhaustive search says the reduced protocol is both safe and live at `F=1`; the known
+liveness defect DEV-20 documents requires more sequence-number "room" than this bound provides to
+show up formally.**
 
 ---
 
@@ -301,17 +332,18 @@ low-memory-driven slowdown seen both locally and in the first Ada attempt.
 |---|---|---|---|---|
 | `ada_flaw5.sbatch` | `pbft_flaw5.cfg`, exhaustive | 2720269 | `qos=low`, 10 cpu/~29.3GB | **complete** — Agreement violated, 1.5B states, 15h56min |
 | `ada_liveness.sbatch` (1st submit, cancelled) | `pbft_liveness.cfg`, exhaustive | 2720270 | `qos=low`, 10 cpu/~29.3GB | cancelled at ~13min/2.6M states, superseded |
-| `ada_liveness.sbatch` (resubmit) | `pbft_liveness.cfg`, exhaustive | 2721161 | `qos=medium`, 20 cpu/~58.6GB | **graph complete** (149,940,224 states, depth 33), computing the temporal/fairness result — not yet finished |
+| `ada_liveness.sbatch` (resubmit) | `pbft_liveness.cfg`, exhaustive | 2721161 | `qos=medium`, 20 cpu/~58.6GB | **complete** — `Termination` holds, 150M states, 16h49min |
 
 `ada_flaw5.sbatch` upgraded Run 2 from "a counterexample exists" (simulation) to "the standard
 exhaustive search reaches the same counterexample too" — see Run 2 above for what it does and does
-not additionally establish. `ada_liveness.sbatch` is what Run 4's argued-but-not-measured
-`Termination` result is waiting on: the reachable-state graph is now fully built (150M states,
-matching the scale this bound's other runs would predict), and TLC is past the expensive-but-
-finite fairness/SCC analysis stage that produced the local "running low on memory" warning — this
-time with 58.6 GB of headroom rather than 1.8 GB, so the concern is patience, not another
-memory-driven stall. Neither job was held open for by this session; check
-`~/m7-18-verification/ada_liveness_result_2721161.log` on Ada for the eventual result.
+not additionally establish. `ada_liveness.sbatch` finished the reachable-state graph (150M states)
+and the subsequent fairness/SCC analysis cleanly, in 16h49min total, reaching "No error has been
+found" rather than the predicted violation — see Run 4 above for why that prediction was wrong at
+this specific bound, and what the real finding is instead. Both jobs finished *before* Ada went
+down for a scheduled multi-day maintenance upgrade (2026-09-29 → 2026-10-01, new login node
+`ada-gw1`): the result logs were already complete and sitting on NFS home (`/home2`, unaffected by
+the login-node swap) when this session next reached the cluster, not something recovered from a
+job that was killed mid-run.
 
 ---
 
@@ -343,7 +375,7 @@ property TLC checked for it, and the measured result.
 | An honest replica commits at most once per seq | `TypeOK` / state-representation argument | **HOLDS BY CONSTRUCTION** — `log[r][s]` is a single-value slot, checked every state |
 | FLAW-5: pBFT's real safety bound is `n/3`, not the paper's borrowed 51% — two colluding replicas of four (50%, below 51%) can fork | `Agreement`, `F=1` (design)/`\|Faulty\|=2` | **VIOLATED** — found by simulation (1s/115,938 states) and independently by exhaustive BFS on Ada (1.5B states/15h56min, job 2720269) |
 | Termination under fairness, fault-free (sanity control) | `Termination`, `\|Faulty\|=0` | **VERIFIED**, exhaustive — 1,240,200 states, depth 27, 2min59s |
-| DEV-20 #2 (no state transfer): a lagging honest replica can become permanently unable to progress once one Byzantine replica equivocates | `Termination`, `F=1`, `\|Faulty\|=1` | **EXPECTED VIOLATED** (argued from Run 1's certificate math: at `F=1/n=4`, `QuorumSize` equals the honest-replica count exactly, so *any* progress requires *every* honest replica to commit — DEV-20 confirmed formally, not just by the one Python fixture, **once Ada job 2721161 completes**); **UNRESOLVED as measured fact** at session end |
+| DEV-20 #2 (no state transfer): a lagging honest replica can become permanently unable to progress once one Byzantine replica equivocates | `Termination`, `F=1`, `\|Faulty\|=1` | **VERIFIED (holds), exhaustive** — 149,940,224 states, 16h49min. Predicted *violated* going in; wrong at this bound, and why is the finding — see Run 4: the omission's guard is vacuous at `MaxSeq=1` (nothing to be "behind" relative to), so its real cost needs `MaxSeq>=2`, not checked here |
 
 ---
 
@@ -381,11 +413,15 @@ this session's two draft view-change guards).
    claim this project's report does not need: one counterexample already refutes universal
    Agreement at `F=2`. Not pursued, and stated as a choice rather than a limitation reached by
    running out of budget.
-4. **`F=1` liveness result is pending (Ada), not merely un-triple-checked.** Unlike the `F=2` case,
-   no counterexample has been found for this property at all yet, locally or otherwise. The
-   expected-violated call is an argument from Run 1's exhaustively-confirmed certificate math (the
-   quorum-size-equals-honest-count coincidence at this exact configuration), not yet a TLC-measured
-   fact, and is reported as such rather than as one.
+4. **`F=1` liveness verifies clean at this bound, but DEV-20 #2's known cost needs a bound this
+   project could not check exhaustively.** `Termination` holds at `MaxView=1, MaxSeq=1` (Run 4) —
+   this is a real, measured result, not an open question — but the bound that makes it checkable
+   is also the bound that hides the one DEV-20 omission the liveness runs were built to exercise:
+   with only one sequence number ever in play, "falling behind" has nothing to fall behind *on*.
+   Showing the lagging-replica defect formally (not just via the one Python fixture) would need
+   `MaxSeq>=2`, and this project's observed growth rates (Run 2 alone: 1.5 billion states at
+   `MaxSeq=1`) make that look impractical on hardware available here. Not pursued; stated as a
+   bound limitation rather than implied away.
 5. **The forced-re-proposal mechanism is modelled at the granularity DEV-20 describes** (a
    `ViewChange` message declares one seq's known-prepared block, verified against the real message
    log), not as a byte-faithful re-implementation of `view_change.py`'s certificate wire format.

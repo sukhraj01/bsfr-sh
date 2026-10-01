@@ -6,10 +6,9 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 statistical drift-detection defense (M7-12), dynamic-behavioral real-data transfer (M7-13), a
 commit-reveal protocol defense (M7-14), a federated cross-replica-disagreement defense (M7-15),
 multi-family ransomware detection (M7-16), exact minimum adversarial perturbation (M7-17), and TLA+
-formal verification of the reduced pBFT consensus protocol (M7-18) delivered; async pBFT with
-modelled network latency is the one remaining, not-required item; two M7-18 exhaustive TLC runs are
-pending completion on Ada (jobs 2720269/2721161), an upgrade to already-reported results, not a
-blocker**
+formal verification of the reduced pBFT consensus protocol (M7-18) delivered, fully resolved (both
+Ada exhaustive runs completed); async pBFT with modelled network latency is the one remaining,
+not-required item**
 
 ---
 
@@ -446,16 +445,19 @@ existing baseline convention). Variance is reported and the repeat count follows
       versions of the view-change safety guard were themselves shown unsound by TLC at the
       smallest bound before a third verified clean — both spec bugs, kept as documented dead ends
       rather than silently fixed. **Measured**: Agreement/Validity/Integrity verify exhaustively at
-      the design fault bound (`F=1`, 74,970,368 states, 68min); FLAW-5's fork at `F=2` is
-      constructed directly (simulation, 1s) after the exhaustive attempt exhausted 24GB of local
-      disk (4h19min, 281M states, stuck at BFS depth 15); `Termination` verifies exhaustively
-      fault-free (1,240,200 states, 3min). Two exhaustive runs (FLAW-5 at `F=2`; `Termination` at
-      `F=1`, expected violated per DEV-20's own lagging-replica cost, sharpened here to "any
-      progress requires every honest replica" at this exact `n=4/F=1` configuration) did not finish
-      locally and were moved to Ada (jobs 2720269/2721161, pending — an upgrade to already-reported
-      findings, not a blocker). `verification/pbft.tla`, `MC.tla`, four `.cfg` files,
-      `pbft_results.md`, report §"Formal Verification of Consensus", `docs/DEVIATIONS.md` DEV-20
-      amendment (2026-09-28)
+      the design fault bound (`F=1`, 74,970,368 states, 68min). FLAW-5's fork at `F=2` confirmed
+      twice over — simulation (1s) after the exhaustive attempt exhausted 24GB of local disk
+      (4h19min, 281M states, stuck at BFS depth 15), then independently by exhaustive BFS on Ada
+      (1,501,898,636 states, 15h56min, job 2720269). `Termination` verifies exhaustively fault-free
+      (1,240,200 states, 3min) **and, surprisingly, at `F=1` too** (149,940,224 states, 16h49min,
+      Ada job 2721161) — contradicting the prediction that DEV-20 #2's lagging-replica cost would
+      surface as a violation here. It does not, at this bound: `DoCommit`'s state-transfer guard is
+      vacuous at `MaxSeq=1` (no second sequence number to fall behind on), so the omission has
+      nowhere to bite. The defect is real (a Python test constructs it on a multi-height run) —
+      showing it formally needs `MaxSeq>=2`, impractical at this project's observed growth rates.
+      Both Ada runs completed before Ada's scheduled maintenance upgrade; nothing pending.
+      `verification/pbft.tla`, `MC.tla`, four `.cfg` files, `pbft_results.md`, report
+      §"Formal Verification of Consensus", `docs/DEVIATIONS.md` DEV-20 amendment (2026-09-28/29)
 
 ---
 

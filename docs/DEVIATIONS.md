@@ -586,26 +586,32 @@ both were spec bugs in this session's TLA+ model, not protocol bugs; kept as doc
 in `pbft.tla` rather than silently fixed.
 
 Omission (2)'s liveness cost — "a lagging honest replica plus one byzantine replica stalls the
-chain" — has a sharper formal statement than the prose above states: **at `F=1, n=4`, the commit
-quorum size (`2f+1=3`) equals the honest-replica count exactly, so at this specific configuration
-any progress at all requires every honest replica to commit, not merely a quorum of them.** A
-Byzantine equivocation combined with (2)'s missing state transfer is therefore not a minor liveness
-degradation here — it is a complete-halt risk whenever it triggers, exactly as this point already
-argued from the Python test, now argued from the safety proof's own certificate arithmetic. The
-TLC run built to confirm this as a measured (not argued) fact — `Termination` under `F=1` — did not
-finish locally within this session's practical compute budget (1h42min, 16.4M states, TLC warning
-it was low on memory) and was moved to the Ada cluster; **as of this amendment, the run's reachable
-graph has fully built on Ada (149,940,224 states, depth 33) and TLC is computing the final
-fairness/temporal result over it — not yet finished, so the violation is still not a TLC-measured
-fact**, only an argument, stated as such rather than reported as a result (CLAUDE.md §2). The
-fault-free control (`F=0`) verifies `Termination` exhaustively (1,240,200 states, 3min), isolating
-that the open question is genuinely about the Byzantine/no-state-transfer interaction and not an
-artifact of the TLA+ model. FLAW-5 (`docs/PAPER_NOTES.md` §V-3) is now confirmed twice over: first
-by TLC constructing the `F=2` fork via simulation (1s), then **independently by an exhaustive,
-standard breadth-first search on Ada reaching the identical fork** (1,501,898,636 states, 15h56min,
-job 2720269) — the local exhaustive attempt that exhausted 24GB of disk at 4h19min/281M states was
-what was resubmitted, and this time it ran to a found violation rather than to disk exhaustion.
-Full mapping
+chain" — was expected to have a sharper formal statement than the prose above gives: at `F=1,
+n=4`, the commit quorum size (`2f+1=3`) equals the honest-replica count exactly, so at this
+specific configuration any progress at all requires every honest replica to commit, not merely a
+quorum of them — a Byzantine equivocation combined with (2)'s missing state transfer looked like it
+should be a complete-halt risk, not a minor liveness degradation, whenever it triggers. **The TLC
+run built to check this — `Termination` under `F=1`, moved to the Ada cluster after not finishing
+locally (1h42min, 16.4M states, low-memory warning) — completed in 16h49min, 149,940,224 states,
+and found `Termination` HOLDS. The expected violation does not occur at this bound, and the reason
+is itself worth recording: `DoCommit`'s state-transfer guard (`PrevCommitted`) is checking whether
+seq `s-1` committed before allowing seq `s` — and at `MaxSeq=1`, the bound this project's hardware
+could exhaust, there is no seq 2 for a replica to be stranded short of. The guard is vacuously
+satisfied for the only sequence number that exists, so omission (2)'s cost has no path to manifest
+as a liveness failure at this bound, regardless of Byzantine behaviour.** The defect is not
+fictional — `test_pbft_byzantine.py::test_equivocation_with_honest_votes_strands_one_honest_replica`
+constructs it concretely, on a real multi-height run — but formally reproducing it would need
+`MaxSeq>=2`, and this project's own measured state-space growth (the `F=2` FLAW-5 run alone: 1.5
+billion states at `MaxSeq=1`) makes that look impractical to exhaust on hardware available here.
+Reported as a bound limitation on this verification, not as evidence the omission is costless. The
+fault-free control (`F=0`) also verifies `Termination` exhaustively (1,240,200 states, 3min),
+confirming the fault-free case was never in doubt and the `F=1` result above is a genuine finding
+about the Byzantine/bound interaction, not a modelling artifact. FLAW-5
+(`docs/PAPER_NOTES.md` §V-3) is confirmed twice over: first by TLC constructing the `F=2` fork via
+simulation (1s), then independently by an exhaustive, standard breadth-first search on Ada reaching
+the identical fork (1,501,898,636 states, 15h56min, job 2720269) — the local exhaustive attempt
+that exhausted 24GB of disk at 4h19min/281M states was what was resubmitted, and this time it ran
+to a found violation rather than to disk exhaustion. Full mapping
 table, both configs' raw output, and stated limitations: `verification/pbft_results.md`.
 
 ### DEV-21 · FILL · Message bus on a simulated clock, per-message delay declared and zero by default

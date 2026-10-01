@@ -924,12 +924,19 @@ universal Agreement, the only claim FLAW-5 makes.) \textbf{Liveness (Termination
 zero Byzantine replicas} (1,240,200 states, 3 minutes), isolating that the harder question is
 genuinely about the Byzantine/no-state-transfer interaction rather than an artifact of the model.
 \textbf{Under one Byzantine replica, the same property did not finish checking locally}
-(1h42m, 16.4 million states, TLC warning it was low on memory) and was moved to Ada rather than
-left to exhaust the dev box a second time; the expected result -- violated, exhibiting DEV-20's
-named lagging-replica cost -- follows from the safety run's own certificate arithmetic (at
-$F{=}1/n{=}4$, the commit quorum size equals the honest-replica count exactly, so \emph{any}
-progress requires \emph{every} honest replica to commit) but is reported as an argument, not yet a
-measured fact, pending that job. Full methodology, both draft-guard failures, and all raw TLC
+(1h42m, 16.4 million states, TLC warning it was low on memory) and was moved to Ada, which
+completed it cleanly in 16h49m (150 million states): \textbf{\texttt{Termination} holds --
+contradicting the prediction going in, for a reason worth stating rather than quietly dropping}.
+DEV-20's own named lagging-replica cost was expected to surface here, by the safety run's
+certificate arithmetic ($F{=}1/n{=}4$: commit quorum size equals the honest-replica count exactly,
+so \emph{any} progress needs \emph{every} honest replica) -- but that cost requires a replica to
+fall behind on one sequence number while others move on to a later one, and at this bound
+($\text{MaxSeq}{=}1$) no later one exists: \texttt{DoCommit}'s state-transfer guard is vacuously
+true for the only sequence number the model has. The defect itself is real (the cited Python test
+constructs it on a genuine multi-height run); this particular bound was simply too small to let
+TLC rediscover it unprompted, and checking it properly would need $\text{MaxSeq}{\ge}2$, which this
+project's observed growth rates ($F{=}2$ alone: 1.5 billion states at $\text{MaxSeq}{=}1$) put out
+of practical reach here. Full methodology, both draft-guard failures, and all raw TLC
 output: \texttt{verification/pbft\_results.md}.
 
 \begin{table}[t]
@@ -947,7 +954,7 @@ Committed block was proposed & Validity, $F{=}1$ & Verified \\
 Commit at most once/seq & Integrity & Holds by constr. \\
 FLAW-5 fork at $F{=}2$ & Agreement, $F{=}2$ & Violated (sim.\ + exhaustive) \\
 Fault-free termination & Termination, $F{=}0$ & Verified, exhaustive \\
-Lagging replica (DEV-20 \#2) & Termination, $F{=}1$ & Expected violated; pending \\
+Lagging replica (DEV-20 \#2) & Termination, $F{=}1$ & Holds at this bound (defect needs MaxSeq$\ge$2) \\
 \hline
 \end{tabular}
 \end{table}

@@ -213,6 +213,21 @@ is an upgrade to existing claims, not a blocker.
   was "running low on memory" against the 1,820 MB heap `-workers auto` left available on this
   machine. Stopped deliberately rather than risk repeating Run 2's disk exhaustion or running
   indefinitely; moved to Ada per the user's mid-session redirection (below).
+- **The single most important finding of the session: the Ada liveness run completed (16h49min,
+  150M states) and `Termination` HOLDS at `F=1` — the predicted DEV-20 #2 violation does not
+  happen at this bound, and the reason is itself a real result, not a loose end.** `DoCommit`'s
+  state-transfer guard (`PrevCommitted`) checks whether seq `s-1` committed before allowing seq
+  `s`; at `MaxSeq=1` that check is vacuously true for the only seq that exists, so a replica can
+  never actually be "behind" in any way the model can represent. DEV-20 #2's real cost — a
+  replica missing one height while others move on to the next — needs at least two heights to
+  even be expressible, let alone observable as a liveness failure. This was caught only because
+  the full result eventually came back measured rather than left as the analytically-plausible-
+  but-wrong prediction this session wrote down mid-way through (and initially shipped in the
+  report/DEVIATIONS/PROJECT_STATE, later corrected once the real number arrived) — a direct,
+  textbook illustration of why CLAUDE.md's "never claim a number we did not measure" rule matters:
+  the analytical argument was reasonable, cited real mechanics (the quorum-size-equals-honest-
+  count coincidence), and was still wrong, because it reasoned about the Byzantine mechanism
+  without checking whether the CHOSEN BOUND could even express the failure mode being predicted.
 - **Ada's actual account ceiling (`cpu=10`, `mem-per-cpu=3000` under QOS `low`) does not fit the
   task's suggested `-Xmx64g`** — the same ceiling `scripts/ada_honest_mode.sbatch` already
   discovered and documented for the ML jobs. Both `.sbatch` scripts request `-Xmx27g` within the
@@ -238,53 +253,63 @@ version:
 | 2 — FLAW-5 (Ada, exhaustive) | `pbft_flaw5.cfg`, F=2 | Agreement violated — same fork, standard BFS | 1,501,898,636 | 15h56min |
 | 3 — liveness control | `pbft_control_f0.cfg`, F=0 | no violation, exhaustive | 1,240,200 | 2m59s |
 | 4 — liveness (local, partial) | `pbft_liveness.cfg`, F=1 | did not finish (low-memory warning) | 16,420,732 (partial) | 1h42min (partial) |
-| 4 — liveness (Ada, in progress) | `pbft_liveness.cfg`, F=1 | graph complete, computing fairness result — not yet finished | 149,940,224 | 15h40min+ so far |
+| 4 — liveness (Ada, exhaustive) | `pbft_liveness.cfg`, F=1 | **no violation** — contradicted the pre-run prediction; see Findings | 149,940,224 | 16h49min |
 
 ## Deviations opened or changed
 
-- **DEV-20 amended**: safety confirmed exhaustively by TLC at the design fault bound; the
-  lagging-replica liveness cost sharpened to a new formal fact (at `n=4/F=1`, quorum size equals
-  the honest-replica count exactly, so any progress requires every honest replica), reported as an
-  argument pending the Ada `Termination` run, not yet a measured fact. No new DEV-NN opened — this
-  session verifies an existing, already-documented reduction rather than introducing a new one.
+- **DEV-20 amended**: safety confirmed exhaustively by TLC at the design fault bound — no
+  violation, 74,970,368 states. FLAW-5 confirmed twice over (simulation + exhaustive Ada BFS,
+  1.5B states). Liveness at `F=1` ALSO confirmed exhaustively to HOLD (149,940,224 states,
+  16h49min on Ada) — this reverses the amendment's earlier mid-session wording, which (correctly
+  reasoning from the safety run's certificate math, but without yet having the liveness result)
+  predicted a violation. The corrected amendment explains why the prediction was wrong at this
+  specific bound: `DoCommit`'s state-transfer guard is vacuous at `MaxSeq=1`, so DEV-20 #2's real
+  cost (needs a replica to miss one seq while others reach a later one) has no "later one" to
+  miss at this bound — a genuine, reportable bound limitation, not evidence the omission is
+  costless. No new DEV-NN opened — this session verifies an existing, already-documented
+  reduction rather than introducing a new one.
 
 ---
 
 ## Handover *(written last, this is what the next session actually depends on)*
 
-**State after:** `verification/` holds a working, twice-corrected TLA+ spec of the reduced pBFT
-protocol. Safety is exhaustively confirmed at the design fault bound. FLAW-5's fork is confirmed
-**twice over**: locally by simulation (1s), and — after the local exhaustive attempt exhausted disk
-— independently on Ada by standard exhaustive breadth-first search (job 2720269, completed,
-1.5 billion states, 15h56min, identical fork). Liveness is exhaustively confirmed fault-free; under
-one Byzantine fault the reachable graph is fully built on Ada (job 2721161, resubmitted mid-session
-at 20 cpu/~58.6GB after a QOS upgrade) and TLC is computing the final fairness result — the one
-M7-18 claim still without a measured pass/fail. The report, DEVIATIONS, ROADMAP and PROJECT_STATE
-all reflect this state honestly: FLAW-5's Ada result is written up as measured and confirmed;
-liveness's Ada result is written up as "still computing"/"expected", not as measured.
+**State after:** M7-18 is **fully resolved, every claim measured, nothing pending.**
+`verification/` holds a working, twice-corrected TLA+ spec of the reduced pBFT protocol. Safety at
+`F=1` is exhaustively confirmed (no violation, 74.97M states). FLAW-5's `F=2` fork is confirmed
+twice over — simulation (1s) and independently by exhaustive BFS on Ada (job 2720269, 1.5B states,
+15h56min). Liveness is exhaustively confirmed fault-free (`F=0`) *and*, contrary to the prediction
+this session made mid-way through, also holds at `F=1` (job 2721161, 149,940,224 states, 16h49min)
+— the predicted DEV-20 #2 violation doesn't surface because the bound (`MaxSeq=1`) gives the
+omission nothing to bite; a real, reportable limitation of this verification's bound, not a
+closed question. Both Ada jobs had already finished — unattended, before this session next reached
+them — by the time Ada went down for a scheduled multi-day maintenance upgrade (login node moved
+`ada`→`ada-gw1`, account QOS reset to `low`); nothing was lost, no resubmission was needed. All
+docs (`pbft_results.md`, the report, `DEVIATIONS.md`, `ROADMAP.md`, `PROJECT_STATE.md`) are
+rewritten to state the corrected, final, measured results — no "pending"/"expected" wording
+remains anywhere in the M7-18 write-up. Separately (same session, unrelated to M7-18 itself): the
+top-level `README.md` was found still showing M0-scaffold "not started" placeholders in its
+reproduction-targets table across 35 sessions of real work, and was corrected with the actual
+measured numbers plus a new "Beyond the paper" section; a broken `git fetch` refspec (pinned to a
+stale branch, silently breaking `fetch`/`pull` while `push` kept working undetected) was also
+fixed.
 
-**Next task:** Check Ada job 2721161 only (`ssh ada squeue -u sukhraj.singh`; result lands in
-`~/m7-18-verification/ada_liveness_result_2721161.log`). When it finishes, update
-`verification/pbft_results.md` §"Ada runs"/Run 4, the report's §"Formal Verification of Consensus",
-and `docs/DEVIATIONS.md`'s DEV-20 amendment to state the measured pass/fail instead of "still
-computing"/"expected". If it errors out instead of finishing (the local failure mode here was
-low memory, not disk, and this job has ~30x the heap the local attempt had), record the state
-reached and move on — FLAW-5's handling of a non-ideal outcome is the precedent for that being an
-acceptable, informative result to report rather than something to keep retrying indefinitely.
+**Next task:** None forced for M7-18 — closed out clean. See `PROJECT_STATE.md`'s own "Next task"
+for the carried M7-17 backlog if a future session wants to act on open findings instead.
 
-**New blockers:** None. Ada job 2721161 is unattended background SLURM work (4-day wall-clock
-limit), not a blocker on anything else in this project.
+**New blockers:** None.
 
-**Questions opened / closed:** Opened Q12 (`PROJECT_STATE.md`): whether the report needs the one
-still-pending Ada run (liveness) to land before being considered final, or can ship with "still
-computing, argued analytically" — FLAW-5's own Ada run already landed and needs no such caveat.
-Q11 (report page count, now 31pp not 30) unchanged in substance, carried.
+**Questions opened / closed:** Q12 (opened mid-session, asking whether the report needed the
+pending Ada liveness run to land before being final) is now moot/closed — it landed, during this
+same session, with a result that itself needed write-up. Q11 (report page count, 31pp) carried,
+unchanged in substance.
 
 ## Checklist
 
-- [x] `PROJECT_STATE.md` rewritten (not appended) and still under 200 lines (145)
+- [x] `PROJECT_STATE.md` rewritten (not appended) and still under 200 lines (146)
 - [x] `RESULTS.md` — deliberately not appended this session (see Numbers; matches M7-1's own
       precedent for formal-verification runs)
 - [x] `docs/ROADMAP.md` boxes ticked
-- [x] `docs/DEVIATIONS.md` updated (DEV-20 amendment)
-- [ ] Committed, message explains *why* — next step after this file is saved
+- [x] `docs/DEVIATIONS.md` updated (DEV-20 amendment, corrected once the real liveness result
+      arrived)
+- [x] `README.md` fixed (separate, unrelated-to-M7-18 fix made in the same session)
+- [x] Committed, message explains *why*
