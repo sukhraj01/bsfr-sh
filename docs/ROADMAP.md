@@ -469,3 +469,18 @@ existing baseline convention). Variance is reported and the repeat count follows
 - [x] The five defects that matter argued in full (FLAW-2, FLAW-4, FLAW-5, DEV-26, DEV-08);
       `docs/DEVIATIONS.md` referenced for the complete list rather than reproduced entry-by-entry,
       per the report brief
+
+---
+
+## Project Phase 2 — gap-filling experiments `[x]`
+
+"Phase 2" here is the course presentation's term (Phase 1 = M0–M7 + report + audit), not one of
+the paper's five phases. Four small experiments on gaps Phase 1 and the October audit left open
+(2026-11-12, `sessions/2026-11-12-01-phase2-gap-experiments.md`):
+
+- [x] **P2-A** — whole-program timer: the paper's rising TPS is a fixed cost (DEV-44)
+- [x] **P2-B** — fair four-model comparison: scaling fixes KNN, not LR (DEV-45)
+- [x] **P2-C** — temporal split: the detector learns *when*, collapses on future years (DEV-46)
+- [x] **P2-D** — threshold-free poisoning-alarm evaluation: catches lopsided batches, not poison (DEV-47)
+- [ ] Report (`docs/report/report.tex`) not yet updated with Phase 2 — l.478 "H4 rules out year"
+      is now contradicted by DEV-46

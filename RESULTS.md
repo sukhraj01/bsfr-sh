@@ -1499,3 +1499,56 @@ DEV-43 for why the Pareto figure (`fig9d`) is not redrawn from the raw exact num
 
 Histogram comparison: `results/figures/fig_m7_17_exact_vs_binary_search_histogram.png`. Sidecar:
 `results/logs/20260927T171603Z-1d279ea9.json`.
+
+## Phase 2 / P2-A — fixed setup cost as the source of the paper's rising TPS (2026-11-12)
+
+`scripts/p2a_tps_fixed_cost.py --seed 20261112`, median of 5 cold-process runs per cell, 1 warm-up
+discarded. "whole-program" = stopwatch around a fresh Python process (interpreter + imports + keys
++ cluster + blocks + index); "inner" = Phase 1's per-block timer. Linux dev box, not M6a's host.
+
+2026-11-12 | bench/p2a-paper-fit | BC_DTBU 3 points | fixed_s=1.717 per_block_s=0.261 r2=0.989 tps_ceiling=383 | paper_reported | — | least-squares fit of Fig. 6(a), 1 dof
+2026-11-12 | bench/p2a-paper-fit | BC_SigRW 3 points | fixed_s=3.153 per_block_s=0.240 r2=0.9999 tps_ceiling=417 | paper_reported | — | least-squares fit of Fig. 6(b), 1 dof
+2026-11-12 | bench/p2a-whole-program | BC_DTBU case1/2/3 | seconds=0.649/1.164/1.698 tps=771/859/883 fixed_s=0.121 per_block_s=0.105 | measured | 20261111T194706Z-d9b5df22 | TPS rises x1.15 once fixed cost is inside the timer
+2026-11-12 | bench/p2a-whole-program | BC_SigRW case1/2/3 | seconds=0.657/1.191/1.725 tps=761/840/870 fixed_s=0.123 per_block_s=0.107 | measured | 20261111T194706Z-d9b5df22 | rises x1.14
+2026-11-12 | bench/p2a-inner | BC_DTBU case1/2/3 | seconds=0.443/0.865/1.308 tps=1130/1156/1147 | measured | 20261111T194706Z-d9b5df22 | flat, reconfirms M6a on this host
+2026-11-12 | bench/p2a-inner | BC_SigRW case1/2/3 | seconds=0.540/1.067/1.597 tps=926/937/939 | measured | 20261111T194706Z-d9b5df22 | flat
+
+## Phase 2 / P2-C — the `year` shortcut: random vs temporal split (2026-11-12)
+
+`scripts/p2c_year_shortcut.py --seed 20260912`, paper's 90/10 resample (n=46,014), address dropped,
+5 seeds (resample + model). `grouped_random` = Phase 1 production split; `temporal_le2015` = train
+on 2011-2015, test on 2016-2018. Means over seeds. const+ = always-"ransomware" accuracy on that test set.
+
+2026-11-12 | detection/p2c-year | grouped_random all8 RF | acc=0.9417 bal_acc=0.762 fpr=0.463 recall=0.987 const+=0.900 | measured | 20261111T195314Z-a38f4731 | Phase 1 protocol; flags 46% of benign
+2026-11-12 | detection/p2c-year | grouped_random year_only RF | acc=0.9223 bal_acc=0.620 fpr=0.759 | measured | 20261111T195314Z-a38f4731 | one calendar feature beats the 7 behaviour features
+2026-11-12 | detection/p2c-year | grouped_random no_year RF | acc=0.9114 bal_acc=0.616 fpr=0.754 | measured | 20261111T195314Z-a38f4731 |
+2026-11-12 | detection/p2c-year | temporal_le2015 all8 RF | acc=0.5514 bal_acc=0.519 fpr=0.520 recall=0.558 const+=0.918 | measured | 20261111T195314Z-a38f4731 | collapses to coin-flip on future years
+2026-11-12 | detection/p2c-year | temporal_le2015 all8 DT | acc=0.4870 bal_acc=0.518 const+=0.918 | measured | 20261111T195314Z-a38f4731 | paper's best model
+2026-11-12 | detection/p2c-year | temporal_le2015 no_year RF | acc=0.8862 bal_acc=0.572 fpr=0.803 const+=0.918 | measured | 20261111T195314Z-a38f4731 | dropping year helps a little, still below const+
+2026-11-12 | detection/p2c-year | temporal_le2016 all8 RF | acc=0.6075 bal_acc=0.482 const+=0.758 | measured | 20261111T195314Z-a38f4731 | second cut agrees
+2026-11-12 | detection/p2c-year | temporal_le2016 no_year_day RF | acc=0.7892 bal_acc=0.581 fpr=0.823 const+=0.758 | measured | 20261111T195314Z-a38f4731 | best temporal cell, still near chance
+
+## Phase 2 / P2-D — threshold-free evaluation of M7-12's poisoning alarm (2026-11-12)
+
+`scripts/p2d_drift_threshold_sweep.py --seed 20260912`, committed honeypot corpus, 30 poisoned
+batches per cell vs 300 clean same-size batches per null. AUC 0.5 = cannot tell apart.
+
+2026-11-12 | detection/p2d-drift | all 9 cells (3 strategies x 5/10/20%) | max_score_any_batch=0.52 phase1_threshold=3.0 det@3.0=0.00 | measured | 20261111T195724Z-f65a6068 | the shipped alarm could never fire
+2026-11-12 | detection/p2d-drift | label_flip 10% n=72 | auc_vs_mixed=1.00 auc_vs_outbreak=0.56 det@5%FA=1.00 outbreak_alarm=1.00 | measured | 20261111T195724Z-f65a6068 | caught, but so is every honest outbreak
+2026-11-12 | detection/p2d-drift | feature_poison 10% n=72 | auc_vs_mixed=1.00 auc_vs_outbreak=0.40 det@5%FA=1.00 | measured | 20261111T195724Z-f65a6068 | same: alarm reacts to lopsided batches
+2026-11-12 | detection/p2d-drift | anchor_point_injection 10% n=72 | auc_vs_mixed=0.00 det@5%FA=0.00 two_sided_det=1.00 | measured | 20261111T195724Z-f65a6068 | scores *below* every clean batch; two-sided alarm catches it
+
+## Phase 2 / P2-B — fair four-model comparison: log+scale, class weighting (2026-11-12)
+
+`scripts/p2b_fair_models.py --seed 20260912`. paper = 90/10 resample (n=46,014), grouped split,
+5 seeds. honest = stratified 400k-row subsample at the natural 1.42%, grouped split, 3 seeds
+(subsample, so not comparable to M6b's full-scale numbers). Means over seeds.
+
+2026-11-12 | detection/p2b-fair | paper KNN raw -> log_scaled | acc=0.8871->0.9356 bal_acc=0.521->0.731 fpr=0.938->0.525 | measured | 20261111T195353Z-38152269 | scaling fixes KNN; last -> 2nd of 4
+2026-11-12 | detection/p2b-fair | paper LR raw -> log_scaled | acc=0.9000->0.9003 bal_acc=0.501->0.502 fpr=0.998->0.997 | measured | 20261111T195353Z-38152269 | scaling does NOT fix LR; it still says "ransomware" to everything
+2026-11-12 | detection/p2b-fair | paper RF raw -> log_scaled | acc=0.9417->0.9417 fpr=0.463->0.459 | measured | 20261111T195353Z-38152269 | sanity check: trees unaffected
+2026-11-12 | detection/p2b-fair | paper DT raw -> log_scaled | acc=0.9181->0.9182 fpr=0.367->0.368 | measured | 20261111T195353Z-38152269 | sanity check: trees unaffected
+2026-11-12 | detection/p2b-fair | honest LR raw / log_scaled / +balanced | recall=0.000/0.000/0.661 precision=0.000/0.000/0.020 pr_auc=0.018/0.017/0.017 | measured | 20261111T195353Z-38152269 | weighting forces guesses, but PR-AUC = base rate: no signal a linear model can use
+2026-11-12 | detection/p2b-fair | honest RF raw / +balanced | recall=0.158/0.286 precision=0.750/0.484 f1=0.261/0.359 mcc=0.340/0.365 | measured | 20261111T195353Z-38152269 | weighting trades precision for recall, small net gain
+2026-11-12 | detection/p2b-fair | honest KNN raw / log_scaled | f1=0.220/0.153 pr_auc=0.142/0.117 | measured | 20261111T195353Z-38152269 | scaling HURTS KNN at natural balance
+2026-11-12 | detection/p2b-fair | honest DT raw / log_scaled+balanced | f1=0.339/0.344 mcc=0.329/0.335 | measured | 20261111T195353Z-38152269 | flat

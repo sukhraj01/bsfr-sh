@@ -4,55 +4,28 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-10-01 · **Milestone:** M7 stretch complete (M7-18 delivered, fully
-resolved — no pending runs) · **Sessions completed:** 35
+**Last updated:** 2026-11-12 · **Milestone:** Project Phase 2 (four gap-filling experiments,
+P2-A..D) delivered on branch `phase2` · **Sessions completed:** 36
 
 ---
 
 ## One-line status
 
-M7-18 (TLA+ formal verification of the reduced pBFT consensus protocol) is **fully delivered,
-every claim measured, nothing pending**: `verification/pbft.tla` models DEV-10/DEV-20's reduced
-pBFT and TLC confirms both safety and liveness at the design fault bound — the consensus-layer
-counterpart to M7-1's Scyther verification of the session layer.
+Phase 1 (M0–M7, report, October audit) is frozen. Phase 2 added four small measured experiments
+beside it, each with a script, sidecar, `RESULTS.md` block, figure (`results/figures/p2*.png`) and
+DEV entry; no Phase 1 number changed.
 
-- **Two draft versions of the view-change safety guard were themselves shown unsound by TLC**, at
-  the smallest bound, before a third verified clean — both spec bugs (a timing-free global
-  snapshot; an unverified Byzantine `ViewChange` claim), kept as documented dead ends in
-  `pbft.tla` rather than silently fixed. Neither was a protocol bug.
-- **Safety at `F=1`: VERIFIED, exhaustive.** Agreement/Validity/Integrity — 74,970,368 states,
-  depth 33, 1h08min, no violation.
-- **FLAW-5 at `F=2`: VIOLATED, confirmed twice over.** Local `-simulate` found the fork in
-  1s/115,938 states; Ada's standard exhaustive BFS independently reached the identical fork at
-  1,501,898,636 states/15h56min (job 2720269). TLC stops at the first violation by design (544M
-  states were still unqueued), so "no other violation exists at F=2" isn't established and wasn't
-  pursued — not needed for FLAW-5's actual claim.
-- **Liveness at `F=0`: VERIFIED, exhaustive** (1,240,200 states, 3min). **Liveness at `F=1`:
-  VERIFIED, exhaustive (149,940,224 states, 16h49min, Ada job 2721161) — and this contradicted the
-  prediction going in.** DEV-20 #2's lagging-replica cost was expected to show up as a
-  `Termination` violation here; it does not, *at this bound*, because `DoCommit`'s state-transfer
-  guard is vacuously satisfied when `MaxSeq=1` — there is no second sequence number to fall behind
-  on. The defect itself is real (a Python test constructs it on a genuine multi-height run);
-  showing it formally needs `MaxSeq>=2`, which this project's observed growth rates (1.5 billion
-  states at `MaxSeq=1` alone) put out of practical reach here. Reported as a bound limitation, not
-  as evidence the omission is costless — see `verification/pbft_results.md` Run 4 for the full
-  argument.
-- Both Ada jobs finished *before* Ada's scheduled maintenance upgrade (2026-09-29→10-01, new login
-  node `ada-gw1`, old `ada` address retired) — results were sitting complete on NFS home when this
-  session next reached the cluster, nothing was lost or needed resubmitting.
-- Report extended (`docs/report/report.tex` §"Formal Verification of Consensus", new table
-  `tab:tlc`, coverage-matrix row 3 amended) with the corrected, measured results throughout;
-  recompiles clean (tectonic), **31 pages** (was 30).
-- **Separately, this session also fixed `README.md`**: its "Reproduction targets" table had said
-  "not started" for every row since M0 scaffold time, never updated across 35 sessions of real
-  work. Now shows the actual measured numbers (94.42%/0.9697 detection accuracy/F1, real mining
-  times, the honest "TPS is flat, not rising" finding) plus a new "Beyond the paper" section
-  covering the M7 stretch work the README previously didn't mention at all. Also fixed a broken
-  `git fetch` refspec (was pinned to a stale branch name, silently breaking `git fetch`/`pull`
-  while `git push` kept working) — pushes were never actually missing, just hard to verify locally.
+- **P2-A (DEV-44):** the paper's rising TPS is a fixed setup cost (fit R² 0.99, 55–72% of case 1);
+  our TPS rises too once the timer covers the whole program.
+- **P2-B (DEV-45):** log+standardise rescues KNN (balanced acc 0.52→0.73), not LR (0.50): LR's
+  failure is linearity, not scale.
+- **P2-C (DEV-46):** on future years (train ≤2015, test ≥2016) the RF falls 94.2%→55.1% vs a 91.8%
+  constant baseline; `year` alone scores 92.2% on the random split. Contradicts report l.478.
+- **P2-D (DEV-47):** M7-12's alarm could never fire (max score 0.52 vs threshold 3.0); tuned, it
+  catches lopsided batches, so it alarms on honest outbreaks too.
 
-`make test` (1801 passed) and `make lint` unaffected — this session touches only `verification/`,
-`docs/`, `PROJECT_STATE.md`, `README.md`, and `.ssh/config`; no Python source changed.
+`make test` 1816 passed, `make lint` clean. Environment now also works on the Linux dev box
+(`.venv`, `data/raw/` fetched and checksum-verified).
 
 ---
 
@@ -60,30 +33,25 @@ counterpart to M7-1's Scyther verification of the session layer.
 
 | Layer | State | Notes |
 |---|---|---|
-| Full implementation (crypto/blockchain/consensus/honeypot/detection/mitigation/recovery/framework/bench) | done | unchanged this session |
-| Formal verification: session layer (M7-1, Scyther) + consensus layer (M7-18, TLA+/TLC) | **done, fully measured** | `verification/pbft.tla`, `pbft_results.md` — no pending runs |
-| Honeypot poisoning: attack + three independent defenses (M7-11/12/14/15) | done | unchanged |
-| Multi-family detection (M7-16); adversarial robustness + exact bounds (M7-3/8/17) | done | unchanged |
-| Real-malware transfer evaluation | done, 3 datasets | unchanged |
-| `docs/report/report.pdf` | done, 31 pages | recompiles clean via `tectonic` |
-| `README.md` | done, now reflects real status | was stuck at M0-scaffold "not started" wording |
-| Everything else (M7-2 through M7-17's own deliverables) | done | unchanged |
+| Full implementation + M7 extensions | done | unchanged by Phase 2 |
+| `detection/fair.py` (P2-B preprocessing) | done | new, 6 unit tests |
+| Phase 2 scripts `scripts/p2{a,b,c,d}_*.py`, `p2_figures.py` | done | each writes CSV + sidecar |
+| `docs/report/report.pdf` | done, 31 pages | **does not include Phase 2**; l.478 now contradicted |
+| Phase 2 presentation | not started | next task |
 
 ## Next task
 
-None forced — M7-18 closed out clean, nothing pending. If a future session wants to act on open
-findings, in order of interest: (1) a stability-adjusted robustness metric (M7-17's own finding);
-(2) exact `k_nearest_neighbours` bounds (needs a bigger machine than the 8GB dev box); (3) the
-`FT_RW`/honeypot family-label gap (M7-16); (4) a coordination mechanism for federated-detection
-disagreement (M7-15); (5) the report's page-count gap (Q11 below); (6) *(new, low priority)* if
-ever revisited, M7-18's `MaxSeq>=2` liveness check would need either a much bigger machine (Ada's
-`cpu=40`/no-disk-quota headroom is the closest available) or a cheaper model-checking technique
-than exhaustive BFS — not attempted this session, see `pbft_results.md` limitations.
+Build the Phase 2 presentation: one-slide Phase 1 recap, then P2-A..D one slide each (what we
+tested, why, result, what it means), figures from `results/figures/p2*.png`, in the style of
+`BSFR-SH_Presentation.pptx`.
+
+Carried, lower priority: update the report with Phase 2 and fix l.478; remaining C15 wording in
+`verification/pbft_results.md`/DEVIATIONS; P2-D's untested counter (noise-added anchor points);
+why scaling hurts KNN at natural balance (P2-B); exact KNN bounds (M7-17); family-label gap (M7-16).
 
 ## Blockers
 
-None. `data/raw/` is present in this environment already; a genuinely fresh clone still needs
-`make data` (~56 minutes) first.
+None. A fresh clone needs `make setup` and `make data` (took ~11 min on 2026-11-12, ~56 min earlier).
 
 **Standing limitation, not a blocker:** CICMalDroid-2020 and MalwareBazaar/Triage remain unusable
 by any future session unless the user personally creates the relevant account or submits the

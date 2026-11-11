@@ -1,0 +1,186 @@
+{
+  "run_id": "20261111T194706Z-d9b5df22",
+  "purpose": "P2-A: fixed setup cost as the source of the paper's rising TPS",
+  "seed": 20261112,
+  "repeats": 5,
+  "config_hash": "bfa58e304a931e0ce8801bf8ca48bdcb2952c30c45d43a9c591e37b2279be838",
+  "config_hash_scheme": 2,
+  "git_rev": "c7d3f9b",
+  "host": {
+    "python_version": "3.11.15",
+    "platform": "linux",
+    "pythonhashseed": "20261112"
+  },
+  "paper_fit": {
+    "BC_DTBU": {
+      "fixed_s": 1.7166666666666677,
+      "per_block_s": 0.26099999999999995,
+      "r2": 0.9893063919601882
+    },
+    "BC_SigRW": {
+      "fixed_s": 3.153333333333334,
+      "per_block_s": 0.23999999999999994,
+      "r2": 0.9999074159800019
+    }
+  },
+  "our_fit": {
+    "BC_DTBU": {
+      "inner": {
+        "fixed_s": 0.006198818678967655,
+        "per_block_s": 0.08655640429860796,
+        "r2": 0.9998007687708408
+      },
+      "whole_program": {
+        "fixed_s": 0.12095648432538542,
+        "per_block_s": 0.1049327490007272,
+        "r2": 0.9999085029769522
+      }
+    },
+    "BC_SigRW": {
+      "inner": {
+        "fixed_s": 0.011403014340127582,
+        "per_block_s": 0.10566609059897018,
+        "r2": 0.9999986549352067
+      },
+      "whole_program": {
+        "fixed_s": 0.12264114967547357,
+        "per_block_s": 0.10679539879929507,
+        "r2": 0.9999999999971477
+      }
+    }
+  },
+  "rows": [
+    {
+      "chain": "BC_DTBU",
+      "blocks": 5,
+      "transactions": 500,
+      "median_wall_s": 0.6485178649963927,
+      "median_import_s": 0.06326823100243928,
+      "median_config_s": 0.00938466499792412,
+      "median_setup_s": 0.0009517079961369745,
+      "median_blocks_s": 0.4425080440050806,
+      "median_index_s": 0.08649041800526902,
+      "tps_inner": 1129.9229624722016,
+      "tps_whole_program": 770.9887837905301,
+      "paper_seconds": 3.1,
+      "paper_tps": 161,
+      "wall_samples": [
+        0.6623756879998837,
+        0.6693881250030245,
+        0.6485178649963927,
+        0.6385600419962429,
+        0.6444690139978775
+      ]
+    },
+    {
+      "chain": "BC_DTBU",
+      "blocks": 10,
+      "transactions": 1000,
+      "median_wall_s": 1.1644887029979145,
+      "median_import_s": 0.06320296999911079,
+      "median_config_s": 0.009245891997125,
+      "median_setup_s": 0.0010083930028486066,
+      "median_blocks_s": 0.864708453998901,
+      "median_index_s": 0.17890770200028783,
+      "tps_inner": 1156.45914571025,
+      "tps_whole_program": 858.7459864793475,
+      "paper_seconds": 4.17,
+      "paper_tps": 240,
+      "wall_samples": [
+        1.1644887029979145,
+        1.150574487997801,
+        1.1545835740034818,
+        1.1722837530032848,
+        1.1893380080000497
+      ]
+    },
+    {
+      "chain": "BC_DTBU",
+      "blocks": 15,
+      "transactions": 1500,
+      "median_wall_s": 1.6978453550036647,
+      "median_import_s": 0.06277995600248687,
+      "median_config_s": 0.009601236000889912,
+      "median_setup_s": 0.001105254988942761,
+      "median_blocks_s": 1.3080720869911602,
+      "median_index_s": 0.2679014690002077,
+      "tps_inner": 1146.7257920397294,
+      "tps_whole_program": 883.4726882394789,
+      "paper_seconds": 5.71,
+      "paper_tps": 263,
+      "wall_samples": [
+        1.7558855230017798,
+        1.689632100999006,
+        1.6915803450028761,
+        1.6978453550036647,
+        1.730803618003847
+      ]
+    },
+    {
+      "chain": "BC_SigRW",
+      "blocks": 5,
+      "transactions": 500,
+      "median_wall_s": 0.6566176230044221,
+      "median_import_s": 0.06303858599858359,
+      "median_config_s": 0.00929551000444917,
+      "median_setup_s": 0.0008196700000553392,
+      "median_blocks_s": 0.5400872340032947,
+      "median_index_s": 0.0,
+      "tps_inner": 925.7763718906006,
+      "tps_whole_program": 761.4781913896829,
+      "paper_seconds": 4.36,
+      "paper_tps": 115,
+      "wall_samples": [
+        0.6445963160003885,
+        0.6661152429951471,
+        0.6471279070028686,
+        0.6566176230044221,
+        0.6629146069972194
+      ]
+    },
+    {
+      "chain": "BC_SigRW",
+      "blocks": 10,
+      "transactions": 1000,
+      "median_wall_s": 1.190596179003478,
+      "median_import_s": 0.06266779699944891,
+      "median_config_s": 0.00938980399951106,
+      "median_setup_s": 0.000830238001071848,
+      "median_blocks_s": 1.0673563869931968,
+      "median_index_s": 0.0,
+      "tps_inner": 936.8941922173309,
+      "tps_whole_program": 839.9153446275916,
+      "paper_seconds": 5.54,
+      "paper_tps": 181,
+      "wall_samples": [
+        1.190596179003478,
+        1.178871992000495,
+        1.179990477998217,
+        1.2098823710039142,
+        1.2044869070014101
+      ]
+    },
+    {
+      "chain": "BC_SigRW",
+      "blocks": 15,
+      "transactions": 1500,
+      "median_wall_s": 1.7245716109973728,
+      "median_import_s": 0.06372039800044149,
+      "median_config_s": 0.009277913006371818,
+      "median_setup_s": 0.0008134500021697022,
+      "median_blocks_s": 1.5967481399929966,
+      "median_index_s": 0.0,
+      "tps_inner": 939.4092671412657,
+      "tps_whole_program": 869.7812201213865,
+      "paper_seconds": 6.76,
+      "paper_tps": 222,
+      "wall_samples": [
+        1.7113598919968354,
+        1.7395155659978627,
+        1.7247217570038629,
+        1.7094882839955972,
+        1.7245716109973728
+      ]
+    }
+  ]
+}

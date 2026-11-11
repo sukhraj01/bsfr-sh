@@ -2255,3 +2255,75 @@ paper-facing number are untouched; this only re-measures an existing, non-paper 
 more precisely. `detection/exact_adversarial.py` (new module), `scripts/m7_17_exact_min_perturbation.py`.
 Figure: `results/figures/fig_m7_17_exact_vs_binary_search_histogram.png`. Full numbers:
 `RESULTS.md` "M7-17", sidecar `results/logs/20260927T171603Z-1d279ea9.json`.
+
+---
+
+## Phase 2 (2026-11-12)
+
+Four small, independent experiments aimed at gaps Phase 1 and the October audit left open. None
+changes a Phase 1 number; each adds a result beside one. Session log:
+`sessions/2026-11-12-01-phase2-gap-experiments.md`.
+
+### DEV-44 · ADD · Whole-program timer for Target 4, to test DEV-08 directly (P2-A)
+
+**Paper:** Fig. 6(c)/(d) TPS rises with chain size; §VII never says what the timer covers.
+**Phase 1:** DEV-08 argued the rise is fixed setup cost amortised over more blocks, but only by
+arithmetic; M6a's timer starts after cluster construction, so it *cannot* contain a fixed cost and
+measured flat TPS by construction.
+**Ours:** `scripts/p2a_tps_fixed_cost.py` (a) least-squares fits the paper's six points to
+`time = fixed + per_block x blocks`, and (b) times a fresh Python process per run from outside
+(interpreter + imports + keys + cluster + blocks + index), no injected cost. Finding: the paper's
+points fit with R^2 0.989 / 0.9999, fixed cost 1.72 s / 3.15 s (55% / 72% of case 1), implying a
+TPS ceiling of ~383 / ~417 tx/s; once our own (real, small, ~0.12 s) fixed cost is inside the timer
+our TPS rises too (x1.15). The whole curve is predicted by one number, the fixed cost in
+"blocks' worth" r: `TPS(15)/TPS(5) = 3(r+5)/(r+15)` gives 1.61 / 1.93 / 1.14 for paper DTBU /
+paper SigRW / ours, all matching. Also: per block the paper's `BC_SigRW` is *faster* than
+`BC_DTBU` (0.240 vs 0.261 s); its "slower ransomware chain" is entirely fixed cost, which
+contradicts Phase 1's per-transaction ECDSA attribution *for the paper's numbers* (it still holds
+for ours). Caveat: 3 points, 1 degree of freedom per fit.
+**Impact on reproduction:** none; Target 3/4 numbers unchanged.
+
+### DEV-45 · FIX · Feature scaling and class weighting for the four-model comparison (P2-B)
+
+**Paper:** four algorithms, no preprocessing stated. **Phase 1:** raw features for all four
+(`detection.models`), so KNN's distance was dominated by `income` and LR's optimiser struggled.
+**Ours:** `detection.fair.build_fair_estimator` — `log1p` on the six amount features, standardise
+all eight, fitted inside an sklearn `Pipeline` on training rows only; optional
+`class_weight="balanced"`. `scripts/p2b_fair_models.py`. Finding (paper 90/10, 5 seeds): KNN
+balanced accuracy 0.52 -> 0.73, accuracy 88.7% -> 93.6% (last -> second of four, above the paper's
+"best" decision tree); LR unchanged at 0.50 (it still predicts "ransomware" for ~100% of rows) —
+its failure is the linear model, not scaling; RF/DT unchanged (sanity check). Natural balance
+(400k subsample, 3 seeds): weighted LR's PR-AUC equals the base rate (no usable linear signal);
+weighted RF trades precision 0.75 -> 0.48 for recall 0.16 -> 0.29 (F1 0.26 -> 0.36); scaling *hurts*
+KNN here (F1 0.22 -> 0.15), cause not established.
+**Impact on reproduction:** none; `paper_mode` defaults unchanged, this is a parallel result set.
+
+### DEV-46 · FIX · Temporal split, to test whether `year` is a shortcut (P2-C)
+
+**Paper:** random split implied, no mention of time. **Phase 1:** M7-6 H4 found dropping `year`
+costs ~3 pt and the report concluded "H4 rules out year as a temporal leak". That inference does
+not follow: informative on a random split is not the same as generalising forward in time.
+**Ours:** `scripts/p2c_year_shortcut.py`, paper 90/10 resample, 5 seeds, random (address-grouped)
+vs temporal (train <=2015, test >=2016; second cut <=2016) split x four feature sets. Finding: 38%
+of all ransomware rows are from 2016 and 2018 has 3; `year` alone scores 92.2% on the random split
+(all 7 behaviour features: 91.1%). On the temporal split the Phase 1 RF falls 94.2% -> 55.1%
+(balanced 0.52) against a 91.8% always-"ransomware" baseline; the paper's best model (DT) falls to
+48.7%. Dropping `year` partially recovers accuracy (88.6%) but only by flagging ~80% of benign rows
+(balanced 0.57). The audit's earlier out-of-repo 20-seed figure (RF 55.86%) is reproduced in-repo.
+**This supersedes the report's "H4 rules out year as a temporal leak" sentence** (report.tex
+l.478, not yet edited — the PDF still carries it).
+**Impact on reproduction:** none.
+
+### DEV-47 · ADD · Threshold-free evaluation of M7-12's drift alarm (P2-D)
+
+**Phase 1:** M7-12 shipped `threshold=3.0` and reported 0/15 attacks prevented, 0/30 false alarms.
+Its own logged scores never exceed ~1.2, so that result describes the threshold, not the detector.
+**Ours:** `scripts/p2d_drift_threshold_sweep.py` — 30 poisoned batches per cell vs 300 clean
+same-size batches from the eval corpus, of three kinds (mixed, ransomware-only = honest outbreak,
+benign-only); AUC and detection at a 5%-false-alarm threshold. Finding: max score over every batch
+0.52, so 3.0 could never fire. At a 5% threshold label flipping and feature poisoning are caught
+100% — but an honest outbreak batch also alarms 99-100% (AUC vs outbreak 0.40-0.68): the alarm
+detects a lopsided batch, not poison. Anchor-point injection scores *below* every clean batch
+(AUC 0.00, "too average"); a two-sided alarm catches it 100%. Not tested: an adversary adding
+noise to defeat the two-sided test.
+**Impact on reproduction:** none; M7-12 code and threshold unchanged.

@@ -140,8 +140,10 @@ Five informal prose arguments: (1) session keys via mutual auth defeat replay/MI
 (4) blockchain immutability resists DoS/manipulation/leakage;
 (5) two separate chains isolate detection from recovery.
 
-**[FLAW-5]** *(found in M2b, 2026-09-11)* **§V-3 cites a threshold that makes pBFT look stronger than PoW; the
-real threshold makes it weaker.** This is a substantive flaw in the argument, not a wording nit.
+**[FLAW-5]** *(found in M2b, 2026-09-11)* **§V-3 states no pBFT fault threshold at all; it defends against PoW's 51%
+attack and concludes blanket safety. pBFT's real threshold is weaker than 51%, not stronger.**
+*(Wording corrected 2026-11-12, audit item C15: an earlier version said §V-3 "cites a threshold"; the
+PDF cites none.)* This is a substantive flaw in the argument, not a wording nit.
 
 The argument, as §V-3 runs it: proof-of-work chains are vulnerable to 51% attacks; BSFR-SH uses
 pBFT instead; therefore BSFR-SH resists 51% attacks. But pBFT's safety threshold is not a half —
@@ -159,7 +161,7 @@ be minted (tested: `test_pbft.py::test_a_sybil_swarm_of_outsider_identities_cann
 So the defensible version of §V-3 is "an attacker must compromise two of our four cloud servers" —
 a claim about operational security of a small, named set of machines, not a consensus-theoretic
 guarantee, and one that gets *worse* in relative terms, not better, as a reason to prefer pBFT over
-PoW. The paper substitutes a borrowed 51% figure for that argument.
+PoW. The paper never makes that argument; it discusses only PoW's 51% and stops.
 
 What M2b does substantiate: with one byzantine node of four, the chain commits and never forks,
 under all four tested behaviours; with two non-colluding faulty nodes, it stops rather than
