@@ -104,6 +104,86 @@ def fig_p2c() -> None:
     fig.savefig(FIGS / "p2c_year_shortcut.png", dpi=170)
 
 
+def fig_p2e() -> None:
+    """Balanced accuracy per test year: deploy-once vs retrain-yearly vs same-year reference."""
+    rows = {(int(r["test_year"]), r["strategy"]): r for r in _read("p2e_yearly_retraining.csv")
+            if r["features"] == "no_year"}  # fmt: skip
+    years = sorted({y for y, _ in rows})
+    series = [
+        ("same_year", "if next year looked like this year\n(random split, reference)", REF, "--", 0),
+        ("expanding", "retrained every year", OURS, "-", -0.018),
+        ("static", "trained once (2011–13)", PAPER, "-", 0.018),
+    ]
+    fig, ax = plt.subplots(figsize=(8.4, 3.9))
+    for key, label, color, ls, dy in series:
+        vals = [float(rows[(y, key)]["balanced_accuracy_mean"]) for y in years]
+        ax.plot(years, vals, color=color, ls=ls, lw=2, marker="o", markersize=8,
+                markeredgecolor="white", markeredgewidth=2, zorder=3)  # fmt: skip
+        ax.text(years[-1] + 0.12, vals[-1] + dy, label, va="center", fontsize=8.5, color=INK)
+    ax.axhline(0.5, color=REF, ls=":", lw=1)
+    ax.text(years[0] - 0.1, 0.505, "chance (0.5)", color=MUTED, fontsize=8, va="bottom")
+    ax.set_xticks(years, [str(y) for y in years])
+    ax.set_xlim(years[0] - 0.2, years[-1] + 1.55)
+    ax.set_ylim(0.4, 0.88)
+    ax.set_xlabel("test year (solid lines: model trained only on earlier years)")
+    ax.set_ylabel("balanced accuracy, random forest")
+    ax.set_title("Retraining every year does not rescue the detector", loc="left", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(FIGS / "p2e_yearly_retraining.png", dpi=170)
+
+
+def fig_p2g() -> None:
+    """Slow-burn ransomware: share of restored files still encrypted, and files lost before alarm."""
+    rows = _read("p2g_slow_burn_timeline.csv")
+
+    def cell(style: str, days: int, policy: str, level: str) -> dict[str, str]:
+        return next(r for r in rows if (r["style"], int(r["slow_burn_days"]), r["policy"],
+                                        r["level"]) == (style, days, policy, level))  # fmt: skip
+
+    days = sorted({int(r["slow_burn_days"]) for r in rows})
+    fig, (ax, bx) = plt.subplots(1, 2, figsize=(11, 4.0), gridspec_kw={"width_ratios": [1.25, 1]})
+    series = [
+        ("full", "paper_newest", "none", PAPER, "-", "paper: restore newest backup"),
+        ("full", "restore_time_screening", "HISTORY", OURS, "-", "with screening (either kind)"),
+        ("stripes_10pct_office_only", "backup_time_screening", "HISTORY", REF, "--",
+         "with screening, attacker hits\nonly office docs (blind spot)"),
+    ]  # fmt: skip
+    offsets: dict[str, float] = {}
+    for style, policy, level, color, ls, label in series:
+        vals = [float(cell(style, d, policy, level)["damaged_share_mean"]) * 100 for d in days]
+        ax.plot(days, vals, color=color, ls=ls, lw=2, marker="o", markersize=7,
+                markeredgecolor="white", markeredgewidth=1.5, zorder=3)  # fmt: skip
+        ax.text(days[-1] + 0.4, vals[-1] + offsets.get(label, 0), label, va="center",
+                fontsize=8.5, color=INK)  # fmt: skip
+    ax.set_xticks(days, [str(d) for d in days])
+    ax.set_xlim(-0.5, days[-1] + 7.5)
+    ax.set_ylim(-4, 100)
+    ax.set_xlabel("days the ransomware spends encrypting before the ransom note")
+    ax.set_ylabel("restored files that are still encrypted (%)")
+    ax.set_title("Recovery restores the ransomware's own output", loc="left", fontsize=11)
+
+    d7 = [("paper:\nrestore newest", cell("full", 7, "paper_newest", "none"), PAPER),
+          ("screen at\nrestore time", cell("full", 7, "restore_time_screening", "HISTORY"), OURS),
+          ("screen at\nbackup time", cell("full", 7, "backup_time_screening", "HISTORY"), OURS)]  # fmt: skip
+    ys = range(len(d7))
+    vals = [float(c["files_encrypted_mean"]) for _, c, _ in d7]
+    bx.barh(list(ys), vals, color=[c for _, _, c in d7], height=0.55, edgecolor="white")
+    for y, (_, c, _), v in zip(ys, d7, vals, strict=True):
+        lost = float(c["damaged_share_mean"]) * 100
+        back = float(c["days_rolled_back_mean"])
+        bx.text(v + 1.2, y, f"{v:.0f} files encrypted\n{lost:.0f}% of restore still encrypted\n"
+                f"{back:.0f} days of work rolled back", va="center", fontsize=8, color=INK)  # fmt: skip
+    bx.set_yticks(list(ys), [n for n, _, _ in d7], fontsize=9)
+    bx.invert_yaxis()
+    bx.set_xlim(0, 100)
+    bx.set_xlabel("files encrypted before it was stopped (7-day attack)")
+    bx.set_title("Screening at backup time is also an early alarm", loc="left", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(FIGS / "p2g_slow_burn_backups.png", dpi=170)
+
+
 if __name__ == "__main__":
     fig_p2b()
     fig_p2c()
+    fig_p2e()
+    fig_p2g()

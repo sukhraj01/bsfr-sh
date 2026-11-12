@@ -4,14 +4,14 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-11-12 · **Milestone:** Project Phase 2 (four gap-filling experiments,
-P2-A..D) delivered on branch `phase2` · **Sessions completed:** 36
+**Last updated:** 2026-11-12 · **Milestone:** Project Phase 2 (seven experiments, P2-A..G)
+delivered on branch `phase2` · **Sessions completed:** 37
 
 ---
 
 ## One-line status
 
-Phase 1 (M0–M7, report, October audit) is frozen. Phase 2 added four small measured experiments
+Phase 1 (M0–M7, report, October audit) is frozen. Phase 2 added seven small measured experiments
 beside it, each with a script, sidecar, `RESULTS.md` block, figure (`results/figures/p2*.png`) and
 DEV entry; no Phase 1 number changed.
 
@@ -23,8 +23,15 @@ DEV entry; no Phase 1 number changed.
   constant baseline; `year` alone scores 92.2% on the random split. Contradicts report l.478.
 - **P2-D (DEV-47):** M7-12's alarm could never fire (max score 0.52 vs threshold 3.0); tuned, it
   catches lopsided batches, so it alarms on honest outbreaks too.
+- **P2-E (DEV-50):** retraining every year does not rescue the detector (balanced 0.47–0.59 on
+  2014–17), even in years where ~98% of ransomware is from already-seen families.
+- **P2-F (DEV-48):** one server holds the only backup key: lose it → 0/4 systems recoverable;
+  steal it → 4/4 readable. 2-of-4 threshold wrapping: 3 lost / 2 stolen needed. Prototype only.
+- **P2-G (DEV-49):** slow-burn ransomware (≥1 day) → Alg. 5 restores 67–81% of files still
+  encrypted. Content screening restores clean backups and, at backup time, is an early alarm;
+  blind spot: striped office docs.
 
-`make test` 1816 passed, `make lint` clean. Environment now also works on the Linux dev box
+`make test` 1884 passed, `make lint` clean. Environment now also works on the Linux dev box
 (`.venv`, `data/raw/` fetched and checksum-verified).
 
 ---
@@ -35,19 +42,23 @@ DEV entry; no Phase 1 number changed.
 |---|---|---|
 | Full implementation + M7 extensions | done | unchanged by Phase 2 |
 | `detection/fair.py` (P2-B preprocessing) | done | new, 6 unit tests |
-| Phase 2 scripts `scripts/p2{a,b,c,d}_*.py`, `p2_figures.py` | done | each writes CSV + sidecar |
+| `crypto/secret_sharing.py`, `crypto/threshold_kem.py` (P2-F) | done, prototype | not wired into Phase 1 |
+| `recovery/screening.py`, `restore.begin_screened`, `phase5.run(accept=)` (P2-G) | done | default = paper behaviour |
+| Phase 2 scripts `scripts/p2{a..g}_*.py`, `p2_figures.py` | done | each writes CSV + sidecar |
 | `docs/report/report.pdf` | done, 31 pages | **does not include Phase 2**; l.478 now contradicted |
 | Phase 2 presentation | not started | next task |
 
 ## Next task
 
-Build the Phase 2 presentation: one-slide Phase 1 recap, then P2-A..D one slide each (what we
+Build the Phase 2 presentation: one-slide Phase 1 recap, then P2-A..G one slide each (what we
 tested, why, result, what it means), figures from `results/figures/p2*.png`, in the style of
-`BSFR-SH_Presentation.pptx`.
+`BSFR-SH_Presentation.pptx`. The user keeps a plain-language explainer, `PHASE2_EXPLAINED.md`,
+untracked on purpose (`.git/info/exclude`) — do not commit it.
 
 Carried, lower priority: update the report with Phase 2 and fix l.478; remaining C15 wording in
 `verification/pbft_results.md`/DEVIATIONS; P2-D's untested counter (noise-added anchor points);
-why scaling hurts KNN at natural balance (P2-B); exact KNN bounds (M7-17); family-label gap (M7-16).
+why scaling hurts KNN at natural balance (P2-B); wire DEV-48 into Phase 1; screening false alarms
+on real (not synthetic) hospital files (P2-G); exact KNN bounds (M7-17); family-label gap (M7-16).
 
 ## Blockers
 

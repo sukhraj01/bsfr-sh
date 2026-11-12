@@ -33,7 +33,7 @@ it attested before backing up (DEV-23). Every failure raises, and none of them r
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -60,6 +60,7 @@ __all__ = [
     "RecoveryPlan",
     "accept_request",
     "begin",
+    "begin_screened",
     "deliver",
     "open_delivery",
     "request",
@@ -147,6 +148,39 @@ def begin(system_id: str, locations: Sequence[BackupLocation]) -> RecoveryPlan:
         f"no complete backup of {system_id!r} on {BC_DTBU}"
         + (f" ({len(skipped)} incomplete)" if skipped else "")
     )
+
+
+def begin_screened(
+    system_id: str,
+    locations: Sequence[BackupLocation],
+    accept: Callable[[RecoveryPlan], bool],
+) -> RecoveryPlan:
+    """P2-G (DEV-49) alternative to Alg. 5 line 2: the newest complete backup that `accept` passes.
+
+    `begin` restores the newest complete backup, which after slow-burn ransomware is a backup of
+    the encrypted files. `accept` is the caller's content check (in P2-G: decrypt the candidate and
+    run `recovery.screening` on it). Rejected backups are named in `skipped`, newest first.
+    """
+    remaining = list(locations)
+    rejected: list[str] = []
+    while True:
+        plan = begin(system_id, remaining)
+        if accept(plan):
+            return RecoveryPlan(
+                system_id=plan.system_id,
+                backup_id=plan.backup_id,
+                captured_at=plan.captured_at,
+                locations=plan.locations,
+                skipped=tuple(rejected) + plan.skipped,
+            )
+        rejected.extend(plan.skipped)
+        rejected.append(plan.backup_id)
+        drop = set(plan.skipped) | {plan.backup_id}
+        remaining = [loc for loc in remaining if loc.backup_id not in drop]
+        if not remaining:
+            raise RecoveryError(
+                f"no backup of {system_id!r} passed screening ({len(rejected)} rejected)"
+            )
 
 
 def request_decrypt(

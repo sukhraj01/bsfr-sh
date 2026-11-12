@@ -38,6 +38,8 @@ back-import.
 | `kem.py` | ECIES-style key wrapping: EC public key wraps the AEAD data key |
 | `session.py` | ECDH + ECDSA-signed transcript, timestamps, nonces (fills GAP-7) |
 | `channel.py` | messages under an established `SK` (M3a): AES-256-GCM; the AAD binds session, direction, protocol step and a strictly increasing counter, so a message cannot be moved to another session, reflected, re-purposed or replayed |
+| `secret_sharing.py` | *(Phase 2, P2-F, DEV-48)* Shamir t-of-n over GF(2^8), byte-wise, so a share of a 32-byte key is 32 bytes |
+| `threshold_kem.py` | *(Phase 2, P2-F, DEV-48)* a payload's data key split into n shares, each wrapped to one server with `kem.wrap_key`; any t open it. `unwrap_share` runs on each holder, `open_with_shares` on the combiner. Not wired into Phase 1 (which still wraps to one key holder) |
 
 **Hashing detail.** `hashing.h()` is the bare SHA-256 primitive; everything positional goes
 through `tagged_h(domain, *parts)`, which length-prefixes each part via the canonical encoder. A
@@ -434,8 +436,17 @@ the index, and building it costs the same decryptions as a scan, paid at append 
   through a second server, and we keep that even though one would do.
 * `deliver` is the `CS_l` → `SYS_i` hop.
 * `open_delivery` is `SYS_i`'s DEV-23 check.
+* *(Phase 2, P2-G, DEV-49)* `begin_screened` is `begin` with a content check: the newest complete
+  backup the caller's `accept` passes. `framework.phase5_recovery.run(accept=...)` uses it; the
+  default `accept=None` is the paper's behaviour.
 
 Every failure raises, and none returns data.
+
+`recovery/screening.py` *(Phase 2, P2-G, DEV-49)* screens a backup's files for ransomware output
+at three levels (whole-file entropy; type-aware format checks; plus "write-once images must not
+change"). It is meant to run on a cloud server (at backup time, between `receive_backup` and
+encryption, and at restore time through `begin_screened`), never on the protected system. It knows
+nothing about chains or keys: it takes `{name: bytes}` and returns flagged names with reasons.
 
 ---
 

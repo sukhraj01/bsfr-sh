@@ -21,6 +21,7 @@ which in M5 is Phase 4's Case-2.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from bsfr_sh.blockchain.backup import pack
@@ -54,8 +55,13 @@ def run(
     key_holder: CloudServer,
     chain: Chain,
     index: BackupIndex | None = None,
+    accept: Callable[[alg5.RecoveryPlan], bool] | None = None,
 ) -> RecoveryReport:
-    """Implements Alg. 5, lines 1-11: restore `system`'s newest complete backup from `chain`."""
+    """Implements Alg. 5, lines 1-11: restore `system`'s newest complete backup from `chain`.
+
+    `accept` (P2-G, DEV-49; default `None` = the paper's behaviour) is a content check: the newest
+    complete backup it passes is restored instead (`recovery.restore.begin_screened`).
+    """
     if not system.has_session(front.identity):
         establish_session(system, front)
     two_hops = front is not key_holder
@@ -65,7 +71,11 @@ def run(
     system_id = front.accept_recovery_request(system.request_recovery(front.identity))
     located_by = "scan" if index is None or index.cold else "index"
     locations = identify(chain, system_id, decrypt=key_holder.decrypt, index=index)
-    plan = alg5.begin(system_id, locations)
+    plan = (
+        alg5.begin(system_id, locations)
+        if accept is None
+        else alg5.begin_screened(system_id, locations, accept)
+    )
     manifest, data = alg5.request_decrypt(chain, plan, key_holder.decrypt)
 
     if two_hops:

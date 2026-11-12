@@ -2327,3 +2327,49 @@ detects a lopsided batch, not poison. Anchor-point injection scores *below* ever
 (AUC 0.00, "too average"); a two-sided alarm catches it 100%. Not tested: an adversary adding
 noise to defeat the two-sided test.
 **Impact on reproduction:** none; M7-12 code and threshold unchanged.
+
+### DEV-48 · ADD · Threshold key wrapping for backups: no single key holder (P2-F)
+
+**Paper / Phase 1:** Alg. 1 line 2 encrypts each backup to the collecting server's key (DEV-01,
+DEV-25). `BC_DTBU` replicates the ciphertext four times; the decryption key exists once.
+**Ours:** `crypto/secret_sharing.py` (Shamir over GF(2^8)) and `crypto/threshold_kem.py`: the
+backup's data key is split into 4 shares, one wrapped to each server; any t open it.
+`scripts/p2f_key_holder.py` measured, on the real pipeline, that losing the key holder leaves 0/4
+systems recoverable with 4 intact chain replicas, and that its stolen key reads 4/4 systems from
+another replica's copy. Every one of the 16 server subsets was then tried for t = 1..4: t=2 needs 3
+servers lost to lose backups and 2 stolen to leak (Phase 1: 1 and 1). Cost per 4 KiB chunk: seal
+121 -> 541 us, open 153 -> 255 us, +399 bytes of key material.
+**Not done:** wiring into Phase 1 / Alg. 5 (the primitive and its tests exist; `phase1_backup`
+still wraps to one key); share refresh / re-keying; verifiable shares (a bad share is detected by
+the AEAD tag, not attributed).
+**Impact on reproduction:** none; Phase 1's single-holder path is unchanged and is the default.
+
+### DEV-49 · ADD · Backup content screening, and Alg. 5 restoring the newest *clean* backup (P2-G)
+
+**Paper:** Alg. 5 line 2 restores the newest complete backup. Nothing checks what is inside it.
+**Ours:** `recovery/screening.py` (three levels) and `recovery.restore.begin_screened` /
+`phase5_recovery.run(accept=...)`. `scripts/p2g_slow_burn_backups.py` (synthetic in-memory files;
+"encryption" modelled as random bytes, CLAUDE.md §2) shows on the real pipeline that slow-burn
+ransomware's output is restored by Alg. 5 byte for byte (16/16 encrypted files after a 7-day burn,
+DEV-23 attestation passing), and that screened restore returns the day-9 backup with 0 encrypted
+files at the cost of 7 days rolled back. Screening at backup time is also an early alarm (7 of 48
+files encrypted before the stop instead of 48). The naive whole-file entropy check is unusable
+(flags every clean JPEG/office file). Residual blind spot, measured: striped encryption of
+already-compressed, legitimately rewritten files (office docs) passes every level.
+**Assumptions:** file type from extension; DICOM window threshold calibrated on synthetic DICOM
+(real compressed DICOM is ~8 bits/byte and would rely on the write-once rule); write-once images
+never legitimately change (real header corrections would be false alarms); isolation stops
+encryption at the alarm.
+**Impact on reproduction:** none; `accept=None` is the paper's behaviour and the default.
+
+### DEV-50 · ADD · Year-by-year retraining evaluation (P2-E, follows DEV-46)
+
+**Phase 1 / P2-C:** one temporal cut (train <=2015, test 2016-18).
+**Ours:** `scripts/p2e_yearly_retraining.py` — test on each year 2014-2017 using only earlier
+years, with static (2011-13), expanding (retrain yearly), sliding 2-year windows, and a same-year
+random split as reference. Retraining yearly gives balanced accuracy 0.47-0.59 without `year`
+(0.49-0.64 with it), flagging ~80% of benign rows; the same-year reference is 0.60-0.81. In 2015
+and 2017 about 98% of ransomware rows come from families already seen the year before, so the
+failure is not only new families: the same family's address statistics change year to year.
+**Impact on reproduction:** none.
+

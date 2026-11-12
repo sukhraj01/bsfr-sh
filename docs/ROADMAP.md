@@ -482,5 +482,10 @@ the paper's five phases. Four small experiments on gaps Phase 1 and the October 
 - [x] **P2-B** — fair four-model comparison: scaling fixes KNN, not LR (DEV-45)
 - [x] **P2-C** — temporal split: the detector learns *when*, collapses on future years (DEV-46)
 - [x] **P2-D** — threshold-free poisoning-alarm evaluation: catches lopsided batches, not poison (DEV-47)
+- [x] **P2-E** — year-by-year retraining: still near chance on every future year (DEV-50)
+- [x] **P2-F** — single backup-key holder; t-of-4 threshold key wrapping prototype (DEV-48)
+- [x] **P2-G** — slow-burn ransomware poisons backups; content screening + its blind spot (DEV-49)
+      (P2-E..G: `sessions/2026-11-12-02-phase2-attacks.md`)
+- [ ] Wire DEV-48 threshold wrapping into Phase 1 / Alg. 5 (prototype only so far)
 - [ ] Report (`docs/report/report.tex`) not yet updated with Phase 2 — l.478 "H4 rules out year"
       is now contradicted by DEV-46

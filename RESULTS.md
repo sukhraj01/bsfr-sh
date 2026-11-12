@@ -1552,3 +1552,53 @@ batches per cell vs 300 clean same-size batches per null. AUC 0.5 = cannot tell 
 2026-11-12 | detection/p2b-fair | honest RF raw / +balanced | recall=0.158/0.286 precision=0.750/0.484 f1=0.261/0.359 mcc=0.340/0.365 | measured | 20261111T195353Z-38152269 | weighting trades precision for recall, small net gain
 2026-11-12 | detection/p2b-fair | honest KNN raw / log_scaled | f1=0.220/0.153 pr_auc=0.142/0.117 | measured | 20261111T195353Z-38152269 | scaling HURTS KNN at natural balance
 2026-11-12 | detection/p2b-fair | honest DT raw / log_scaled+balanced | f1=0.339/0.344 mcc=0.329/0.335 | measured | 20261111T195353Z-38152269 | flat
+
+## Phase 2 / P2-E — does yearly retraining rescue the detector on future years? (2026-11-12)
+
+`scripts/p2e_yearly_retraining.py --seed 20260912`, paper's 90/10 resample, address dropped, 5 seeds,
+random forest, test on each year t using only earlier years. static = 2011-13 only; expanding =
+all years < t (retrain yearly); sliding_2yr = t-2..t-1; same_year = grouped 70/30 split inside t
+(reference only). `no_year` features unless stated. Means over seeds; balanced accuracy 0.5 = chance.
+
+2026-11-12 | detection/p2e-retrain | static no_year 2014/15/16/17 | bal_acc=0.469/0.472/0.519/0.555 | measured | 20261112T150327Z-9ba241b2 | deploy-once baseline, at or below chance
+2026-11-12 | detection/p2e-retrain | expanding no_year 2014/15/16/17 | bal_acc=0.469/0.588/0.573/0.542 fpr=0.595/0.785/0.814/0.818 | measured | 20261112T150327Z-9ba241b2 | retraining yearly: +0.03..0.12, still near chance, flags ~80% of benign
+2026-11-12 | detection/p2e-retrain | sliding_2yr no_year 2014/15/16/17 | bal_acc=0.483/0.585/0.567/0.502 | measured | 20261112T150327Z-9ba241b2 | forgetting old years no better
+2026-11-12 | detection/p2e-retrain | expanding all8 2014/15/16/17 | bal_acc=0.492/0.635/0.555/0.491 | measured | 20261112T150327Z-9ba241b2 | best single cell 0.649 (sliding all8 2015)
+2026-11-12 | detection/p2e-retrain | same_year no_year 2014/15/16/17 | bal_acc=0.701/0.803/0.604/0.809 | measured | 20261112T150327Z-9ba241b2 | reference: random split inside the year
+2026-11-12 | detection/p2e-families | share of year's ransomware rows from families never seen before 2014/15/16/17 | 0.888/0.020/0.984/0.012 | measured | 20261112T150327Z-9ba241b2 | 2015 and 2017 are ~98% known families, yet retraining still scores 0.59 / 0.54
+
+## Phase 2 / P2-F — the single backup-key holder, and t-of-4 threshold key wrapping (2026-11-12)
+
+`scripts/p2f_key_holder.py --seed 20261112`. Part A: Alg. 1 through real pBFT on a 4-server
+`BC_DTBU` (4 systems x 48 KiB), then Alg. 5 after the key holder CS_0 is lost / compromised.
+Part B: every one of the 16 server subsets actually tried, hospital recovery with the survivors and
+attacker decryption with the subset's keys (attacker bypasses the share-count check and tries the
+AEAD directly). p-columns are *derived* from those 16 measured outcomes assuming each server fails
+independently with probability p. Part C: median of 200, one 4 KiB chunk, dev box.
+
+2026-11-12 | crypto/p2f-real-pipeline | CS_0 holds the key, 4 replicas hold the chain | recovered_with_CS_0=4/4 recovered_after_CS_0_lost(by CS_1/CS_2/CS_3)=0/4,0/4,0/4 attacker_with_CS_0_key_reads_from_CS_3_replica=4/4 | measured | 20261112T151009Z-dc551838 | four copies of the ciphertext, one copy of the key
+2026-11-12 | crypto/p2f-subsets | single_holder | fewest_lost_to_lose_backups=1 fewest_stolen_to_leak=1 p=0.10:loss=0.100,leak=0.100 | measured | 20261112T151009Z-dc551838 | Phase 1 scheme
+2026-11-12 | crypto/p2f-subsets | t1_of_4 (key copied to all) | lose=4 leak=1 p=0.10:loss=0.0001,leak=0.344 | measured | 20261112T151009Z-dc551838 | availability bought with confidentiality
+2026-11-12 | crypto/p2f-subsets | t2_of_4 | lose=3 leak=2 p=0.10:loss=0.0037,leak=0.052 | measured | 20261112T151009Z-dc551838 | recommended for a ransomware defence: loss 27x less likely than single holder, leak 1.9x less
+2026-11-12 | crypto/p2f-subsets | t3_of_4 | lose=2 leak=3 p=0.10:loss=0.052,leak=0.0037 | measured | 20261112T151009Z-dc551838 | mirror image of t2
+2026-11-12 | crypto/p2f-subsets | t4_of_4 | lose=1 leak=4 p=0.10:loss=0.344,leak=0.0001 | measured | 20261112T151009Z-dc551838 | worse availability than Phase 1
+2026-11-12 | crypto/p2f-cost | single vs t2_of_4, per 4 KiB chunk | seal_us=121->541 open_us=153->255 key_bytes=133->532 | measured | 20261112T151009Z-dc551838 | 4 ECDH wraps instead of 1; +399 B/tx (~10% of a 4 KiB payload)
+
+## Phase 2 / P2-G — slow-burn ransomware poisons the backups; content screening and its bypass (2026-11-12)
+
+`scripts/p2g_slow_burn_backups.py --seed 20261112`. Synthetic in-memory hospital files (text
+records, DICOM-like scans, JPEGs, office docs); "encryption" = overwrite with seeded uniform random
+bytes (CLAUDE.md §2). Backups at the end of each day; attack starts day 10 and encrypts gradually
+over D days; ransom note on day 10+D. Screening runs on the cloud server (never the infected system).
+Part A: real Alg. 1 + pBFT `BC_DTBU` + Alg. 5. Part B: 60 files per type. Part C: 10 seeds per cell.
+
+2026-11-12 | recovery/p2g-real-pipeline | D=7 full encryption, 17 daily backups through pBFT | paper_alg5: restored day-16 backup, 16/16 encrypted files restored encrypted, DEV-23 attestation passed | screened(HISTORY): restored day-9 backup, 0 encrypted, 7 backups rejected, 7 days rolled back | measured | 20261112T152026Z-27a8cbee | the chain faithfully preserves the ransomware's output
+2026-11-12 | recovery/p2g-real-pipeline | D=7 striped 10% encryption | paper: 15/15 restored encrypted; screened: 0, day-9 backup | measured | 20261112T152026Z-27a8cbee |
+2026-11-12 | recovery/p2g-timeline | paper_newest, full, D=0/1/3/7/14 | restored_still_encrypted=0%/81%/79%/74%/67% | measured | 20261112T152026Z-27a8cbee | D=0 (smash-and-grab) is the only case the paper's recovery handles
+2026-11-12 | recovery/p2g-timeline | restore_time_screening HISTORY, full and stripes_10pct, D=1..14 | restored_still_encrypted=0% (<=0.2% striped D=14) days_rolled_back=D | measured | 20261112T152026Z-27a8cbee | clean restore, at the cost of D days of work
+2026-11-12 | recovery/p2g-timeline | backup_time_screening HISTORY, full, D=3/7/14 | files_encrypted_before_stop=16/7/4 of 48 (paper 48) restored_still_encrypted=0% days_rolled_back=0 detected_on_attack_day=0 | measured | 20261112T152026Z-27a8cbee | screening doubles as an early ransomware alarm (assumes isolation stops encryption at the alarm)
+2026-11-12 | recovery/p2g-timeline | restore_time_screening ENTROPY (naive), all cells | restorable=0/10 runs | measured | 20261112T152026Z-27a8cbee | flags every clean JPEG/office file, so no backup ever passes
+2026-11-12 | recovery/p2g-bypass | attacker stripes only office docs, every policy, D=1..14 | restored_still_encrypted=11-13% (= all targeted docs) detection=none until ransom note | measured | 20261112T152026Z-27a8cbee | the residual blind spot: compressed + legitimately rewritten files
+2026-11-12 | recovery/p2g-screen | ENTROPY level | false_alarm: text 0, dicom 0, jpeg 1.00, office 1.00; detect: full 1.00 all types; header_only/stripes on text 0.00 | measured | 20261112T152026Z-27a8cbee | naive check: misses partial encryption, flags all compressed files
+2026-11-12 | recovery/p2g-screen | FORMAT level | false_alarm 0 all types; detect full/header_only 1.00 all; stripes: text 1.00, dicom 1.00 (512 B) / 0.00 (64 B), jpeg 0.00, office 0.00 | measured | 20261112T152026Z-27a8cbee | header-preserving stripes beat it on compressed files and tiny stripes on DICOM
+2026-11-12 | recovery/p2g-screen | HISTORY level | false_alarm 0 all types (synthetic corpus); detect: text/dicom/jpeg 1.00 every style; office stripes 0.00 | measured | 20261112T152026Z-27a8cbee | write-once rule closes images; office docs remain open
