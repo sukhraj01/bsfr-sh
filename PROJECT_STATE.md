@@ -5,7 +5,7 @@
 > not to add a summary. See the maintenance rule at the bottom.
 
 **Last updated:** 2026-11-17 · **Milestone:** Project Phase 2 (seven experiments, P2-A..G)
-delivered on branch `phase2`; final-evaluation deck and speaker notes built · **Sessions completed:** 38
+delivered on branch `phase2`; final-evaluation deck, speaker notes and an 8-page ACL final report built · **Sessions completed:** 39
 
 ---
 
@@ -45,18 +45,19 @@ DEV entry; no Phase 1 number changed.
 | `crypto/secret_sharing.py`, `crypto/threshold_kem.py` (P2-F) | done, prototype | not wired into Phase 1 |
 | `recovery/screening.py`, `restore.begin_screened`, `phase5.run(accept=)` (P2-G) | done | default = paper behaviour |
 | Phase 2 scripts `scripts/p2{a..g}_*.py`, `p2_figures.py` | done | each writes CSV + sidecar |
-| `docs/report/report.pdf` | done, 31 pages | **does not include Phase 2**; l.478 now contradicted |
+| `docs/report/report.pdf` | done, 31 pages | mid-semester report; **does not include Phase 2**; l.478 contradicted by DEV-46 |
+| `docs/final_report/` (ACL, end-to-end) | source done, **not compiled** | no LaTeX on the dev box; user compiles on Overleaf from `BSFR-SH_Final_Report_Overleaf.zip` (untracked). Covers paper, mid-semester work, P2-A..G, paper limitations, our limitations |
 | Final-evaluation deck `BSFR-SH_Final_Presentation.pptx` | done, 15 slides | light theme; "till mid-semester" (3 slides) + "after mid-semester" (gap map, A–G); no future-work slide by user request; speaker notes embedded |
 | Speaker script `BSFR-SH_Speaker_Notes.html` | done | ~17.5 min main script, ~22 min with extras; timer + per-slide pace |
 
 ## Next task
 
-Update `docs/report/report.tex` with Phase 2 (P2-A..G, DEV-44..50) and correct l.478 ("H4 rules
-out year as a temporal leak", contradicted by DEV-46), then recompile the PDF.
+Compile `docs/final_report/report.tex` (pdflatex + bibtex, ACL style files included), check it is at
+most 9 pages, and fix any layout problems; source-level estimate is about 7 pages.
 
 **Untracked on purpose (listed in `.git/info/exclude`, never commit):** `PHASE2_EXPLAINED.md`
 (plain-language explainer for the user's partner), `BSFR-SH_Final_Presentation.pptx`,
-`BSFR-SH_Speaker_Notes.html`, and `presentation_src/` (the pptxgenjs/python generators for both:
+`BSFR-SH_Speaker_Notes.html`, `BSFR-SH_Final_Report_Overleaf.zip`, and `presentation_src/` (the pptxgenjs/python generators for both:
 edit `notes_data.py` / `build2.js`, rerun). The user calls the two halves "till mid-semester" and
 "after mid-semester" in presentations, not "Phase 1/2". A browser-based draft of the deck
 (claude.ai artifact) was superseded by the .pptx.
