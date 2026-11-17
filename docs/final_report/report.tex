@@ -12,6 +12,7 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{xcolor}
+\usepackage{url}
 
 \newcommand{\dtbu}{BC$_{\mathrm{DTBU}}$}
 \newcommand{\sigrw}{BC$_{\mathrm{SigRW}}$}
@@ -19,10 +20,10 @@
 \title{Rebuilding and Attacking BSFR-SH: A Reproduction and Security Study\\
 of a Blockchain-Based Ransomware Defence for Smart Healthcare}
 
-\author{[Author names] \\
-  Research in Information Security, course project \\
-  [Institute] \\
-  \texttt{[emails]}}
+\author{Neill Rawani \\
+  Roll no.\ 2025202027 \And
+  Sukhraj Singh \\
+  Roll no.\ 2025202009}
 
 \begin{document}
 \maketitle
@@ -42,7 +43,8 @@ throughput is a one-off setup cost being averaged out, and that the detector mos
 year does not help. Most importantly, the recovery step can be broken in two ways. A single
 server holds the only key to every backup, and slow ransomware gets its encrypted files backed up
 and later restored. We built and measured a fix for each: 2-of-4 key sharing and backup content
-screening.
+screening. Our code, configurations and run logs are available at
+\url{https://github.com/sukhraj01/bsfr-sh}.
 \end{abstract}
 
 % =====================================================================================
@@ -166,7 +168,8 @@ Every result is compared with the score of a constant answer, the \emph{base rat
 \paragraph{Reproducibility.} Every experiment is a script that takes a random seed and writes a run
 log with its configuration and results; the post-mid-semester results are means over several seeds. Every
 departure from the paper (50 in total) is recorded with its reason in a deviations log, and every
-measured number is listed in a results log that this report draws from.
+measured number is listed in a results log that this report draws from. All of it is in our
+repository: \url{https://github.com/sukhraj01/bsfr-sh}.
 
 % =====================================================================================
 \section{Work Until Mid-Semester}
