@@ -4,8 +4,8 @@
 > **Hard cap: 200 lines.** If this file exceeds it, the fix is to *delete resolved content*,
 > not to add a summary. See the maintenance rule at the bottom.
 
-**Last updated:** 2026-11-12 · **Milestone:** Project Phase 2 (seven experiments, P2-A..G)
-delivered on branch `phase2` · **Sessions completed:** 37
+**Last updated:** 2026-11-17 · **Milestone:** Project Phase 2 (seven experiments, P2-A..G)
+delivered on branch `phase2`; final-evaluation deck and speaker notes built · **Sessions completed:** 38
 
 ---
 
@@ -46,14 +46,20 @@ DEV entry; no Phase 1 number changed.
 | `recovery/screening.py`, `restore.begin_screened`, `phase5.run(accept=)` (P2-G) | done | default = paper behaviour |
 | Phase 2 scripts `scripts/p2{a..g}_*.py`, `p2_figures.py` | done | each writes CSV + sidecar |
 | `docs/report/report.pdf` | done, 31 pages | **does not include Phase 2**; l.478 now contradicted |
-| Phase 2 presentation | not started | next task |
+| Final-evaluation deck `BSFR-SH_Final_Presentation.pptx` | done, 15 slides | light theme; "till mid-semester" (3 slides) + "after mid-semester" (gap map, A–G); no future-work slide by user request; speaker notes embedded |
+| Speaker script `BSFR-SH_Speaker_Notes.html` | done | ~17.5 min main script, ~22 min with extras; timer + per-slide pace |
 
 ## Next task
 
-Build the Phase 2 presentation: one-slide Phase 1 recap, then P2-A..G one slide each (what we
-tested, why, result, what it means), figures from `results/figures/p2*.png`, in the style of
-`BSFR-SH_Presentation.pptx`. The user keeps a plain-language explainer, `PHASE2_EXPLAINED.md`,
-untracked on purpose (`.git/info/exclude`) — do not commit it.
+Update `docs/report/report.tex` with Phase 2 (P2-A..G, DEV-44..50) and correct l.478 ("H4 rules
+out year as a temporal leak", contradicted by DEV-46), then recompile the PDF.
+
+**Untracked on purpose (listed in `.git/info/exclude`, never commit):** `PHASE2_EXPLAINED.md`
+(plain-language explainer for the user's partner), `BSFR-SH_Final_Presentation.pptx`,
+`BSFR-SH_Speaker_Notes.html`, and `presentation_src/` (the pptxgenjs/python generators for both:
+edit `notes_data.py` / `build2.js`, rerun). The user calls the two halves "till mid-semester" and
+"after mid-semester" in presentations, not "Phase 1/2". A browser-based draft of the deck
+(claude.ai artifact) was superseded by the .pptx.
 
 Carried, lower priority: update the report with Phase 2 and fix l.478; remaining C15 wording in
 `verification/pbft_results.md`/DEVIATIONS; P2-D's untested counter (noise-added anchor points);
